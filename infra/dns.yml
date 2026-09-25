@@ -29,6 +29,7 @@ Resources:
   # Intentionally not carried over from GoDaddy:
   #   @ A 3.33.130.190 / 15.197.148.33  - GoDaddy parking; replaced by CloudFront
   #   www CNAME @                       - replaced by CloudFront alias in site.yml
+  #   _domainconnect CNAME              - GoDaddy-DNS-only feature, meaningless off GoDaddy nameservers
 
 Outputs:
   HostedZoneId:
