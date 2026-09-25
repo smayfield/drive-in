@@ -1,0 +1,287 @@
+:root {
+  --bg: #f7f3ea;
+  --surface: #ffffff;
+  --text: #1b1a24;
+  --muted: #5d5a68;
+  --border: rgba(40, 30, 80, 0.12);
+  --accent: #d9362b;
+
+  /* The hero is always night at the drive-in, in both themes */
+  --night: #0a0d1f;
+  --bulb: #ffd66b;
+  --neon-red: #ff4d5e;
+  --neon-cyan: #5ef2ff;
+  --marquee: #1a0f2e;
+
+  --display: "Bungee", system-ui, sans-serif;
+  --shade: "Bungee Shade", "Bungee", system-ui, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1226;
+    --surface: #171b36;
+    --text: #efedf6;
+    --muted: #a8a6bd;
+    --border: rgba(255, 214, 107, 0.14);
+    --accent: #ff6b6b;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+a { color: var(--accent); }
+
+.wrap {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+/* ---------- Hero ---------- */
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  min-height: min(92vh, 800px);
+  display: flex;
+  align-items: center;
+  padding: 72px 0 160px;
+  color: #fff;
+  background:
+    radial-gradient(ellipse at 50% 110%, #2b1d4d 0%, transparent 60%),
+    linear-gradient(#050716, var(--night) 55%, #1a1433);
+  text-align: center;
+}
+
+.stars {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -2;
+}
+
+/* Projector beam from the bottom corner up to the marquee */
+.beam {
+  position: absolute;
+  z-index: -1;
+  right: 4%;
+  bottom: 70px;
+  width: 90%;
+  height: 90%;
+  background: linear-gradient(200deg, rgba(255, 244, 214, 0.22), rgba(255, 244, 214, 0) 70%);
+  clip-path: polygon(100% 100%, 98% 96%, 12% 8%, 88% 8%);
+  filter: blur(6px);
+  animation: flicker 4s steps(1) infinite;
+}
+
+@keyframes flicker {
+  0%, 100% { opacity: 1; }
+  12%      { opacity: 0.85; }
+  14%      { opacity: 1; }
+  56%      { opacity: 0.9; }
+  58%      { opacity: 1; }
+}
+
+.hero-inner { position: relative; display: grid; justify-items: center; }
+
+/* Marquee sign with chasing bulbs */
+.marquee {
+  --bulb-gap: 22px;
+  position: relative;
+  padding: 36px clamp(20px, 5vw, 56px) 30px;
+  margin-bottom: 32px;
+  border-radius: 18px;
+  background: var(--marquee);
+  box-shadow:
+    0 0 0 3px #3a2560,
+    0 0 60px rgba(255, 77, 94, 0.35),
+    inset 0 0 40px rgba(0, 0, 0, 0.6);
+}
+.marquee::before {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 12px;
+  padding: 8px;
+  background: radial-gradient(circle, var(--bulb) 0 3px, rgba(255, 214, 107, 0.18) 3.5px 5px, transparent 5.5px) 0 0 / var(--bulb-gap) var(--bulb-gap);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: chase 0.9s linear infinite;
+  filter: drop-shadow(0 0 4px var(--bulb));
+  pointer-events: none;
+}
+
+@keyframes chase {
+  to { background-position: var(--bulb-gap) var(--bulb-gap); }
+}
+
+.eyebrow {
+  margin: 0 0 10px;
+  font-family: var(--display);
+  font-size: 0.8rem;
+  letter-spacing: 0.3em;
+  color: var(--neon-cyan);
+  text-shadow: 0 0 10px var(--neon-cyan);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(2.2rem, 8.5vw, 5.2rem);
+  line-height: 1.05;
+  color: #fff;
+  text-shadow: 0 0 18px rgba(255, 77, 94, 0.6);
+}
+.title .shade {
+  display: block;
+  font-family: var(--shade);
+  color: var(--neon-red);
+  text-shadow: 0 0 14px var(--neon-red), 0 0 40px rgba(255, 77, 94, 0.6);
+  animation: neon 6s ease-in-out infinite;
+}
+
+@keyframes neon {
+  0%, 100% { opacity: 1; }
+  45%      { opacity: 1; }
+  46%      { opacity: 0.55; }
+  48%      { opacity: 1; }
+  49%      { opacity: 0.7; }
+  50%      { opacity: 1; }
+}
+
+.tagline {
+  margin: 14px 0 0;
+  font-size: clamp(0.95rem, 2.4vw, 1.2rem);
+  letter-spacing: 0.04em;
+  color: var(--bulb);
+}
+
+.lede {
+  margin: 0 0 24px;
+  max-width: 46ch;
+  font-size: clamp(1.02rem, 2.2vw, 1.2rem);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.pill {
+  display: inline-block;
+  padding: 8px 20px;
+  border-radius: 999px;
+  font-family: var(--display);
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  color: var(--night);
+  background: var(--bulb);
+  box-shadow: 0 0 24px rgba(255, 214, 107, 0.55);
+}
+
+.cars {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 120px;
+}
+
+/* ---------- Features ---------- */
+
+main { padding: 72px 16px 56px; }
+
+main h2 {
+  margin: 0 0 8px;
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 1.8rem;
+  color: var(--accent);
+}
+
+.section-lede { margin: 0 0 28px; color: var(--muted); }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 18px;
+}
+
+.card {
+  padding: 22px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.card:hover {
+  transform: translateY(-3px);
+  border-color: var(--bulb);
+  box-shadow: 0 12px 36px rgba(255, 170, 60, 0.18);
+}
+.card .icon {
+  display: inline-grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  margin-bottom: 12px;
+  border-radius: 12px;
+  font-size: 1.5rem;
+  background: rgba(255, 214, 107, 0.2);
+}
+.card h3 { margin: 0 0 6px; font-size: 1.1rem; }
+.card p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+
+footer {
+  padding: 24px 16px 40px;
+  color: var(--muted);
+  font-size: 0.875rem;
+  border-top: 1px solid var(--border);
+}
+
+/* ---------- Entrance animation ---------- */
+
+.js .reveal {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 0.7s ease, transform 0.7s ease;
+  transition-delay: calc(var(--i, 0) * 90ms);
+}
+.js .reveal.in { opacity: 1; transform: none; }
+
+/* ---------- 404 page ---------- */
+
+.hero.compact { min-height: 100vh; }
+.cta {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 10px 22px;
+  border-radius: 999px;
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.08);
+}
+.cta:hover, .cta:focus-visible { background: rgba(255, 255, 255, 0.18); outline: none; }
+
+/* ---------- Respect reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  .js .reveal { opacity: 1; transform: none; }
+}

@@ -1,0 +1,40 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  drive-in.online Route 53 hosted zone. Carries over the records worth keeping
+  from GoDaddy DNS. Website alias records live in site.yml.
+
+Parameters:
+  DomainName:
+    Type: String
+    Default: drive-in.online
+
+Resources:
+  HostedZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: !Ref DomainName
+
+  # The domain sends no mail. This GoDaddy-default DMARC policy tells receivers
+  # to quarantine mail spoofing the domain, so it's kept.
+  Dmarc:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZone
+      Name: !Sub _dmarc.${DomainName}
+      Type: TXT
+      TTL: "3600"
+      ResourceRecords:
+        - '"v=DMARC1; p=quarantine; adkim=r; aspf=r; rua=mailto:dmarc_rua@onsecureserver.net;"'
+
+  # Intentionally not carried over from GoDaddy:
+  #   @ A 3.33.130.190 / 15.197.148.33  - GoDaddy parking; replaced by CloudFront
+  #   www CNAME @                       - replaced by CloudFront alias in site.yml
+
+Outputs:
+  HostedZoneId:
+    Value: !Ref HostedZone
+    Export:
+      Name: drive-in-HostedZoneId
+  NameServers:
+    Description: Set these as custom nameservers at GoDaddy.
+    Value: !Join [", ", !GetAtt HostedZone.NameServers]
