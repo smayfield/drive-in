@@ -18,6 +18,8 @@ services:
       - caddy_config:/config
     depends_on:
       - web
+    networks:
+      - edge
 
   web:
     image: ${REGISTRY}/drive-in-web:${TAG}
@@ -30,6 +32,7 @@ services:
       DataProtection__KeysPath: /keys
       Seed__AdminEmail: ${ADMIN_EMAIL}
       Email__Provider: Ses
+      ForwardedHeaders__KnownNetworks__0: 172.30.0.0/24
       # SES credentials come from the EC2 instance role (IMDS hop limit is 2 for containers).
       AWS_REGION: us-east-1
     volumes:
@@ -37,6 +40,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - default
+      - edge
 
   postgres:
     image: postgres:17
@@ -69,3 +75,9 @@ volumes:
   dpkeys:
   caddy_data:
   caddy_config:
+
+networks:
+  edge:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24

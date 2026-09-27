@@ -43,7 +43,7 @@ public abstract class AppComponentBase : ComponentBase
         }
         catch (AccessDeniedException)
         {
-            Nav.NavigateTo("Account/AccessDenied");
+            Nav.NavigateTo("Account/AccessDenied", forceLoad: true);
         }
         catch (Exception ex) when (ex is AppValidationException or NotFoundException)
         {

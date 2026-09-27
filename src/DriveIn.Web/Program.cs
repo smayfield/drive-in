@@ -1,3 +1,4 @@
+using System.Net;
 using Amazon.SimpleEmailV2;
 using DriveIn.Web.Authorization;
 using DriveIn.Web.Components;
@@ -19,8 +20,28 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.Configure<ForwardedHeadersOptions>(o =>
 {
     o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    o.KnownIPNetworks.Clear();
-    o.KnownProxies.Clear();
+
+    var knownNetworks = builder.Configuration.GetSection("ForwardedHeaders:KnownNetworks")
+        .GetChildren()
+        .Select(c => c.Value)
+        .OfType<string>()
+        .ToArray();
+    var knownProxies = builder.Configuration.GetSection("ForwardedHeaders:KnownProxies")
+        .GetChildren()
+        .Select(c => c.Value)
+        .OfType<string>()
+        .ToArray();
+
+    if (knownNetworks.Length > 0 || knownProxies.Length > 0)
+    {
+        o.KnownIPNetworks.Clear();
+        o.KnownProxies.Clear();
+
+        foreach (var network in knownNetworks)
+            o.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(network));
+        foreach (var proxy in knownProxies)
+            o.KnownProxies.Add(IPAddress.Parse(proxy));
+    }
 });
 
 // Persist Data Protection keys so auth cookies and emailed tokens survive container restarts/deploys.
