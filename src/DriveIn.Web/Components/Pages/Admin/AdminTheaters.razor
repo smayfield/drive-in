@@ -1,0 +1,76 @@
+@page "/admin/theaters"
+@attribute [Authorize(Policy = Policies.Admin)]
+@rendermode InteractiveServer
+@inherits AppComponentBase
+@inject TheaterService Theaters
+
+<PageTitle>Theaters · Admin · Drive-In Online</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="mb-0">Theaters</h1>
+    <a class="btn btn-primary" href="admin/theaters/new">New theater</a>
+</div>
+
+<Alerts Error="@Error" Success="@Success" />
+
+@if (theaters is not null)
+{
+    <table class="table align-middle">
+        <thead>
+            <tr><th>Name</th><th>Slug</th><th>Location</th><th>Owner</th><th class="text-end">Screens</th><th class="text-end">Employees</th><th></th></tr>
+        </thead>
+        <tbody>
+            @foreach (var t in theaters)
+            {
+                <tr @key="t.Id">
+                    <td>
+                        <a href="admin/theaters/@t.Id">@t.Name</a>
+                        @if (!t.IsActive) { <span class="badge text-bg-secondary ms-1">Inactive</span> }
+                    </td>
+                    <td><code>@t.Slug</code></td>
+                    <td>@string.Join(", ", new[] { t.City, t.State }.Where(s => !string.IsNullOrWhiteSpace(s)))</td>
+                    <td>@(t.OwnerEmail ?? "—")</td>
+                    <td class="text-end">@t.ScreenCount</td>
+                    <td class="text-end">@t.EmployeeCount</td>
+                    <td class="text-end text-nowrap">
+                        <a class="btn btn-sm btn-outline-secondary" href="manage/@t.Id">Manage</a>
+                        @if (confirmDeleteId == t.Id)
+                        {
+                            <button class="btn btn-sm btn-danger" @onclick="() => DeleteAsync(t)">@DeleteLabel(t)</button>
+                            <button class="btn btn-sm btn-link" @onclick="() => confirmDeleteId = null">Cancel</button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => confirmDeleteId = t.Id">Delete</button>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+    @if (theaters.Count == 0)
+    {
+        <p class="text-muted">No theaters yet.</p>
+    }
+}
+
+@code {
+    private List<TheaterSummary>? theaters;
+    private int? confirmDeleteId;
+
+    protected override async Task LoadAsync()
+    {
+        theaters = await Theaters.AdminListAsync(User);
+        confirmDeleteId = null;
+    }
+
+    private static string DeleteLabel(TheaterSummary t) => t.EmployeeCount == 0
+        ? "Confirm delete"
+        : $"Delete theater and {t.EmployeeCount} employee account{(t.EmployeeCount == 1 ? "" : "s")}";
+
+    private Task DeleteAsync(TheaterSummary t) => RunAsync(async () =>
+    {
+        await Theaters.DeleteAsync(User, t.Id);
+        await LoadAsync();
+    }, $"Deleted {t.Name}.");
+}

@@ -1,0 +1,18 @@
+# EF Core migration bundle: a self-contained executable that applies pending migrations.
+# Build from the repo root:  docker build -f src/DriveIn.Web/Dockerfile.migrate .
+# Run with:  efbundle --connection "Host=...;Database=...;Username=...;Password=..."
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG TARGETARCH
+WORKDIR /src
+COPY dotnet-tools.json .
+RUN dotnet tool restore
+COPY src/DriveIn.Web/ DriveIn.Web/
+RUN dotnet restore DriveIn.Web/DriveIn.Web.csproj
+RUN RID=$([ "$TARGETARCH" = "arm64" ] && echo linux-arm64 || echo linux-x64) \
+ && dotnet ef migrations bundle -p DriveIn.Web -r "$RID" --self-contained -o /out/efbundle
+
+FROM mcr.microsoft.com/dotnet/runtime-deps:10.0
+WORKDIR /app
+COPY --from=build /out/efbundle .
+USER $APP_UID
+ENTRYPOINT ["./efbundle"]

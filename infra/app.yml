@@ -1,0 +1,333 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  drive-in.online app: one small ARM EC2 server running the stack in Docker
+  (Caddy, Blazor web app, PostgreSQL, EF Core migration bundle), with ECR image
+  repos, an ops bucket for deploy files and DB backups, daily EBS snapshots,
+  Route 53 records, and a GitHub Actions OIDC deploy role. Deploy in us-east-1.
+
+Parameters:
+  DomainName:
+    Type: String
+    Default: drive-in.online
+  ServeApex:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+    Description: >
+      false = only app.<domain> points at the server (the apex still belongs to the
+      old CloudFront site). true = apex and www point here too; only set this after
+      the drive-in-site stack is deleted. Also tells deploy.sh which Caddyfile to use,
+      so redeploy the app after changing it.
+  InstanceType:
+    Type: String
+    Default: t4g.small
+    AllowedValues: [t4g.micro, t4g.small, t4g.medium]
+  GitHubSub:
+    Type: String
+    Default: repo:smayfield@1933107/drive-in@1388283268:ref:refs/heads/main
+    Description: >
+      OIDC subject allowed to deploy (main branch only). This repo uses GitHub's
+      immutable subject format; see
+      `gh api repos/smayfield/drive-in/actions/oidc/customization/sub`.
+  AmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+
+Conditions:
+  Live: !Equals [!Ref ServeApex, "true"]
+
+Resources:
+  # ---------- Network: one public subnet, no NAT ----------
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.41.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags: [{ Key: Name, Value: drive-in }]
+  Igw:
+    Type: AWS::EC2::InternetGateway
+  IgwAttach:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: { VpcId: !Ref Vpc, InternetGatewayId: !Ref Igw }
+  Subnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.41.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags: [{ Key: Name, Value: drive-in-public }]
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties: { VpcId: !Ref Vpc }
+  DefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: IgwAttach
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref Igw
+  SubnetRoute:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref Subnet, RouteTableId: !Ref RouteTable }
+
+  WebSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Drive-In web (HTTP/HTTPS only; admin via SSM Session Manager)
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0 }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0 }
+        - { IpProtocol: udp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0 }
+
+  # ---------- Storage ----------
+  OpsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules: [{ ObjectOwnership: BucketOwnerEnforced }]
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+      LifecycleConfiguration:
+        Rules:
+          - { Id: expire-backups, Status: Enabled, Prefix: backups/, ExpirationInDays: 30 }
+          - { Id: expire-deploy-files, Status: Enabled, Prefix: deploy/, ExpirationInDays: 30 }
+
+  EcrWeb:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: drive-in-web
+      ImageScanningConfiguration: { ScanOnPush: true }
+      LifecyclePolicy:
+        LifecyclePolicyText: >-
+          {"rules":[{"rulePriority":1,"description":"Keep last 10 images",
+          "selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":10},
+          "action":{"type":"expire"}}]}
+  EcrMigrate:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: drive-in-migrate
+      ImageScanningConfiguration: { ScanOnPush: true }
+      LifecyclePolicy:
+        LifecyclePolicyText: >-
+          {"rules":[{"rulePriority":1,"description":"Keep last 10 images",
+          "selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":10},
+          "action":{"type":"expire"}}]}
+
+  # Read by deploy.sh to choose Caddyfile.live or Caddyfile.staging.
+  ServeApexParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /drive-in/serve-apex
+      Type: String
+      Value: !Ref ServeApex
+
+  # ---------- Server ----------
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: drive-in-instance
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+      Policies:
+        - PolicyName: drive-in-app
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [ssm:GetParameter, ssm:GetParameters]
+                Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/drive-in/*
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub ${OpsBucket.Arn}/deploy/*
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt OpsBucket.Arn
+                Condition: { StringLike: { "s3:prefix": "deploy/*" } }
+              - Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub ${OpsBucket.Arn}/backups/*
+              # The web container sends account and invite emails through SES (see email.yml).
+              - Effect: Allow
+                Action: [ses:SendEmail, ses:SendRawEmail]
+                Resource: !Sub arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/${DomainName}
+                Condition:
+                  StringLike: { "ses:FromAddress": !Sub "*@${DomainName}" }
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties: { Roles: [!Ref InstanceRole] }
+
+  Server:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref InstanceProfile
+      SubnetId: !Ref Subnet
+      SecurityGroupIds: [!Ref WebSg]
+      PropagateTagsToVolumeOnCreation: true
+      # Hop limit 2 lets containers reach IMDSv2 for the instance role (SES credentials).
+      MetadataOptions: { HttpTokens: required, HttpPutResponseHopLimit: 2 }
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs: { VolumeSize: 20, VolumeType: gp3, Encrypted: true, DeleteOnTermination: false }
+      Tags:
+        - { Key: Name, Value: drive-in }
+        - { Key: Backup, Value: drive-in }
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          set -euxo pipefail
+          dnf install -y docker
+          mkdir -p /usr/libexec/docker/cli-plugins
+          curl -fsSL -o /usr/libexec/docker/cli-plugins/docker-compose \
+            https://github.com/docker/compose/releases/latest/download/docker-compose-linux-aarch64
+          chmod +x /usr/libexec/docker/cli-plugins/docker-compose
+          systemctl enable --now docker
+          # 2 GB swap as headroom for the .NET app plus PostgreSQL
+          if [ ! -f /swapfile ]; then
+            dd if=/dev/zero of=/swapfile bs=1M count=2048
+            chmod 600 /swapfile && mkswap /swapfile
+            echo '/swapfile none swap defaults 0 0' >> /etc/fstab
+          fi
+          swapon -a
+          mkdir -p /opt/drive-in
+
+  ServerIp:
+    Type: AWS::EC2::EIP
+    DependsOn: IgwAttach
+    Properties:
+      Domain: vpc
+      InstanceId: !Ref Server
+      Tags: [{ Key: Name, Value: drive-in }]
+
+  # ---------- DNS ----------
+  AppRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !ImportValue drive-in-HostedZoneId
+      Name: !Sub app.${DomainName}
+      Type: A
+      TTL: "300"
+      ResourceRecords: [!Ref ServerIp]
+  # These replace the CloudFront alias records from site.yml, so that stack must be gone first.
+  ApexRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: Live
+    Properties:
+      HostedZoneId: !ImportValue drive-in-HostedZoneId
+      Name: !Ref DomainName
+      Type: A
+      TTL: "300"
+      ResourceRecords: [!Ref ServerIp]
+  WwwRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: Live
+    Properties:
+      HostedZoneId: !ImportValue drive-in-HostedZoneId
+      Name: !Sub www.${DomainName}
+      Type: A
+      TTL: "300"
+      ResourceRecords: [!Ref ServerIp]
+
+  # ---------- Daily EBS snapshots (keep 7) ----------
+  DlmRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: dlm.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSDataLifecycleManagerServiceRole
+  SnapshotPolicy:
+    Type: AWS::DLM::LifecyclePolicy
+    Properties:
+      Description: Daily snapshots of the Drive-In server disk
+      State: ENABLED
+      ExecutionRoleArn: !GetAtt DlmRole.Arn
+      PolicyDetails:
+        ResourceTypes: [VOLUME]
+        TargetTags: [{ Key: Backup, Value: drive-in }]
+        Schedules:
+          - Name: daily
+            CreateRule: { Interval: 24, IntervalUnit: HOURS, Times: ["08:00"] }
+            RetainRule: { Count: 7 }
+            CopyTags: true
+
+  # ---------- GitHub Actions deploy role ----------
+  # The account's GitHub OIDC provider is owned by the magicworld-site stack.
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: drive-in-app-deploy
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Ref GitHubSub
+      Policies:
+        - PolicyName: deploy-drive-in
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:BatchGetImage
+                  - ecr:CompleteLayerUpload
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:InitiateLayerUpload
+                  - ecr:PutImage
+                  - ecr:UploadLayerPart
+                Resource:
+                  - !GetAtt EcrWeb.Arn
+                  - !GetAtt EcrMigrate.Arn
+              - Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub ${OpsBucket.Arn}/deploy/*
+              - Effect: Allow
+                Action: ssm:SendCommand
+                Resource:
+                  - !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${Server}
+                  - !Sub arn:aws:ssm:${AWS::Region}::document/AWS-RunShellScript
+              - Effect: Allow
+                Action: [ssm:GetCommandInvocation, ssm:ListCommandInvocations]
+                Resource: "*"
+
+Outputs:
+  InstanceId:
+    Value: !Ref Server
+  PublicIp:
+    Value: !Ref ServerIp
+  OpsBucket:
+    Value: !Ref OpsBucket
+  EcrRegistry:
+    Value: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com
+  DeployRoleArn:
+    Value: !GetAtt DeployRole.Arn

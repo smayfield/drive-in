@@ -1,0 +1,6 @@
+# Before cutover: the apex still points at the old CloudFront site, so only
+# app.drive-in.online is served (and only it gets a certificate).
+app.drive-in.online {
+	encode zstd gzip
+	reverse_proxy web:8080
+}

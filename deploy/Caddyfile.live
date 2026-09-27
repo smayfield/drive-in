@@ -1,0 +1,10 @@
+# Live: the app serves the apex. Caddy gets and renews Let's Encrypt certificates,
+# redirects HTTP to HTTPS, sets X-Forwarded-* headers, and proxies Blazor's WebSockets.
+drive-in.online {
+	encode zstd gzip
+	reverse_proxy web:8080
+}
+
+www.drive-in.online, app.drive-in.online {
+	redir https://drive-in.online{uri} permanent
+}

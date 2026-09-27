@@ -1,10 +1,14 @@
-name: Deploy site
+name: Deploy
 
+# Test, build ARM64 images, push them to ECR, then have the server pull them,
+# apply EF Core migrations, and restart the app (via SSM Run Command).
 on:
   push:
     branches: [main]
     paths:
-      - "site/**"
+      - "src/**"
+      - "deploy/**"
+      - "dotnet-tools.json"
       - ".github/workflows/deploy.yml"
   workflow_dispatch:
 
@@ -16,19 +20,72 @@ concurrency:
   group: deploy
   cancel-in-progress: false
 
+env:
+  AWS_REGION: us-east-1
+  TAG: ${{ github.sha }}
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
 
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Test
+        run: dotnet test src/DriveIn.sln -c Release
+
       - uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
-          aws-region: us-east-1
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Sync to S3
-        run: aws s3 sync site/ "s3://${{ vars.S3_BUCKET }}" --delete
+      - name: Log in to ECR
+        run: aws ecr get-login-password | docker login --username AWS --password-stdin "${{ vars.ECR_REGISTRY }}"
 
-      - name: Invalidate CloudFront
-        run: aws cloudfront create-invalidation --distribution-id "${{ vars.CF_DISTRIBUTION_ID }}" --paths "/*"
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push images (linux/arm64)
+        run: |
+          set -euo pipefail
+          R="${{ vars.ECR_REGISTRY }}"
+          docker buildx build --platform linux/arm64 --push -t "$R/drive-in-web:$TAG"     -f src/DriveIn.Web/Dockerfile .
+          docker buildx build --platform linux/arm64 --push -t "$R/drive-in-migrate:$TAG" -f src/DriveIn.Web/Dockerfile.migrate .
+
+      - name: Upload deploy files
+        run: aws s3 cp deploy/ "s3://${{ vars.OPS_BUCKET }}/deploy/$TAG/" --recursive
+
+      - name: Deploy on server
+        run: |
+          set -euo pipefail
+          CMD=$(cat <<EOF
+          set -euo pipefail
+          aws s3 cp s3://${{ vars.OPS_BUCKET }}/deploy/$TAG/ /opt/drive-in/ --recursive --region $AWS_REGION
+          bash /opt/drive-in/deploy.sh $TAG ${{ vars.ECR_REGISTRY }} ${{ vars.OPS_BUCKET }}
+          EOF
+          )
+          PARAMS=$(jq -n --arg c "$CMD" '{commands: [$c], executionTimeout: ["1200"]}')
+          ID=$(aws ssm send-command \
+            --instance-ids "${{ vars.INSTANCE_ID }}" \
+            --document-name AWS-RunShellScript \
+            --comment "Drive-In deploy $TAG" \
+            --parameters "$PARAMS" \
+            --query Command.CommandId --output text)
+          echo "SSM command: $ID"
+
+          for i in $(seq 1 120); do
+            sleep 10
+            STATUS=$(aws ssm get-command-invocation --command-id "$ID" --instance-id "${{ vars.INSTANCE_ID }}" \
+              --query Status --output text 2>/dev/null || echo Pending)
+            echo "status: $STATUS"
+            case "$STATUS" in
+              Success|Failed|Cancelled|TimedOut|Cancelling) break ;;
+            esac
+          done
+
+          aws ssm get-command-invocation --command-id "$ID" --instance-id "${{ vars.INSTANCE_ID }}" \
+            --query '[StandardOutputContent, StandardErrorContent]' --output text
+          test "$STATUS" = "Success"

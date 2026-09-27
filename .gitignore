@@ -3,3 +3,9 @@ Thumbs.db
 .vscode/
 .idea/
 *.log
+bin/
+obj/
+*.user
+.vs/
+TestResults/
+*.local.json

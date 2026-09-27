@@ -1,0 +1,66 @@
+@page "/theaters/{Slug}"
+@attribute [Authorize]
+@inject TheaterService Theaters
+
+@if (theater is null)
+{
+    <PageTitle>Theater not found · Drive-In Online</PageTitle>
+    <h1>Theater not found</h1>
+    <p><a href="theaters">Back to all theaters</a></p>
+}
+else
+{
+    <PageTitle>@theater.Name · Drive-In Online</PageTitle>
+
+    <p><a href="theaters">&larr; All theaters</a></p>
+    <h1>@theater.Name</h1>
+
+    <div class="row g-4">
+        <div class="col-md-7">
+            @if (!string.IsNullOrWhiteSpace(theater.Description))
+            {
+                <p style="white-space: pre-line">@theater.Description</p>
+            }
+            <h2 class="h5 mt-4">Screens</h2>
+            @if (theater.Screens.Count == 0)
+            {
+                <p class="text-muted">No screens listed.</p>
+            }
+            else
+            {
+                <table class="table table-sm">
+                    <thead><tr><th>Screen</th><th class="text-end">Car capacity</th></tr></thead>
+                    <tbody>
+                        @foreach (var s in theater.Screens)
+                        {
+                            <tr><td>@s.Name</td><td class="text-end">@s.CarCapacity</td></tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+        <div class="col-md-5">
+            <address>
+                @if (!string.IsNullOrWhiteSpace(theater.AddressLine1)) { @theater.AddressLine1<br /> }
+                @if (!string.IsNullOrWhiteSpace(theater.AddressLine2)) { @theater.AddressLine2<br /> }
+                @string.Join(" ", new[] { Index.Location(theater), theater.PostalCode }.Where(s => !string.IsNullOrWhiteSpace(s)))
+            </address>
+            @if (!string.IsNullOrWhiteSpace(theater.Phone))
+            {
+                <p>Phone: <a href="tel:@theater.Phone">@theater.Phone</a></p>
+            }
+            @if (Uri.TryCreate(theater.Website, UriKind.Absolute, out var site) && (site.Scheme == "https" || site.Scheme == "http"))
+            {
+                <p><a href="@site" target="_blank" rel="noopener">@site.Host</a></p>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string Slug { get; set; } = "";
+
+    private Theater? theater;
+
+    protected override async Task OnParametersSetAsync() => theater = await Theaters.GetBySlugAsync(Slug);
+}

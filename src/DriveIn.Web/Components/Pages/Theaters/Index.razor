@@ -1,0 +1,42 @@
+@page "/theaters"
+@attribute [Authorize]
+@inject TheaterService Theaters
+
+<PageTitle>Theaters · Drive-In Online</PageTitle>
+
+<h1>Drive-in theaters</h1>
+
+@if (theaters is null)
+{
+    <p>Loading…</p>
+}
+else if (theaters.Count == 0)
+{
+    <p class="text-muted">No theaters yet.</p>
+}
+else
+{
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
+        @foreach (var t in theaters)
+        {
+            <div class="col">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h2 class="h5 card-title"><a href="theaters/@t.Slug">@t.Name</a></h2>
+                        <p class="card-text text-muted mb-1">@Location(t)</p>
+                        <p class="card-text small">@t.Screens.Count screen@(t.Screens.Count == 1 ? "" : "s") · @t.Screens.Sum(s => s.CarCapacity) cars</p>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private List<Theater>? theaters;
+
+    protected override async Task OnInitializedAsync() => theaters = await Theaters.ListActiveAsync();
+
+    internal static string Location(Theater t) =>
+        string.Join(", ", new[] { t.City, t.State }.Where(s => !string.IsNullOrWhiteSpace(s)));
+}

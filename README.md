@@ -1,45 +1,113 @@
 # drive-in.online
 
-Placeholder site for [drive-in.online](https://drive-in.online): turn-key software for drive-in
-theaters (ticket sales, lot capacity, concessions, and more).
+[drive-in.online](https://drive-in.online): turn-key software for drive-in theaters (ticket sales,
+lot capacity, concessions, and more). A .NET 10 Blazor Web App (Interactive Server) with ASP.NET
+Core Identity (local accounts + Google), PostgreSQL via EF Core, and SES for email, running in
+Docker on one EC2 server. The setup mirrors LegoList.
 
 ## Layout
 
 | Path | What |
 |---|---|
-| `site/` | The website: plain HTML/CSS/JS, no build step. Everything here is published. |
-| `infra/dns.yml` | CloudFormation: Route 53 hosted zone for drive-in.online. |
-| `infra/site.yml` | CloudFormation: S3 bucket, CloudFront, ACM cert, alias records, GitHub deploy role. |
-| `.github/workflows/deploy.yml` | Deploys `site/` to S3 and invalidates CloudFront on every merge to `main`. |
+| `src/DriveIn.Web/` | The app: marketing home page, Identity account pages, theater browsing, owner/employee management, admin UI. |
+| `src/DriveIn.Web/Data/Migrations/` | EF Core migrations (the schema's source of truth). |
+| `src/DriveIn.Web.Tests/` | xUnit tests: authorization matrix and services, against a real DI container with EF InMemory. |
+| `deploy/` | Production compose file, Caddyfiles, `deploy.sh`, `backup.sh` (copied to the server on each deploy). |
+| `infra/dns.yml` | CloudFormation: Route 53 hosted zone. |
+| `infra/email.yml` | CloudFormation: SES domain identity (DKIM, MAIL FROM). |
+| `infra/app.yml` | CloudFormation: VPC, EC2, EIP, ECR, ops bucket, snapshots, DNS records, GitHub deploy role. |
+| `infra/site.yml` | The old static site (S3 + CloudFront). Retired at cutover; see below. |
+| `.github/workflows/deploy.yml` | On merge to `main`: test, build ARM64 images, deploy via SSM. |
+
+## Accounts and permissions
+
+- **Users** register with email + password (confirmed by email) or sign in with Google. Every signed-in
+  user can browse all theaters. Google sign-in links automatically to an existing confirmed account
+  with the same verified email; links can also be managed under Account → External logins.
+- **Admin** is the only role. The account whose email matches `Seed:AdminEmail` (SSM
+  `/drive-in/admin-email`) becomes admin when it signs in, so the first admin just registers.
+  Admins manage all theaters (`/admin/theaters`) and users (`/admin/users`). Note: removing admin
+  from that seeded account won't stick; it gets it back at next sign-in.
+- **Owners**: each theater has one owner; one user may own several theaters. An admin assigns the
+  owner by email on the theater's admin page: existing accounts become owner immediately; otherwise
+  an invitation is emailed. Owners manage their theater at `/manage/{id}`, including employees.
+- **Employees** are separate accounts bound to one theater, created only by invitation from its
+  owner (or an admin). They can do everything for that theater except manage employees.
+
+Invitations are single-use links valid for 7 days (only a SHA-256 of the token is stored); the
+invitee sets a password or continues with Google using the invited address.
+
+## Local development
+
+Needs Docker and the .NET 10 SDK.
+
+```powershell
+./setup.ps1   # Postgres on localhost:5433 + migrations
+./start.ps1   # build, test, run at http://localhost:5280
+```
+
+Emails aren't sent locally; confirmation, reset, and invite links are written to the console.
+To make yourself admin locally: `dotnet user-secrets set Seed:AdminEmail you@example.com --project src/DriveIn.Web`.
+Google sign-in is optional locally; to enable it, set `Authentication:Google:ClientId` and
+`Authentication:Google:ClientSecret` with user-secrets (redirect URI `http://localhost:5280/signin-google`).
+
+**Schema changes:** edit the entities in `src/DriveIn.Web/Data/`, then
+
+```sh
+dotnet ef migrations add <Name> --project src/DriveIn.Web --output-dir Data/Migrations
+dotnet ef database update --project src/DriveIn.Web
+```
+
+Production applies migrations during deploy with an EF migration bundle (`Dockerfile.migrate`),
+before the new app version starts; if a migration fails, the old version keeps running.
 
 ## Workflow
 
 All changes go through a feature branch and a pull request; nothing is committed to `main` directly.
+Merging to `main` runs `.github/workflows/deploy.yml`, which assumes the IAM role
+`drive-in-app-deploy` via OIDC (no stored AWS keys) and reads these repo **variables**:
+`AWS_ROLE_ARN`, `ECR_REGISTRY`, `OPS_BUCKET`, `INSTANCE_ID` (from the `drive-in-app` stack outputs).
 
-1. `git checkout -b feature/whatever`
-2. Edit files in `site/`; preview with any static server, e.g. `python -m http.server -d site`.
-3. Push, open a PR, merge to `main` → GitHub Actions deploys within a minute or two.
+## Infrastructure
 
-## How deploys authenticate
+All stacks are in `us-east-1`. The domain is registered at GoDaddy with nameservers pointing to Route 53.
 
-GitHub Actions assumes the IAM role `drive-in-github-deploy` via OIDC (no stored AWS keys).
-The role trusts only this repo's `main` branch, using GitHub's immutable subject format
-(`repo:owner@id/repo@id:ref:refs/heads/main`), and can only write to the site bucket and
-invalidate the distribution. The workflow reads these repo **variables**:
+### One-time setup
 
-- `AWS_ROLE_ARN`, `S3_BUCKET`, `CF_DISTRIBUTION_ID` (from the `drive-in-site` stack outputs)
+1. **Email.** `aws cloudformation deploy --stack-name drive-in-email --template-file infra/email.yml`.
+   Then request SES production access (Account dashboard → Request production access); until it's
+   granted, SES only delivers to verified addresses.
+2. **Google OAuth client** (Google Cloud console → Credentials → OAuth client ID, Web application).
+   Authorized redirect URIs: `https://drive-in.online/signin-google`,
+   `https://app.drive-in.online/signin-google`, `http://localhost:5280/signin-google`.
+3. **Secrets** in SSM Parameter Store (SecureString):
+   ```sh
+   aws ssm put-parameter --type SecureString --name /drive-in/db-password          --value "$(openssl rand -base64 32 | tr -d '/+=')"
+   aws ssm put-parameter --type SecureString --name /drive-in/google-client-id     --value ...
+   aws ssm put-parameter --type SecureString --name /drive-in/google-client-secret --value ...
+   aws ssm put-parameter --type SecureString --name /drive-in/admin-email          --value you@example.com
+   ```
+   (`/drive-in/serve-apex` is managed by the app stack.)
+4. **Server**, staged on `app.drive-in.online` while the old site keeps the apex:
+   ```sh
+   aws cloudformation deploy --stack-name drive-in-app --template-file infra/app.yml \
+     --capabilities CAPABILITY_NAMED_IAM
+   ```
+   Set the repo variables from the stack outputs, then merge (or run the workflow manually).
+   Check `https://app.drive-in.online`: registration email, Google sign-in, admin, invites.
 
-The GitHub OIDC provider itself is shared and owned by the `magicworld-site` stack.
+### Cutover from the static site
 
-## Infrastructure (one-time / rare changes)
+1. Empty the old bucket and delete the `drive-in-site` stack (removes CloudFront and the apex/www
+   alias records): `aws s3 rm s3://<bucket> --recursive && aws cloudformation delete-stack --stack-name drive-in-site`.
+   The old `drive-in-github-deploy` role goes with it.
+2. `aws cloudformation deploy --stack-name drive-in-app --template-file infra/app.yml --capabilities CAPABILITY_NAMED_IAM --parameter-overrides ServeApex=true`
+3. Re-run the Deploy workflow so the server switches to `Caddyfile.live` (Caddy gets certificates
+   for the apex and www; `www` and `app` then redirect to the apex).
+4. Delete `infra/site.yml` from the repo.
 
-Both stacks are in `us-east-1`. Deploy `site.yml` only after the domain's nameservers point
-to Route 53, since the certificate is validated through DNS.
+### Operations
 
-```sh
-aws cloudformation deploy --region us-east-1 --stack-name drive-in-dns  --template-file infra/dns.yml
-aws cloudformation deploy --region us-east-1 --stack-name drive-in-site --template-file infra/site.yml \
-  --capabilities CAPABILITY_NAMED_IAM
-```
-
-The domain is **registered** at GoDaddy; its nameservers point to Route 53. It has no email.
+- Shell on the server: `aws ssm start-session --target <InstanceId>`; the stack lives in `/opt/drive-in`.
+- Backups: nightly `pg_dump` to `s3://<OpsBucket>/backups/` (30 days), plus daily EBS snapshots (7).
+  Run one now with `sudo drive-in-backup <OpsBucket>`.

@@ -1,0 +1,144 @@
+@page "/manage/{Id:int}/employees"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inherits AppComponentBase
+@inject TheaterService Theaters
+@inject EmployeeService Employees
+@inject InvitationService Invitations
+
+<PageTitle>Employees · Manage · Drive-In Online</PageTitle>
+
+<p><a href="manage/@Id">&larr; Back to theater</a></p>
+<h1>Employees @if (theaterName is not null) { <small class="text-muted fs-5">@theaterName</small> }</h1>
+
+<Alerts Error="@Error" Success="@Success" />
+
+@if (employees is not null)
+{
+    <section class="mb-4">
+        <h2 class="h5">Invite an employee</h2>
+        <p class="text-muted small">
+            They'll get an email link to create an account for this theater, with a password or with Google.
+            Employee accounts can edit the theater and its screens, but can't manage employees.
+        </p>
+        <form class="row g-2" @onsubmit="InviteAsync">
+            <div class="col-sm-8 col-md-6">
+                <input type="email" class="form-control" placeholder="name@example.com" @bind="inviteEmail" required />
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-primary">Send invite</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="mb-4">
+        <h2 class="h5">Employees</h2>
+        @if (employees.Count == 0)
+        {
+            <p class="text-muted">No employees yet.</p>
+        }
+        else
+        {
+            <table class="table align-middle">
+                <thead><tr><th>Email</th><th>Name</th><th>Sign-in</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var e in employees)
+                    {
+                        <tr @key="e.Id">
+                            <td>@e.Email @if (e.IsLockedOut) { <span class="badge text-bg-warning ms-1">Locked</span> }</td>
+                            <td>@e.DisplayName</td>
+                            <td>@(e.HasPassword ? "Password" : "Google only")</td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => ResetAsync(e)">Send password reset</button>
+                                @if (confirmDeleteId == e.Id)
+                                {
+                                    <button class="btn btn-sm btn-danger" @onclick="() => DeleteAsync(e)">Confirm delete</button>
+                                }
+                                else
+                                {
+                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => confirmDeleteId = e.Id">Delete</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </section>
+
+    <section>
+        <h2 class="h5">Pending invitations</h2>
+        @if (pending!.Count == 0)
+        {
+            <p class="text-muted">None.</p>
+        }
+        else
+        {
+            <table class="table align-middle">
+                <thead><tr><th>Email</th><th>Type</th><th>Expires</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var i in pending)
+                    {
+                        <tr @key="i.Id">
+                            <td>@i.Email</td>
+                            <td>@i.Kind</td>
+                            <td>@(i.ExpiresAt <= DateTimeOffset.UtcNow ? "Expired" : i.ExpiresAt.ToLocalTime().ToString("MMM d, yyyy"))</td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => ResendAsync(i)">Resend</button>
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => RevokeAsync(i)">Revoke</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </section>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private string? theaterName;
+    private List<EmployeeSummary>? employees;
+    private List<Invitation>? pending;
+    private string inviteEmail = "";
+    private string? confirmDeleteId;
+
+    protected override async Task LoadAsync()
+    {
+        theaterName = (await Theaters.GetForOperateAsync(User, Id)).Name;
+        employees = await Employees.ListAsync(User, Id);
+        pending = await Invitations.ListPendingAsync(User, Id);
+        confirmDeleteId = null;
+    }
+
+    private Task InviteAsync() => RunAsync(async () =>
+    {
+        if (string.IsNullOrWhiteSpace(inviteEmail))
+            throw new AppValidationException("Enter an email address.");
+        await Invitations.InviteAsync(User, Id, inviteEmail, InvitationKind.Employee, BaseUri);
+        inviteEmail = "";
+        await LoadAsync();
+    }, "Invitation sent.");
+
+    private Task ResetAsync(EmployeeSummary e) =>
+        RunAsync(() => Employees.SendPasswordResetAsync(User, Id, e.Id, BaseUri), $"Password reset email sent to {e.Email}.");
+
+    private Task DeleteAsync(EmployeeSummary e) => RunAsync(async () =>
+    {
+        await Employees.DeleteAsync(User, Id, e.Id);
+        await LoadAsync();
+    }, $"Deleted {e.Email}.");
+
+    private Task ResendAsync(Invitation i) => RunAsync(async () =>
+    {
+        await Invitations.ResendAsync(User, i.Id, BaseUri);
+        await LoadAsync();
+    }, $"Invitation re-sent to {i.Email}.");
+
+    private Task RevokeAsync(Invitation i) => RunAsync(async () =>
+    {
+        await Invitations.RevokeAsync(User, i.Id);
+        await LoadAsync();
+    }, $"Invitation to {i.Email} revoked.");
+}
