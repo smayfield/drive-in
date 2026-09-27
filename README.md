@@ -100,14 +100,30 @@ All stacks are in `us-east-1`. The domain is registered at GoDaddy with nameserv
    aws cloudformation deploy --stack-name drive-in-app --template-file infra/app.yml \
      --capabilities CAPABILITY_NAMED_IAM
    ```
-   Set the repo variables from the stack outputs, then merge (or run the workflow manually).
-   Check `https://app.drive-in.online`: registration email, Google sign-in, admin, invites.
+5. **Repo variables** for the Deploy workflow, from the stack outputs (PowerShell). `AWS_ROLE_ARN`
+   replaces the old static-site role:
+   ```powershell
+   $out = aws cloudformation describe-stacks --stack-name drive-in-app --region us-east-1 --query "Stacks[0].Outputs" --output json | ConvertFrom-Json
+   function Out($key) { ($out | Where-Object OutputKey -eq $key).OutputValue }
+   gh variable set AWS_ROLE_ARN --body (Out DeployRoleArn)
+   gh variable set ECR_REGISTRY --body (Out EcrRegistry)
+   gh variable set OPS_BUCKET   --body (Out OpsBucket)
+   gh variable set INSTANCE_ID  --body (Out InstanceId)
+   gh variable list
+   ```
+   Confirm the server is reachable by SSM (should print `Online` a few minutes after the stack finishes):
+   ```powershell
+   aws ssm describe-instance-information --region us-east-1 --filters "Key=InstanceIds,Values=$(Out InstanceId)" --query "InstanceInformationList[].PingStatus" --output text
+   ```
+6. **Deploy**: merge to `main` (or run the Deploy workflow manually) and watch it with `gh run watch`.
+   Then check `https://app.drive-in.online`: registration email, Google sign-in, admin, invites.
 
 ### Cutover from the static site
 
 1. Empty the old bucket and delete the `drive-in-site` stack (removes CloudFront and the apex/www
    alias records): `aws s3 rm s3://<bucket> --recursive && aws cloudformation delete-stack --stack-name drive-in-site`.
-   The old `drive-in-github-deploy` role goes with it.
+   The old `drive-in-github-deploy` role goes with it; also remove its repo variables:
+   `gh variable delete S3_BUCKET; gh variable delete CF_DISTRIBUTION_ID`.
 2. `aws cloudformation deploy --stack-name drive-in-app --template-file infra/app.yml --capabilities CAPABILITY_NAMED_IAM --parameter-overrides ServeApex=true`
 3. Re-run the Deploy workflow so the server switches to `Caddyfile.live` (Caddy gets certificates
    for the apex and www; `www` and `app` then redirect to the apex).
