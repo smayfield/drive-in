@@ -1,4 +1,8 @@
 @page "/not-found"
+@using Microsoft.AspNetCore.Antiforgery
+@* Re-executed for failed requests of any method, including POSTs whose antiforgery token was the
+   failure; this page has no forms, so it must not validate one (else the error page itself throws). *@
+@attribute [RequireAntiforgeryToken(required: false)]
 @layout MarketingLayout
 
 <PageTitle>Not found · Drive-In Online</PageTitle>

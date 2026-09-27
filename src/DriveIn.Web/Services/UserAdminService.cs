@@ -11,7 +11,7 @@ public sealed record UserSummary(
     string? EmployeeTheaterName, List<string> OwnedTheaters, List<string> Logins, bool HasPassword, DateTimeOffset CreatedAt);
 
 // Site-admin user management. Each call runs in its own scope (see InvitationService).
-public sealed class UserAdminService(IServiceScopeFactory scopeFactory, IEmailSender<ApplicationUser> identityEmail)
+public sealed class UserAdminService(IServiceScopeFactory scopeFactory, IEmailSender<ApplicationUser> identityEmail, TimeProvider time)
 {
     public async Task<List<UserSummary>> ListAsync(ClaimsPrincipal actor, string? search)
     {
@@ -28,7 +28,7 @@ public sealed class UserAdminService(IServiceScopeFactory scopeFactory, IEmailSe
         }
 
         var adminRoleId = await db.Roles.Where(r => r.Name == Roles.Admin).Select(r => r.Id).FirstOrDefaultAsync();
-        var now = DateTimeOffset.UtcNow;
+        var now = time.GetUtcNow();
         var rows = await query
             .OrderBy(u => u.Email)
             .Take(500)
@@ -64,6 +64,7 @@ public sealed class UserAdminService(IServiceScopeFactory scopeFactory, IEmailSe
             UserName = address,
             Email = address,
             EmailConfirmed = true,
+            CreatedAt = time.GetUtcNow(),
             DisplayName = string.IsNullOrWhiteSpace(displayName) ? null : displayName.Trim(),
         };
         Check(await users.CreateAsync(user));

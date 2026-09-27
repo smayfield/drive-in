@@ -10,7 +10,7 @@ public sealed record TheaterSummary(
     int Id, string Name, string Slug, string? City, string? State, bool IsActive,
     string? OwnerEmail, int ScreenCount, int EmployeeCount);
 
-public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFactory, IAuthorizationService auth)
+public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFactory, IAuthorizationService auth, TimeProvider time)
 {
     // --- Browsing (any signed-in user) ---
 
@@ -68,7 +68,7 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
             ?? throw new NotFoundException("Theater not found.");
         await auth.RequireAsync(user, theater, TheaterOperations.Operate);
         CopyProfile(input, theater);
-        theater.UpdatedAt = DateTimeOffset.UtcNow;
+        theater.UpdatedAt = time.GetUtcNow();
         await db.SaveChangesAsync();
     }
 
@@ -98,7 +98,7 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
         Guard.RequireAdmin(user);
         await using var db = await dbFactory.CreateDbContextAsync();
         await EnsureSlugFreeAsync(db, input.Slug, exceptId: null);
-        var theater = new Theater { Slug = input.Slug, IsActive = input.IsActive };
+        var theater = new Theater { Slug = input.Slug, IsActive = input.IsActive, CreatedAt = time.GetUtcNow(), UpdatedAt = time.GetUtcNow() };
         CopyProfile(input, theater);
         db.Theaters.Add(theater);
         await db.SaveChangesAsync();
@@ -115,7 +115,7 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
         CopyProfile(input, theater);
         theater.Slug = input.Slug;
         theater.IsActive = input.IsActive;
-        theater.UpdatedAt = DateTimeOffset.UtcNow;
+        theater.UpdatedAt = time.GetUtcNow();
         await db.SaveChangesAsync();
     }
 

@@ -13,14 +13,15 @@ public sealed record EmployeeSummary(string Id, string Email, string? DisplayNam
 public sealed class EmployeeService(
     IServiceScopeFactory scopeFactory,
     IAuthorizationService auth,
-    IEmailSender<ApplicationUser> identityEmail)
+    IEmailSender<ApplicationUser> identityEmail,
+    TimeProvider time)
 {
     public async Task<List<EmployeeSummary>> ListAsync(ClaimsPrincipal actor, int theaterId)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         await RequireAsync(db, actor, theaterId);
-        var now = DateTimeOffset.UtcNow;
+        var now = time.GetUtcNow();
         return await db.Users.AsNoTracking()
             .Where(u => u.EmployeeTheaterId == theaterId)
             .OrderBy(u => u.Email)

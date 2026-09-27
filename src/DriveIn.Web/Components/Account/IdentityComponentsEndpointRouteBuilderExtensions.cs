@@ -22,15 +22,18 @@ internal static class IdentityComponentsEndpointRouteBuilderExtensions
 
         var accountGroup = endpoints.MapGroup("/Account");
 
-        accountGroup.MapPost("/PerformExternalLogin", async (
+        // Antiforgery: endpoints that bind [FromForm] parameters (PerformExternalLogin, Logout,
+        // LinkExternalLogin) are validated automatically via app.UseAntiforgery(): a missing/invalid
+        // token gets a 400 at form binding, before the handler runs. They deliberately have no manual
+        // ValidateRequestAsync call. Endpoints that bind no form data (passkey options,
+        // DownloadPersonalData) must validate manually. Verified with token-less POSTs.
+
+        accountGroup.MapPost("/PerformExternalLogin", (
             HttpContext context,
             [FromServices] SignInManager<ApplicationUser> signInManager,
-            [FromServices] IAntiforgery antiforgery,
             [FromForm] string provider,
             [FromForm] string returnUrl) =>
         {
-            await antiforgery.ValidateRequestAsync(context);
-
             IEnumerable<KeyValuePair<string, StringValues>> query = [
                 new("ReturnUrl", returnUrl),
                 new("Action", ExternalLogin.LoginCallbackAction)];
@@ -45,13 +48,10 @@ internal static class IdentityComponentsEndpointRouteBuilderExtensions
         });
 
         accountGroup.MapPost("/Logout", async (
-            HttpContext context,
             ClaimsPrincipal user,
             [FromServices] SignInManager<ApplicationUser> signInManager,
-            [FromServices] IAntiforgery antiforgery,
             [FromForm] string returnUrl) =>
         {
-            await antiforgery.ValidateRequestAsync(context);
             await signInManager.SignOutAsync();
             return TypedResults.LocalRedirect($"~/{returnUrl}");
         });
@@ -62,6 +62,10 @@ internal static class IdentityComponentsEndpointRouteBuilderExtensions
             [FromServices] SignInManager<ApplicationUser> signInManager,
             [FromServices] IAntiforgery antiforgery) =>
         {
+            // Binds no form data, so UseAntiforgery() alone would not reject a missing token.
+            if (!await antiforgery.IsRequestValidAsync(context))
+                return Results.BadRequest();
+
             await antiforgery.ValidateRequestAsync(context);
 
             var user = await userManager.GetUserAsync(context.User);
@@ -100,11 +104,8 @@ internal static class IdentityComponentsEndpointRouteBuilderExtensions
         manageGroup.MapPost("/LinkExternalLogin", async (
             HttpContext context,
             [FromServices] SignInManager<ApplicationUser> signInManager,
-            [FromServices] IAntiforgery antiforgery,
             [FromForm] string provider) =>
         {
-            await antiforgery.ValidateRequestAsync(context);
-
             // Clear the existing external cookie to ensure a clean login process
             await context.SignOutAsync(IdentityConstants.ExternalScheme);
 
@@ -126,7 +127,9 @@ internal static class IdentityComponentsEndpointRouteBuilderExtensions
             [FromServices] AuthenticationStateProvider authenticationStateProvider,
             [FromServices] IAntiforgery antiforgery) =>
         {
-            await antiforgery.ValidateRequestAsync(context);
+            // Binds no form data, so UseAntiforgery() alone would not reject a missing token.
+            if (!await antiforgery.IsRequestValidAsync(context))
+                return Results.BadRequest();
 
             var user = await userManager.GetUserAsync(context.User);
             if (user is null)
