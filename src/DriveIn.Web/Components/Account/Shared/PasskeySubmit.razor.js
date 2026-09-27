@@ -29,7 +29,7 @@ async function createCredential(headers, signal) {
 }
 
 async function requestCredential(email, mediation, headers, signal) {
-    const optionsResponse = await fetchWithErrorHandling(`/Account/PasskeyRequestOptions?username=${email}`, {
+    const optionsResponse = await fetchWithErrorHandling(`/Account/PasskeyRequestOptions?username=${encodeURIComponent(email ?? '')}`, {
         method: 'POST',
         headers,
         signal,

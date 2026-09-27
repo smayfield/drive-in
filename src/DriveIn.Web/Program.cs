@@ -142,6 +142,10 @@ else
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
 
+// Explicit so they run after UseForwardedHeaders. Left implicit, WebApplication inserts them at the
+// start of the pipeline, where the Google callback and login redirects would see http:// behind Caddy.
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseAntiforgery();
 
 app.MapStaticAssets();

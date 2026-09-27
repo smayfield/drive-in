@@ -32,6 +32,7 @@ services:
       DataProtection__KeysPath: /keys
       Seed__AdminEmail: ${ADMIN_EMAIL}
       Email__Provider: Ses
+      # Trust X-Forwarded-* only from the edge network (Caddy); must match its subnet below.
       ForwardedHeaders__KnownNetworks__0: 172.30.0.0/24
       # SES credentials come from the EC2 instance role (IMDS hop limit is 2 for containers).
       AWS_REGION: us-east-1
@@ -77,6 +78,7 @@ volumes:
   caddy_config:
 
 networks:
+  # Caddy <-> web. Fixed subnet so the web app can trust forwarded headers from it only.
   edge:
     ipam:
       config:
