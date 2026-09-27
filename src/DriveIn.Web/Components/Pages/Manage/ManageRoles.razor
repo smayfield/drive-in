@@ -1,0 +1,192 @@
+@page "/manage/{Id:int}/roles"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inherits AppComponentBase
+@inject TheaterService Theaters
+@inject TheaterAccess Access
+@inject RoleService RoleManager
+
+<PageTitle>Roles · Manage · Drive-In Online</PageTitle>
+
+<p><a href="manage/@Id">&larr; Back to theater</a> · <a href="manage/@Id/employees">Employees</a></p>
+<h1>Roles @if (theaterName is not null) { <small class="text-muted fs-5">@theaterName</small> }</h1>
+<p class="text-muted">
+    A role is a set of actions. Employees can have several roles and can do anything any of their roles allows.
+    Employees with no roles can't do anything. Owners always have every action.
+    @if (!fullAccess)
+    {
+        <span>You can only grant, change or remove actions you have yourself.</span>
+    }
+</p>
+
+<Alerts Error="@Error" Success="@Success" />
+
+@if (roles is not null)
+{
+    @if (editor is null)
+    {
+        <button class="btn btn-primary mb-3" @onclick="StartNew">New role</button>
+    }
+
+    @if (editor is not null)
+    {
+        <div class="card mb-4">
+            <div class="card-body">
+                <h2 class="h5">@(editor.Id is null ? "New role" : $"Edit {editor.OriginalName}")</h2>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label" for="role-name">Name</label>
+                        <input id="role-name" class="form-control" @bind="editor.Name" maxlength="60" />
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label" for="role-desc">Description</label>
+                        <input id="role-desc" class="form-control" @bind="editor.Description" maxlength="300" />
+                    </div>
+                </div>
+                @foreach (var group in TheaterPermissions.All.GroupBy(p => p.Group))
+                {
+                    <fieldset class="mb-3">
+                        <legend class="h6">@group.Key</legend>
+                        @foreach (var p in group)
+                        {
+                            var allowed = permissions.Contains(p.Key);
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="perm-@p.Key"
+                                       checked="@editor.Permissions.Contains(p.Key)" disabled="@(!allowed)"
+                                       @onchange="args => Toggle(p.Key, (bool)args.Value!)" />
+                                <label class="form-check-label" for="perm-@p.Key">
+                                    @p.Name <span class="text-muted small">— @p.Description</span>
+                                    @if (!allowed) { <span class="text-muted small">(you don't have this)</span> }
+                                </label>
+                            </div>
+                        }
+                    </fieldset>
+                }
+                <button class="btn btn-primary" @onclick="SaveAsync">@(editor.Id is null ? "Create role" : "Save role")</button>
+                <button class="btn btn-outline-secondary" @onclick="() => editor = null">Cancel</button>
+            </div>
+        </div>
+    }
+
+    @if (roles.Count == 0)
+    {
+        <p class="text-muted">No roles yet.</p>
+    }
+    <div class="list-group">
+        @foreach (var role in roles)
+        {
+            var mine = role.Permissions.All(permissions.Contains);
+            <div class="list-group-item" @key="role.Id">
+                <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+                    <div>
+                        <div class="fw-semibold">
+                            @role.Name
+                            <span class="badge text-bg-light ms-1">@role.MemberCount employee@(role.MemberCount == 1 ? "" : "s")</span>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(role.Description))
+                        {
+                            <div class="small text-muted">@role.Description</div>
+                        }
+                        <div class="mt-1">
+                            @if (role.Permissions.Count == 0)
+                            {
+                                <span class="small text-muted">No actions</span>
+                            }
+                            @foreach (var key in role.Permissions)
+                            {
+                                <span class="badge text-bg-secondary me-1">@NameOf(key)</span>
+                            }
+                        </div>
+                    </div>
+                    <div class="text-nowrap">
+                        @if (mine)
+                        {
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => StartEdit(role)">Edit</button>
+                            @if (confirmDeleteId == role.Id)
+                            {
+                                <button class="btn btn-sm btn-danger" @onclick="() => DeleteAsync(role)">
+                                    @(role.MemberCount > 0 ? $"Delete and remove from {role.MemberCount}" : "Confirm delete")
+                                </button>
+                                <button class="btn btn-sm btn-link" @onclick="() => confirmDeleteId = null">Cancel</button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => confirmDeleteId = role.Id">Delete</button>
+                            }
+                        }
+                        else
+                        {
+                            <span class="small text-muted">Has actions you don't have</span>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private string? theaterName;
+    private bool fullAccess;
+    private IReadOnlySet<string> permissions = new HashSet<string>();
+    private List<RoleSummary>? roles;
+    private RoleEditor? editor;
+    private int? confirmDeleteId;
+
+    private sealed class RoleEditor
+    {
+        public int? Id { get; init; }
+        public string? OriginalName { get; init; }
+        public string Name { get; set; } = "";
+        public string? Description { get; set; }
+        public HashSet<string> Permissions { get; init; } = [];
+    }
+
+    protected override async Task LoadAsync()
+    {
+        var theater = await Theaters.GetForManageAsync(User, Id);
+        theaterName = theater.Name;
+        fullAccess = TheaterAccess.HasFullAccess(User, theater);
+        permissions = await Access.GetPermissionsAsync(User, theater);
+        roles = await RoleManager.ListAsync(User, Id); // requires ManageRoles
+        confirmDeleteId = null;
+    }
+
+    private static string NameOf(string key) => TheaterPermissions.All.FirstOrDefault(p => p.Key == key)?.Name ?? key;
+
+    private void StartNew() => editor = new RoleEditor();
+
+    private void StartEdit(RoleSummary role)
+    {
+        confirmDeleteId = null;
+        editor = new RoleEditor
+        {
+            Id = role.Id, OriginalName = role.Name, Name = role.Name, Description = role.Description,
+            Permissions = role.Permissions.ToHashSet(),
+        };
+    }
+
+    private void Toggle(string key, bool on)
+    {
+        if (on) editor!.Permissions.Add(key); else editor!.Permissions.Remove(key);
+    }
+
+    private Task SaveAsync() => RunAsync(async () =>
+    {
+        var e = editor!;
+        if (e.Id is int roleId)
+            await RoleManager.UpdateAsync(User, roleId, e.Name, e.Description, e.Permissions);
+        else
+            await RoleManager.CreateAsync(User, Id, e.Name, e.Description, e.Permissions);
+        editor = null;
+        await LoadAsync();
+    }, editor?.Id is null ? "Role created." : "Role saved.");
+
+    private Task DeleteAsync(RoleSummary role) => RunAsync(async () =>
+    {
+        await RoleManager.DeleteAsync(User, role.Id);
+        await LoadAsync();
+    }, $"Deleted the {role.Name} role.");
+}

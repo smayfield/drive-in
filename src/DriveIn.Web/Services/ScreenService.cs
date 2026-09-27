@@ -13,7 +13,7 @@ public sealed class ScreenService(IDbContextFactory<ApplicationDbContext> dbFact
         await using var db = await dbFactory.CreateDbContextAsync();
         var theater = await db.Theaters.FirstOrDefaultAsync(t => t.Id == theaterId)
             ?? throw new NotFoundException("Theater not found.");
-        await auth.RequireAsync(user, theater, TheaterOperations.Operate);
+        await auth.RequireAsync(user, theater, TheaterPermissions.ManageScreens);
 
         var nextOrder = await db.Screens.Where(s => s.TheaterId == theaterId)
             .Select(s => (int?)s.SortOrder).MaxAsync() ?? -1;
@@ -61,7 +61,7 @@ public sealed class ScreenService(IDbContextFactory<ApplicationDbContext> dbFact
     {
         var screen = await db.Screens.Include(s => s.Theater).FirstOrDefaultAsync(s => s.Id == screenId)
             ?? throw new NotFoundException("Screen not found.");
-        await auth.RequireAsync(user, screen.Theater!, TheaterOperations.Operate);
+        await auth.RequireAsync(user, screen.Theater!, TheaterPermissions.ManageScreens);
         return screen;
     }
 }

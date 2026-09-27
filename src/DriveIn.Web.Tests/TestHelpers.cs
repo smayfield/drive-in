@@ -63,7 +63,8 @@ public sealed class TestApp : IAsyncDisposable
             .AddClaimsPrincipalFactory<AppClaimsPrincipalFactory>()
             .AddDefaultTokenProviders();
         services.AddAuthorizationCore();
-        services.AddSingleton<IAuthorizationHandler, TheaterAuthorizationHandler>();
+        services.AddScoped<TheaterAccess>();
+        services.AddScoped<IAuthorizationHandler, TheaterAuthorizationHandler>();
         services.AddSingleton<IAppEmailSender>(Email);
         services.AddSingleton<IEmailSender<ApplicationUser>, IdentityEmailSender>();
         services.AddSingleton<TimeProvider>(Time);
@@ -72,6 +73,7 @@ public sealed class TestApp : IAsyncDisposable
         services.AddScoped<InvitationService>();
         services.AddScoped<EmployeeService>();
         services.AddScoped<UserAdminService>();
+        services.AddScoped<RoleService>();
         Services = services.BuildServiceProvider();
         DbSeeder.SeedAsync(Services).GetAwaiter().GetResult();
     }
@@ -99,6 +101,30 @@ public sealed class TestApp : IAsyncDisposable
         db.Theaters.Add(theater);
         await db.SaveChangesAsync();
         return theater;
+    }
+
+    // Creates a role at the employee's theater with these permissions and assigns it to them.
+    public async Task<TheaterRole> GrantAsync(ApplicationUser employee, params string[] permissions)
+    {
+        await using var db = Db();
+        var role = new TheaterRole
+        {
+            TheaterId = employee.EmployeeTheaterId ?? throw new InvalidOperationException("Not an employee."),
+            Name = "role-" + Guid.NewGuid().ToString("N")[..8],
+            Permissions = permissions.Select(p => new TheaterRolePermission { Permission = p }).ToList(),
+        };
+        db.TheaterRoles.Add(role);
+        await db.SaveChangesAsync();
+        db.EmployeeRoles.Add(new EmployeeRole { UserId = employee.Id, RoleId = role.Id });
+        await db.SaveChangesAsync();
+        return role;
+    }
+
+    public async Task<IReadOnlySet<string>> PermissionsAsync(ApplicationUser user, Theater theater, bool admin = false)
+    {
+        await using var scope = Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<TheaterAccess>()
+            .GetPermissionsAsync(Principals.For(user, admin), theater);
     }
 
     public async ValueTask DisposeAsync() => await Services.DisposeAsync();

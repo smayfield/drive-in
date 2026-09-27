@@ -13,4 +13,7 @@ public class ApplicationUser : IdentityUser
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
     public List<Theater> OwnedTheaters { get; set; } = [];
+
+    // Employee accounts only: roles within EmployeeTheater.
+    public List<EmployeeRole> EmployeeRoles { get; set; } = [];
 }

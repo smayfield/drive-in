@@ -48,25 +48,26 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
         return await query.OrderBy(t => t.Name).ToListAsync();
     }
 
-    public async Task<Theater> GetForOperateAsync(ClaimsPrincipal user, int id)
+    // For the manage pages: any member (admin, owner, or its employee). What they can change is per permission.
+    public async Task<Theater> GetForManageAsync(ClaimsPrincipal user, int id)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var theater = await db.Theaters.AsNoTracking()
             .Include(t => t.Screens)
             .Include(t => t.Owner)
             .FirstOrDefaultAsync(t => t.Id == id) ?? throw new NotFoundException("Theater not found.");
-        await auth.RequireAsync(user, theater, TheaterOperations.Operate);
+        Guard.RequireMember(user, theater);
         theater.Screens.Sort((a, b) => a.SortOrder.CompareTo(b.SortOrder));
         return theater;
     }
 
-    // Owners and employees edit the public profile; slug, active flag and owner are admin-only.
+    // Requires EditProfile; slug, active flag and owner are admin-only.
     public async Task UpdateProfileAsync(ClaimsPrincipal user, Theater input)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var theater = await db.Theaters.FirstOrDefaultAsync(t => t.Id == input.Id)
             ?? throw new NotFoundException("Theater not found.");
-        await auth.RequireAsync(user, theater, TheaterOperations.Operate);
+        await auth.RequireAsync(user, theater, TheaterPermissions.EditProfile);
         CopyProfile(input, theater);
         theater.UpdatedAt = time.GetUtcNow();
         await db.SaveChangesAsync();
@@ -101,6 +102,7 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
         var theater = new Theater { Slug = input.Slug, IsActive = input.IsActive, CreatedAt = time.GetUtcNow(), UpdatedAt = time.GetUtcNow() };
         CopyProfile(input, theater);
         db.Theaters.Add(theater);
+        db.TheaterRoles.AddRange(DefaultTheaterRoles.CreateFor(theater));
         await db.SaveChangesAsync();
         return theater;
     }
@@ -119,7 +121,7 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
         await db.SaveChangesAsync();
     }
 
-    // Deletes the theater with its screens, invitations, and employee accounts
+    // Deletes the theater with its screens, invitations, roles, and employee accounts
     // (employee accounts are only valid for this theater, so they go too).
     public async Task DeleteAsync(ClaimsPrincipal user, int id)
     {
@@ -131,6 +133,10 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
             .Include(t => t.Employees)
             .FirstOrDefaultAsync(t => t.Id == id) ?? throw new NotFoundException("Theater not found.");
         db.Invitations.RemoveRange(db.Invitations.Where(i => i.TheaterId == id));
+        var roleIds = db.TheaterRoles.Where(r => r.TheaterId == id).Select(r => r.Id);
+        db.EmployeeRoles.RemoveRange(db.EmployeeRoles.Where(m => roleIds.Contains(m.RoleId)));
+        db.TheaterRolePermissions.RemoveRange(db.TheaterRolePermissions.Where(p => roleIds.Contains(p.RoleId)));
+        db.TheaterRoles.RemoveRange(db.TheaterRoles.Where(r => r.TheaterId == id));
         db.Users.RemoveRange(theater.Employees);
         db.Screens.RemoveRange(theater.Screens);
         db.Theaters.Remove(theater);
