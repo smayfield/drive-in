@@ -32,7 +32,13 @@ Docker on one EC2 server. The setup mirrors LegoList.
   owner by email on the theater's admin page: existing accounts become owner immediately; otherwise
   an invitation is emailed. Owners manage their theater at `/manage/{id}`, including employees.
 - **Employees** are separate accounts bound to one theater, created only by invitation from its
-  owner (or an admin). They can do everything for that theater except manage employees.
+  owner or anyone with "Invite employees". What they can do is set by **roles**.
+- **Roles** are defined per theater by its owner (Manage → Roles). A role is a named set of actions
+  (edit profile, manage screens, view/invite/manage employees, manage roles). Employees can have several
+  roles and get the union of their actions; new employees have none, so they can't do anything until
+  assigned a role. New theaters start with Manager (everything), Operations, Ticketing and Concessions,
+  which owners can change or delete. Someone with "Manage roles" can only grant, change or remove
+  actions they hold themselves, and can't delete an employee who has more authority than they do.
 
 Invitations are single-use links valid for 7 days (only a SHA-256 of the token is stored); the
 invitee sets a password or continues with Google using the invited address.

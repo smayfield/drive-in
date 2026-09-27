@@ -29,3 +29,14 @@ verified; please don't flag them again unless the code around them changes.
   without this the error page itself throws and the user gets a raw 500.
 - **Services use the injected `TimeProvider`**, not `DateTimeOffset.UtcNow`. Entity property
   initializers (`= DateTimeOffset.UtcNow`) are only defaults for rows created outside the services.
+- **Theater permissions are resolved from the database on every check** (`TheaterAccess`), not cached
+  in claims, so role changes take effect immediately. The query is small and indexed.
+- **Anti-escalation in `RoleService`/`EmployeeService`** (`Guard.RequireWithinAuthority`): a non-owner can
+  only create, change, delete, assign or remove roles, or delete employees, within their own permissions.
+  Removing a permission you don't hold also counts. Owners and admins pass automatically (they hold all).
+- **Default roles "Ticketing" and "Concessions" have no actions** on purpose: they're placeholders for
+  features that don't exist yet.
+- **The `AddTheaterRoles` migration hard-codes the default roles in SQL** instead of reading
+  `DefaultTheaterRoles`, so the migration's behavior never changes when the catalog does.
+- **Employees with no roles can still open `/manage/{id}`** (read-only, with a notice). Membership is
+  checked by `Guard.RequireMember`; every change is still permission-checked.

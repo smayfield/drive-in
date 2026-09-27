@@ -104,7 +104,8 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
 
 builder.Services.AddAuthorizationBuilder()
     .AddPolicy(Policies.Admin, p => p.RequireRole(Roles.Admin));
-builder.Services.AddSingleton<IAuthorizationHandler, TheaterAuthorizationHandler>();
+builder.Services.AddScoped<TheaterAccess>();
+builder.Services.AddScoped<IAuthorizationHandler, TheaterAuthorizationHandler>();
 
 builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection(EmailOptions.Section));
 if (builder.Configuration[$"{EmailOptions.Section}:Provider"] == "Ses")
@@ -125,6 +126,7 @@ builder.Services.AddScoped<ScreenService>();
 builder.Services.AddScoped<InvitationService>();
 builder.Services.AddScoped<EmployeeService>();
 builder.Services.AddScoped<UserAdminService>();
+builder.Services.AddScoped<RoleService>();
 
 var app = builder.Build();
 

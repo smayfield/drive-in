@@ -9,6 +9,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<Theater> Theaters => Set<Theater>();
     public DbSet<Screen> Screens => Set<Screen>();
     public DbSet<Invitation> Invitations => Set<Invitation>();
+    public DbSet<TheaterRole> TheaterRoles => Set<TheaterRole>();
+    public DbSet<TheaterRolePermission> TheaterRolePermissions => Set<TheaterRolePermission>();
+    public DbSet<EmployeeRole> EmployeeRoles => Set<EmployeeRole>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -65,6 +68,39 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .WithMany()
                 .HasForeignKey(x => x.InvitedById)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<TheaterRole>(r =>
+        {
+            r.HasIndex(x => new { x.TheaterId, x.NormalizedName }).IsUnique();
+            r.Property(x => x.NormalizedName).IsRequired();
+            r.HasOne(x => x.Theater)
+                .WithMany()
+                .HasForeignKey(x => x.TheaterId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<TheaterRolePermission>(p =>
+        {
+            p.HasKey(x => new { x.RoleId, x.Permission });
+            p.Property(x => x.Permission).HasMaxLength(64);
+            p.HasOne(x => x.Role)
+                .WithMany(r => r.Permissions)
+                .HasForeignKey(x => x.RoleId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<EmployeeRole>(m =>
+        {
+            m.HasKey(x => new { x.UserId, x.RoleId });
+            m.HasOne(x => x.User)
+                .WithMany(u => u.EmployeeRoles)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            m.HasOne(x => x.Role)
+                .WithMany(r => r.Members)
+                .HasForeignKey(x => x.RoleId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

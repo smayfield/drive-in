@@ -3,8 +3,10 @@
 @rendermode InteractiveServer
 @inherits AppComponentBase
 @inject TheaterService Theaters
+@inject TheaterAccess Access
 @inject EmployeeService Employees
 @inject InvitationService Invitations
+@inject RoleService RoleManager
 
 <PageTitle>Employees · Manage · Drive-In Online</PageTitle>
 
@@ -13,104 +15,207 @@
 
 <Alerts Error="@Error" Success="@Success" />
 
-@if (employees is not null)
+@if (loaded)
 {
-    <section class="mb-4">
-        <h2 class="h5">Invite an employee</h2>
-        <p class="text-muted small">
-            They'll get an email link to create an account for this theater, with a password or with Google.
-            Employee accounts can edit the theater and its screens, but can't manage employees.
-        </p>
-        <form class="row g-2" @onsubmit="InviteAsync">
-            <div class="col-sm-8 col-md-6">
-                <input type="email" class="form-control" placeholder="name@example.com" @bind="inviteEmail" required />
-            </div>
-            <div class="col-auto">
-                <button type="submit" class="btn btn-primary">Send invite</button>
-            </div>
-        </form>
-    </section>
+    @if (Can(TheaterPermissions.InviteEmployees))
+    {
+        <section class="mb-4">
+            <h2 class="h5">Invite an employee</h2>
+            <p class="text-muted small">
+                They'll get an email link to create an account for this theater, with a password or with Google.
+                New employees have no roles, so they can't do anything until someone assigns them one.
+            </p>
+            <form class="row g-2" @onsubmit="InviteAsync">
+                <div class="col-sm-8 col-md-6">
+                    <input type="email" class="form-control" placeholder="name@example.com" @bind="inviteEmail" required />
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-primary">Send invite</button>
+                </div>
+            </form>
+        </section>
+    }
 
-    <section class="mb-4">
-        <h2 class="h5">Employees</h2>
-        @if (employees.Count == 0)
-        {
-            <p class="text-muted">No employees yet.</p>
-        }
-        else
-        {
-            <table class="table align-middle">
-                <thead><tr><th>Email</th><th>Name</th><th>Sign-in</th><th></th></tr></thead>
-                <tbody>
-                    @foreach (var e in employees)
-                    {
-                        <tr @key="e.Id">
-                            <td>@e.Email @if (e.IsLockedOut) { <span class="badge text-bg-warning ms-1">Locked</span> }</td>
-                            <td>@e.DisplayName</td>
-                            <td>@(e.HasPassword ? "Password" : "Google only")</td>
-                            <td class="text-end">
-                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => ResetAsync(e)">Send password reset</button>
-                                @if (confirmDeleteId == e.Id)
-                                {
-                                    <button class="btn btn-sm btn-danger" @onclick="() => DeleteAsync(e)">Confirm delete</button>
-                                }
-                                else
-                                {
-                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => confirmDeleteId = e.Id">Delete</button>
-                                }
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        }
-    </section>
+    @if (employees is not null)
+    {
+        <section class="mb-4">
+            <div class="d-flex justify-content-between align-items-center">
+                <h2 class="h5 mb-0">Employees</h2>
+                @if (Can(TheaterPermissions.ManageRoles))
+                {
+                    <a href="manage/@Id/roles" class="small">Manage roles</a>
+                }
+            </div>
+            @if (employees.Count == 0)
+            {
+                <p class="text-muted mt-2">No employees yet.</p>
+            }
+            else
+            {
+                <table class="table align-middle mt-2">
+                    <thead><tr><th>Employee</th><th>Roles</th><th>Sign-in</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var e in employees)
+                        {
+                            <tr @key="e.Id">
+                                <td>
+                                    <div>@(e.DisplayName ?? e.Email)</div>
+                                    @if (e.DisplayName is not null) { <div class="small text-muted">@e.Email</div> }
+                                    @if (e.IsLockedOut) { <span class="badge text-bg-warning">Locked</span> }
+                                </td>
+                                <td>
+                                    @if (editingRolesFor == e.Id)
+                                    {
+                                        @foreach (var role in roles!)
+                                        {
+                                            var grantable = WithinMyAuthority(role);
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="r-@e.Id-@role.Id"
+                                                       checked="@selectedRoles.Contains(role.Id)" disabled="@(!grantable)"
+                                                       @onchange="args => ToggleRole(role.Id, (bool)args.Value!)" />
+                                                <label class="form-check-label" for="r-@e.Id-@role.Id"
+                                                       title="@(grantable ? role.Description : "This role has permissions you don't have.")">
+                                                    @role.Name
+                                                    @if (!grantable) { <span class="text-muted small">(can't change)</span> }
+                                                </label>
+                                            </div>
+                                        }
+                                        @if (roles!.Count == 0)
+                                        {
+                                            <span class="text-muted small">No roles yet. <a href="manage/@Id/roles">Create one</a>.</span>
+                                        }
+                                        <div class="mt-2">
+                                            <button class="btn btn-sm btn-primary" @onclick="() => SaveRolesAsync(e)">Save roles</button>
+                                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => editingRolesFor = null">Cancel</button>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        @if (e.Roles.Count == 0)
+                                        {
+                                            <span class="text-muted small">No roles</span>
+                                        }
+                                        @foreach (var r in e.Roles)
+                                        {
+                                            <span class="badge text-bg-secondary me-1">@r.Name</span>
+                                        }
+                                        @if (Can(TheaterPermissions.ManageRoles))
+                                        {
+                                            <button class="btn btn-sm btn-link" @onclick="() => StartEditRoles(e)">Edit</button>
+                                        }
+                                    }
+                                </td>
+                                <td class="small">@(e.HasPassword ? "Password" : "Google only")</td>
+                                <td class="text-end text-nowrap">
+                                    @if (Can(TheaterPermissions.ManageEmployees))
+                                    {
+                                        <button class="btn btn-sm btn-outline-secondary" @onclick="() => ResetAsync(e)">Send password reset</button>
+                                        @if (confirmDeleteId == e.Id)
+                                        {
+                                            <button class="btn btn-sm btn-danger" @onclick="() => DeleteAsync(e)">Confirm delete</button>
+                                        }
+                                        else
+                                        {
+                                            <button class="btn btn-sm btn-outline-danger" @onclick="() => confirmDeleteId = e.Id">Delete</button>
+                                        }
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </section>
+    }
 
-    <section>
-        <h2 class="h5">Pending invitations</h2>
-        @if (pending!.Count == 0)
-        {
-            <p class="text-muted">None.</p>
-        }
-        else
-        {
-            <table class="table align-middle">
-                <thead><tr><th>Email</th><th>Type</th><th>Expires</th><th></th></tr></thead>
-                <tbody>
-                    @foreach (var i in pending)
-                    {
-                        <tr @key="i.Id">
-                            <td>@i.Email</td>
-                            <td>@i.Kind</td>
-                            <td>@(i.ExpiresAt <= DateTimeOffset.UtcNow ? "Expired" : i.ExpiresAt.ToLocalTime().ToString("MMM d, yyyy"))</td>
-                            <td class="text-end">
-                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => ResendAsync(i)">Resend</button>
-                                <button class="btn btn-sm btn-outline-danger" @onclick="() => RevokeAsync(i)">Revoke</button>
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        }
-    </section>
+    @if (pending is not null)
+    {
+        <section>
+            <h2 class="h5">Pending invitations</h2>
+            @if (pending.Count == 0)
+            {
+                <p class="text-muted">None.</p>
+            }
+            else
+            {
+                <table class="table align-middle">
+                    <thead><tr><th>Email</th><th>Type</th><th>Expires</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var i in pending)
+                        {
+                            <tr @key="i.Id">
+                                <td>@i.Email</td>
+                                <td>@i.Kind</td>
+                                <td>@(i.ExpiresAt <= DateTimeOffset.UtcNow ? "Expired" : i.ExpiresAt.ToLocalTime().ToString("MMM d, yyyy"))</td>
+                                <td class="text-end">
+                                    @if (Can(TheaterPermissions.InviteEmployees) && (i.Kind == InvitationKind.Employee || User.IsAdmin()))
+                                    {
+                                        <button class="btn btn-sm btn-outline-secondary" @onclick="() => ResendAsync(i)">Resend</button>
+                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => RevokeAsync(i)">Revoke</button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </section>
+    }
 }
 
 @code {
     [Parameter] public int Id { get; set; }
 
+    private bool loaded;
     private string? theaterName;
+    private IReadOnlySet<string> permissions = new HashSet<string>();
     private List<EmployeeSummary>? employees;
     private List<Invitation>? pending;
+    private List<RoleSummary>? roles;
     private string inviteEmail = "";
     private string? confirmDeleteId;
+    private string? editingRolesFor;
+    private HashSet<int> selectedRoles = [];
+
+    // UI only; every action is re-checked by the service.
+    private bool Can(string permission) => permissions.Contains(permission);
+
+    private bool WithinMyAuthority(RoleSummary role) => role.Permissions.All(permissions.Contains);
 
     protected override async Task LoadAsync()
     {
-        theaterName = (await Theaters.GetForOperateAsync(User, Id)).Name;
-        employees = await Employees.ListAsync(User, Id);
-        pending = await Invitations.ListPendingAsync(User, Id);
+        var theater = await Theaters.GetForManageAsync(User, Id);
+        theaterName = theater.Name;
+        permissions = await Access.GetPermissionsAsync(User, theater);
+        if (!EmployeeService.ListingPermissions.Any(Can) && !Can(TheaterPermissions.InviteEmployees))
+            throw new AccessDeniedException();
+
+        employees = EmployeeService.ListingPermissions.Any(Can) ? await Employees.ListAsync(User, Id) : null;
+        pending = Can(TheaterPermissions.ViewEmployees) || Can(TheaterPermissions.InviteEmployees)
+            ? await Invitations.ListPendingAsync(User, Id) : null;
+        roles = Can(TheaterPermissions.ManageRoles) ? await RoleManager.ListAsync(User, Id) : null;
         confirmDeleteId = null;
+        editingRolesFor = null;
+        loaded = true;
     }
+
+    private void StartEditRoles(EmployeeSummary e)
+    {
+        confirmDeleteId = null;
+        editingRolesFor = e.Id;
+        selectedRoles = e.Roles.Select(r => r.Id).ToHashSet();
+    }
+
+    private void ToggleRole(int roleId, bool on)
+    {
+        if (on) selectedRoles.Add(roleId); else selectedRoles.Remove(roleId);
+    }
+
+    private Task SaveRolesAsync(EmployeeSummary e) => RunAsync(async () =>
+    {
+        await Employees.SetRolesAsync(User, Id, e.Id, selectedRoles);
+        await LoadAsync();
+    }, $"Roles updated for {e.DisplayName ?? e.Email}.");
 
     private Task InviteAsync() => RunAsync(async () =>
     {

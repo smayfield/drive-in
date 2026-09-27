@@ -1,7 +1,7 @@
 using System.Security.Claims;
 using DriveIn.Web.Data;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Authorization.Infrastructure;
+using Microsoft.EntityFrameworkCore;
 
 namespace DriveIn.Web.Authorization;
 
@@ -21,15 +21,6 @@ public static class AppClaims
     public const string EmployeeTheater = "drivein:employee_theater";
 }
 
-public static class TheaterOperations
-{
-    // Edit the theater profile and screens: admin, owner, or one of its employees.
-    public static readonly OperationAuthorizationRequirement Operate = new() { Name = nameof(Operate) };
-
-    // Invite, reset, and delete employees: admin or owner only.
-    public static readonly OperationAuthorizationRequirement ManageEmployees = new() { Name = nameof(ManageEmployees) };
-}
-
 public static class ClaimsPrincipalExtensions
 {
     public static string? GetUserId(this ClaimsPrincipal user) => user.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -40,29 +31,50 @@ public static class ClaimsPrincipalExtensions
     public static bool IsAdmin(this ClaimsPrincipal user) => user.IsInRole(Roles.Admin);
 }
 
-public sealed class TheaterAuthorizationHandler : AuthorizationHandler<OperationAuthorizationRequirement, Theater>
+// Requires one TheaterPermissions action on a Theater resource.
+public sealed record TheaterPermissionRequirement(string Permission) : IAuthorizationRequirement;
+
+// Resolves what a user may do at a theater:
+//   admin or the theater's owner  -> every permission
+//   an employee of the theater    -> the union of their roles' permissions (none by default)
+//   anyone else                   -> nothing
+// Role permissions are read from the database on each check, so changes apply immediately.
+public sealed class TheaterAccess(IDbContextFactory<ApplicationDbContext> dbFactory)
 {
-    protected override Task HandleRequirementAsync(
-        AuthorizationHandlerContext context, OperationAuthorizationRequirement requirement, Theater theater)
+    private static readonly IReadOnlySet<string> None = new HashSet<string>();
+
+    // Admins, the owner, and the theater's own employees (even with no roles) may open its manage pages.
+    public static bool IsMember(ClaimsPrincipal user, Theater theater) =>
+        user.GetUserId() is string userId
+        && (user.IsAdmin() || theater.OwnerId == userId || user.GetEmployeeTheaterId() == theater.Id);
+
+    public static bool HasFullAccess(ClaimsPrincipal user, Theater theater) =>
+        user.GetUserId() is string userId && (user.IsAdmin() || theater.OwnerId == userId);
+
+    public async Task<IReadOnlySet<string>> GetPermissionsAsync(ClaimsPrincipal user, Theater theater)
     {
-        var user = context.User;
-        var userId = user.GetUserId();
-        if (userId is null)
-            return Task.CompletedTask;
+        if (HasFullAccess(user, theater))
+            return TheaterPermissions.AllKeys;
+        if (user.GetUserId() is not string userId || user.GetEmployeeTheaterId() != theater.Id)
+            return None;
 
-        var isAdmin = user.IsAdmin();
-        var isOwner = theater.OwnerId == userId;
-        var isEmployee = user.GetEmployeeTheaterId() == theater.Id;
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var keys = await db.EmployeeRoles
+            .Where(m => m.UserId == userId && m.Role!.TheaterId == theater.Id)
+            .SelectMany(m => m.Role!.Permissions.Select(p => p.Permission))
+            .Distinct()
+            .ToListAsync();
+        return keys.Where(TheaterPermissions.IsKnown).ToHashSet();
+    }
+}
 
-        var allowed = requirement.Name switch
-        {
-            nameof(TheaterOperations.Operate) => isAdmin || isOwner || isEmployee,
-            nameof(TheaterOperations.ManageEmployees) => isAdmin || isOwner,
-            _ => false,
-        };
-
-        if (allowed)
+public sealed class TheaterAuthorizationHandler(TheaterAccess access)
+    : AuthorizationHandler<TheaterPermissionRequirement, Theater>
+{
+    protected override async Task HandleRequirementAsync(
+        AuthorizationHandlerContext context, TheaterPermissionRequirement requirement, Theater theater)
+    {
+        if ((await access.GetPermissionsAsync(context.User, theater)).Contains(requirement.Permission))
             context.Succeed(requirement);
-        return Task.CompletedTask;
     }
 }

@@ -25,6 +25,7 @@ public enum InviteOutcome
 public sealed class InvitationService(
     IServiceScopeFactory scopeFactory,
     IAuthorizationService auth,
+    TheaterAccess access,
     IAppEmailSender email,
     TimeProvider time)
 {
@@ -84,7 +85,9 @@ public sealed class InvitationService(
         var (db, _) = Resolve(scope);
         var theater = await db.Theaters.AsNoTracking().FirstOrDefaultAsync(t => t.Id == theaterId)
             ?? throw new NotFoundException("Theater not found.");
-        await auth.RequireAsync(actor, theater, TheaterOperations.ManageEmployees);
+        var permissions = await access.GetPermissionsAsync(actor, theater);
+        if (!permissions.Contains(TheaterPermissions.ViewEmployees) && !permissions.Contains(TheaterPermissions.InviteEmployees))
+            throw new AccessDeniedException();
 
         var query = db.Invitations.AsNoTracking().Where(i => i.TheaterId == theaterId && i.AcceptedAt == null);
         if (!actor.IsAdmin())
@@ -230,13 +233,13 @@ public sealed class InvitationService(
         return invite;
     }
 
-    // Only admins assign owners; owners (and admins) invite employees.
+    // Only admins assign owners; employee invitations need InviteEmployees (owners and admins have it).
     private async Task RequireCanManageAsync(ClaimsPrincipal actor, Theater theater, InvitationKind kind)
     {
         if (kind == InvitationKind.Owner)
             Guard.RequireAdmin(actor);
         else
-            await auth.RequireAsync(actor, theater, TheaterOperations.ManageEmployees);
+            await auth.RequireAsync(actor, theater, TheaterPermissions.InviteEmployees);
     }
 
     private Task SendInviteEmailAsync(string to, string theaterName, InvitationKind kind, string link)

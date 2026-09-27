@@ -111,12 +111,15 @@ public class EmployeeServiceTests
 public class ScreenServiceTests
 {
     [Fact]
-    public async Task Employee_adds_and_reorders_screens_for_their_theater_only()
+    public async Task Employee_needs_ManageScreens_and_only_for_their_theater()
     {
         await using var app = new TestApp();
         var theater = await app.CreateTheaterAsync("Starlight");
         var other = await app.CreateTheaterAsync("Other");
-        var employee = Principals.For(await app.CreateUserAsync("emp@example.com", employeeTheaterId: theater.Id));
+        var employeeUser = await app.CreateUserAsync("emp@example.com", employeeTheaterId: theater.Id);
+        var employee = Principals.For(employeeUser);
+        await Assert.ThrowsAsync<AccessDeniedException>(() => app.Get<ScreenService>().AddAsync(employee, theater.Id, "Nope", 1));
+        await app.GrantAsync(employeeUser, TheaterPermissions.ManageScreens);
         var service = app.Get<ScreenService>();
 
         await service.AddAsync(employee, theater.Id, "One", 100);

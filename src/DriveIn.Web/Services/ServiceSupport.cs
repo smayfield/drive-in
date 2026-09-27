@@ -3,7 +3,6 @@ using System.Text;
 using DriveIn.Web.Authorization;
 using DriveIn.Web.Data;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Authorization.Infrastructure;
 using Microsoft.AspNetCore.WebUtilities;
 
 namespace DriveIn.Web.Services;
@@ -19,11 +18,25 @@ public sealed class NotFoundException(string message = "Not found.") : Exception
 internal static class Guard
 {
     public static async Task RequireAsync(this IAuthorizationService auth, ClaimsPrincipal user, Theater theater,
-        OperationAuthorizationRequirement operation)
+        string permission)
     {
-        var result = await auth.AuthorizeAsync(user, theater, operation);
+        var result = await auth.AuthorizeAsync(user, theater, new TheaterPermissionRequirement(permission));
         if (!result.Succeeded)
             throw new AccessDeniedException();
+    }
+
+    // Admin, owner, or one of the theater's employees (regardless of roles).
+    public static void RequireMember(ClaimsPrincipal user, Theater theater)
+    {
+        if (!TheaterAccess.IsMember(user, theater))
+            throw new AccessDeniedException();
+    }
+
+    // Anti-escalation: a non-owner can only grant, revoke or touch permissions they hold themselves.
+    public static void RequireWithinAuthority(IReadOnlySet<string> actorPermissions, IEnumerable<string> permissions, string message)
+    {
+        if (!permissions.Where(TheaterPermissions.IsKnown).All(actorPermissions.Contains))
+            throw new AppValidationException(message);
     }
 
     public static void RequireAdmin(ClaimsPrincipal user)

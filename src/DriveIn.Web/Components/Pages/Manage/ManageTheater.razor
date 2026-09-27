@@ -4,7 +4,7 @@
 @inherits AppComponentBase
 @inject TheaterService Theaters
 @inject ScreenService Screens
-@inject IAuthorizationService Auth
+@inject TheaterAccess Access
 
 <PageTitle>@(theater?.Name ?? "Theater") · Manage · Drive-In Online</PageTitle>
 
@@ -24,24 +24,55 @@ else
             {
                 <a class="btn btn-outline-secondary" href="theaters/@theater.Slug">View public page</a>
             }
-            @if (canManageEmployees)
+            @if (EmployeeService.ListingPermissions.Any(Can) || Can(TheaterPermissions.InviteEmployees))
             {
                 <a class="btn btn-outline-primary" href="manage/@theater.Id/employees">Employees</a>
+            }
+            @if (Can(TheaterPermissions.ManageRoles))
+            {
+                <a class="btn btn-outline-primary" href="manage/@theater.Id/roles">Roles</a>
             }
         </div>
     </div>
 
     <Alerts Error="@Error" Success="@Success" />
 
-    <section class="mb-5">
-        <h2 class="h4">Profile</h2>
-        <EditForm Model="profile" OnValidSubmit="SaveProfileAsync">
-            <DataAnnotationsValidator />
-            <TheaterProfileFields Model="profile" />
-            <button type="submit" class="btn btn-primary mt-3">Save profile</button>
-        </EditForm>
-    </section>
+    @if (permissions.Count == 0)
+    {
+        <div class="alert alert-info">
+            You don't have any permissions at this theater yet. Ask your manager or the owner to assign you a role.
+        </div>
+    }
 
+    @if (Can(TheaterPermissions.EditProfile))
+    {
+        <section class="mb-5">
+            <h2 class="h4">Profile</h2>
+            <EditForm Model="profile" OnValidSubmit="SaveProfileAsync">
+                <DataAnnotationsValidator />
+                <TheaterProfileFields Model="profile" />
+                <button type="submit" class="btn btn-primary mt-3">Save profile</button>
+            </EditForm>
+        </section>
+    }
+
+    @if (!Can(TheaterPermissions.ManageScreens))
+    {
+        <section>
+            <h2 class="h4">Screens</h2>
+            <table class="table table-sm">
+                <thead><tr><th>Name</th><th>Car capacity</th></tr></thead>
+                <tbody>
+                    @foreach (var screen in theater.Screens)
+                    {
+                        <tr><td>@screen.Name</td><td>@screen.CarCapacity</td></tr>
+                    }
+                </tbody>
+            </table>
+        </section>
+    }
+    else
+    {
     <section>
         <h2 class="h4">Screens</h2>
         <table class="table align-middle">
@@ -95,6 +126,7 @@ else
             </tbody>
         </table>
     </section>
+    }
 }
 
 @code {
@@ -102,21 +134,24 @@ else
 
     private Theater? theater;
     private Theater profile = new();
-    private bool canManageEmployees;
+    private IReadOnlySet<string> permissions = new HashSet<string>();
     private Screen newScreen = new();
     private Screen? editing;
     private int? confirmDeleteId;
 
+    // UI only; every action is re-checked by the service.
+    private bool Can(string permission) => permissions.Contains(permission);
+
     protected override async Task LoadAsync()
     {
-        theater = await Theaters.GetForOperateAsync(User, Id);
+        theater = await Theaters.GetForManageAsync(User, Id);
         profile = theater.CopyForEdit();
-        canManageEmployees = (await Auth.AuthorizeAsync(User, theater, TheaterOperations.ManageEmployees)).Succeeded;
+        permissions = await Access.GetPermissionsAsync(User, theater);
     }
 
     private async Task ReloadAsync()
     {
-        theater = await Theaters.GetForOperateAsync(User, Id);
+        theater = await Theaters.GetForManageAsync(User, Id);
         editing = null;
         confirmDeleteId = null;
     }

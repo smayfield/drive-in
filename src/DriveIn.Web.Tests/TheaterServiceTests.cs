@@ -1,3 +1,4 @@
+using DriveIn.Web.Authorization;
 using DriveIn.Web.Data;
 using DriveIn.Web.Services;
 using Microsoft.EntityFrameworkCore;
@@ -46,13 +47,16 @@ public class TheaterServiceTests
     }
 
     [Fact]
-    public async Task Employees_edit_only_their_theater_profile_and_not_admin_fields()
+    public async Task Employees_with_EditProfile_edit_only_their_theater_profile_and_not_admin_fields()
     {
         await using var app = new TestApp();
         var mine = await app.CreateTheaterAsync("Mine");
         var other = await app.CreateTheaterAsync("Other");
         var employee = await app.CreateUserAsync("emp@example.com", employeeTheaterId: mine.Id);
         var service = app.Get<TheaterService>();
+        await Assert.ThrowsAsync<AccessDeniedException>(() => // no roles yet
+            service.UpdateProfileAsync(Principals.For(employee), new Theater { Id = mine.Id, Name = "Nope" }));
+        await app.GrantAsync(employee, TheaterPermissions.EditProfile);
 
         await service.UpdateProfileAsync(Principals.For(employee),
             new Theater { Id = mine.Id, Name = "Mine Renamed", Slug = "hijacked", IsActive = false, City = "Austin" });
