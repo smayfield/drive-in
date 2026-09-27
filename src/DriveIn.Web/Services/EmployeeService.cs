@@ -40,7 +40,7 @@ public sealed class EmployeeService(
             .OrderBy(u => u.Email)
             .Select(u => new EmployeeSummary(u.Id, u.Email!, u.DisplayName, u.PasswordHash != null,
                 u.LockoutEnd != null && u.LockoutEnd > now, u.CreatedAt,
-                u.EmployeeRoles.OrderBy(m => m.Role!.Name).Select(m => new RoleRef(m.RoleId, m.Role!.Name)).ToList()))
+                u.EmployeeRoles.Where(m => m.Role!.TheaterId == theaterId).OrderBy(m => m.Role!.Name).Select(m => new RoleRef(m.RoleId, m.Role!.Name)).ToList()))
             .ToListAsync();
     }
 
@@ -94,7 +94,7 @@ public sealed class EmployeeService(
         if (wanted.Except(theaterRoles.Select(r => r.Id)).Any())
             throw new NotFoundException("Role not found.");
 
-        var current = await db.EmployeeRoles.Where(m => m.UserId == userId).ToListAsync();
+        var current = await db.EmployeeRoles.Where(m => m.UserId == userId && m.Role!.TheaterId == theaterId).ToListAsync();
         var currentIds = current.Select(m => m.RoleId).ToHashSet();
         var changed = theaterRoles.Where(r => wanted.Contains(r.Id) != currentIds.Contains(r.Id)).ToList();
 
