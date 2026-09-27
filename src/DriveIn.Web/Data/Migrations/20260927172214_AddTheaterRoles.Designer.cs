@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace DriveIn.Web.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260927171128_AddTheaterRoles")]
+    [Migration("20260927172214_AddTheaterRoles")]
     partial class AddTheaterRoles
     {
         /// <inheritdoc />
@@ -362,6 +362,12 @@ namespace DriveIn.Web.Data.Migrations
                         .HasColumnType("character varying(60)")
                         .HasColumnName("name");
 
+                    b.Property<string>("NormalizedName")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("normalized_name");
+
                     b.Property<int>("TheaterId")
                         .HasColumnType("integer")
                         .HasColumnName("theater_id");
@@ -369,9 +375,9 @@ namespace DriveIn.Web.Data.Migrations
                     b.HasKey("Id")
                         .HasName("pk_theater_roles");
 
-                    b.HasIndex("TheaterId", "Name")
+                    b.HasIndex("TheaterId", "NormalizedName")
                         .IsUnique()
-                        .HasDatabaseName("ix_theater_roles_theater_id_name");
+                        .HasDatabaseName("ix_theater_roles_theater_id_normalized_name");
 
                     b.ToTable("theater_roles", (string)null);
                 });

@@ -20,6 +20,7 @@ namespace DriveIn.Web.Data.Migrations
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     theater_id = table.Column<int>(type: "integer", nullable: false),
                     name = table.Column<string>(type: "character varying(60)", maxLength: 60, nullable: false),
+                    normalized_name = table.Column<string>(type: "character varying(60)", maxLength: 60, nullable: false),
                     description = table.Column<string>(type: "character varying(300)", maxLength: 300, nullable: true),
                     created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
@@ -82,17 +83,17 @@ namespace DriveIn.Web.Data.Migrations
                 column: "role_id");
 
             migrationBuilder.CreateIndex(
-                name: "ix_theater_roles_theater_id_name",
+                name: "ix_theater_roles_theater_id_normalized_name",
                 table: "theater_roles",
-                columns: new[] { "theater_id", "name" },
+                columns: new[] { "theater_id", "normalized_name" },
                 unique: true);
 
             // Give existing theaters the default roles that new theaters get (DefaultTheaterRoles), as
             // they were when this migration was written. Existing employees get no roles, per the new
             // rule that employees can do nothing until assigned one.
             migrationBuilder.Sql("""
-                INSERT INTO theater_roles (theater_id, name, description, created_at)
-                SELECT t.id, r.name, r.description, now()
+                INSERT INTO theater_roles (theater_id, name, normalized_name, description, created_at)
+                SELECT t.id, r.name, upper(r.name), r.description, now()
                 FROM theaters t
                 CROSS JOIN (VALUES
                     ('Manager', 'Runs the theater day to day, including staff and roles.'),

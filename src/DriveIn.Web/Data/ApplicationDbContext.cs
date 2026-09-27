@@ -72,7 +72,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
         builder.Entity<TheaterRole>(r =>
         {
-            r.HasIndex(x => new { x.TheaterId, x.Name }).IsUnique();
+            r.HasIndex(x => new { x.TheaterId, x.NormalizedName }).IsUnique();
+            r.Property(x => x.NormalizedName).IsRequired();
             r.HasOne(x => x.Theater)
                 .WithMany()
                 .HasForeignKey(x => x.TheaterId)

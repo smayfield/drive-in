@@ -47,10 +47,11 @@ public static class DefaultTheaterRoles
             []),
     ];
 
-    public static List<TheaterRole> CreateFor(Theater theater) =>
+    public static List<TheaterRole> CreateFor(Theater theater, DateTimeOffset createdAt) =>
         All.Select(r => new TheaterRole
         {
             Theater = theater,
+            CreatedAt = createdAt,
             Name = r.Name,
             Description = r.Description,
             Permissions = r.Permissions.Select(p => new TheaterRolePermission { Permission = p }).ToList(),

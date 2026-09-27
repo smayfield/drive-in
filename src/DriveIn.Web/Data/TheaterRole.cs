@@ -11,7 +11,21 @@ public class TheaterRole
     public Theater? Theater { get; set; }
 
     [Required, MaxLength(60)]
-    public string Name { get; set; } = "";
+    public string Name
+    {
+        get;
+        set
+        {
+            field = value;
+            NormalizedName = Normalize(value);
+        }
+    } = "";
+
+    // Upper-cased Name; unique per theater, so role names are unique ignoring case (enforced by the DB).
+    [MaxLength(60)]
+    public string NormalizedName { get; private set; } = "";
+
+    public static string Normalize(string name) => name.Trim().ToUpperInvariant();
 
     [MaxLength(300)]
     public string? Description { get; set; }

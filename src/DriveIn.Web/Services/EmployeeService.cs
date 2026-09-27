@@ -66,7 +66,7 @@ public sealed class EmployeeService(
 
         // Can't remove someone with authority you don't have yourself.
         var targetPermissions = await db.EmployeeRoles
-            .Where(m => m.UserId == userId)
+            .Where(m => m.UserId == userId && m.Role!.TheaterId == theaterId)
             .SelectMany(m => m.Role!.Permissions.Select(p => p.Permission))
             .ToListAsync();
         Guard.RequireWithinAuthority(await access.GetPermissionsAsync(actor, theater), targetPermissions,

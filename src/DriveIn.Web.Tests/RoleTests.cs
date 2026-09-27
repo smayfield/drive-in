@@ -63,6 +63,24 @@ public class RoleTests
     }
 
     [Fact]
+    public async Task Renaming_a_role_keeps_its_normalized_name_in_sync()
+    {
+        await using var app = new TestApp();
+        var owner = await app.CreateUserAsync("owner@example.com");
+        var theater = await app.CreateTheaterAsync("Starlight", owner.Id);
+        var roles = app.Get<RoleService>();
+        var me = Principals.For(owner);
+        var role = await roles.CreateAsync(me, theater.Id, "Night Crew", null, []);
+
+        await roles.UpdateAsync(me, role.Id, "Late Crew", null, []);
+
+        await using var db = app.Db();
+        Assert.Equal("LATE CREW", (await db.TheaterRoles.SingleAsync(r => r.Id == role.Id)).NormalizedName);
+        await roles.CreateAsync(me, theater.Id, "night crew", null, []); // old name is free again
+        await Assert.ThrowsAsync<AppValidationException>(() => roles.CreateAsync(me, theater.Id, "LATE crew", null, []));
+    }
+
+    [Fact]
     public async Task Role_manager_cannot_grant_permissions_they_lack()
     {
         await using var app = new TestApp();

@@ -102,7 +102,7 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
         var theater = new Theater { Slug = input.Slug, IsActive = input.IsActive, CreatedAt = time.GetUtcNow(), UpdatedAt = time.GetUtcNow() };
         CopyProfile(input, theater);
         db.Theaters.Add(theater);
-        db.TheaterRoles.AddRange(DefaultTheaterRoles.CreateFor(theater));
+        db.TheaterRoles.AddRange(DefaultTheaterRoles.CreateFor(theater, time.GetUtcNow()));
         await db.SaveChangesAsync();
         return theater;
     }

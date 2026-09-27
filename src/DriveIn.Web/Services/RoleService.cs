@@ -49,7 +49,7 @@ public sealed class RoleService(
             Permissions = keys.Select(k => new TheaterRolePermission { Permission = k }).ToList(),
         };
         db.TheaterRoles.Add(role);
-        await db.SaveChangesAsync();
+        await SaveNamedAsync(db, trimmed);
         return role;
     }
 
@@ -71,7 +71,7 @@ public sealed class RoleService(
         db.TheaterRolePermissions.RemoveRange(role.Permissions.Where(p => !keys.Contains(p.Permission)));
         var existing = role.Permissions.Select(p => p.Permission).ToHashSet();
         role.Permissions.AddRange(keys.Where(k => !existing.Contains(k)).Select(k => new TheaterRolePermission { Permission = k }));
-        await db.SaveChangesAsync();
+        await SaveNamedAsync(db, trimmed);
     }
 
     // Removes the role from everyone who has it.
@@ -115,10 +115,23 @@ public sealed class RoleService(
             throw new AppValidationException("Give the role a name.");
         if (trimmed.Length > 60)
             throw new AppValidationException("Role names can be at most 60 characters.");
-        var lower = trimmed.ToLower();
-        if (await db.TheaterRoles.AnyAsync(r => r.TheaterId == theaterId && r.Id != exceptId && r.Name.ToLower() == lower))
+        var normalized = TheaterRole.Normalize(trimmed);
+        if (await db.TheaterRoles.AnyAsync(r => r.TheaterId == theaterId && r.Id != exceptId && r.NormalizedName == normalized))
             throw new AppValidationException($"There's already a role named \"{trimmed}\".");
         return trimmed;
+    }
+
+    // The app-level name check gives the friendly error; the unique index catches concurrent duplicates.
+    private static async Task SaveNamedAsync(ApplicationDbContext db, string name)
+    {
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation })
+        {
+            throw new AppValidationException($"There's already a role named \"{name}\".");
+        }
     }
 
     private static string? Clean(string? description) =>
