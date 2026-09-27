@@ -22,12 +22,15 @@ internal static class IdentityComponentsEndpointRouteBuilderExtensions
 
         var accountGroup = endpoints.MapGroup("/Account");
 
-        accountGroup.MapPost("/PerformExternalLogin", (
+        accountGroup.MapPost("/PerformExternalLogin", async (
             HttpContext context,
             [FromServices] SignInManager<ApplicationUser> signInManager,
+            [FromServices] IAntiforgery antiforgery,
             [FromForm] string provider,
             [FromForm] string returnUrl) =>
         {
+            await antiforgery.ValidateRequestAsync(context);
+
             IEnumerable<KeyValuePair<string, StringValues>> query = [
                 new("ReturnUrl", returnUrl),
                 new("Action", ExternalLogin.LoginCallbackAction)];
@@ -42,10 +45,13 @@ internal static class IdentityComponentsEndpointRouteBuilderExtensions
         });
 
         accountGroup.MapPost("/Logout", async (
+            HttpContext context,
             ClaimsPrincipal user,
             [FromServices] SignInManager<ApplicationUser> signInManager,
+            [FromServices] IAntiforgery antiforgery,
             [FromForm] string returnUrl) =>
         {
+            await antiforgery.ValidateRequestAsync(context);
             await signInManager.SignOutAsync();
             return TypedResults.LocalRedirect($"~/{returnUrl}");
         });
@@ -94,8 +100,11 @@ internal static class IdentityComponentsEndpointRouteBuilderExtensions
         manageGroup.MapPost("/LinkExternalLogin", async (
             HttpContext context,
             [FromServices] SignInManager<ApplicationUser> signInManager,
+            [FromServices] IAntiforgery antiforgery,
             [FromForm] string provider) =>
         {
+            await antiforgery.ValidateRequestAsync(context);
+
             // Clear the existing external cookie to ensure a clean login process
             await context.SignOutAsync(IdentityConstants.ExternalScheme);
 
@@ -114,8 +123,11 @@ internal static class IdentityComponentsEndpointRouteBuilderExtensions
         manageGroup.MapPost("/DownloadPersonalData", async (
             HttpContext context,
             [FromServices] UserManager<ApplicationUser> userManager,
-            [FromServices] AuthenticationStateProvider authenticationStateProvider) =>
+            [FromServices] AuthenticationStateProvider authenticationStateProvider,
+            [FromServices] IAntiforgery antiforgery) =>
         {
+            await antiforgery.ValidateRequestAsync(context);
+
             var user = await userManager.GetUserAsync(context.User);
             if (user is null)
             {
