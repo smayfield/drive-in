@@ -1,0 +1,196 @@
+@page "/invite/{Token}"
+@using System.ComponentModel.DataAnnotations
+@using DriveIn.Web.Components.Account
+@using DriveIn.Web.Components.Account.Shared
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Identity
+@inject InvitationService Invitations
+@inject SignInManager<ApplicationUser> SignInManager
+@inject IdentityRedirectManager RedirectManager
+
+@* Static SSR on purpose: accepting signs the user in, which needs the HTTP response. *@
+
+<PageTitle>Invitation · Drive-In Online</PageTitle>
+
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        @if (invite is null)
+        {
+            <h1>Invitation not valid</h1>
+            <p>This invitation link has expired, was already used, or was replaced by a newer one. Ask whoever invited you to send it again.</p>
+        }
+        else
+        {
+            <h1>Join @invite.Theater!.Name</h1>
+            <p>
+                You've been invited to <strong>@invite.Theater.Name</strong> as
+                <strong>@(invite.Kind == InvitationKind.Owner ? "the owner" : "an employee")</strong>.
+                This invitation is for <strong>@invite.Email</strong>.
+            </p>
+
+            @if (!string.IsNullOrEmpty(error))
+            {
+                <div class="alert alert-danger" role="alert">@error</div>
+            }
+
+            @if (signedIn is not null)
+            {
+                @if (invite.Kind == InvitationKind.Owner && string.Equals(signedInEmail, invite.Email, StringComparison.OrdinalIgnoreCase))
+                {
+                    <form method="post" @formname="accept-existing" @onsubmit="AcceptExistingAsync">
+                        <AntiforgeryToken />
+                        <button type="submit" class="btn btn-primary">Accept as @signedInEmail</button>
+                    </form>
+                }
+                else
+                {
+                    <div class="alert alert-warning">
+                        You're signed in as <strong>@signedInEmail</strong>.
+                        @(invite.Kind == InvitationKind.Employee
+                            ? "Employee invitations create a new account, so sign out first and then open this link again."
+                            : $"Sign out, then open this link again to create an account for {invite.Email} or sign in to it.")
+                    </div>
+                    <form action="Account/Logout" method="post">
+                        <AntiforgeryToken />
+                        <input type="hidden" name="ReturnUrl" value="invite/@Token" />
+                        <button type="submit" class="btn btn-outline-secondary">Sign out</button>
+                    </form>
+                }
+            }
+            else
+            {
+                <h2 class="h5 mt-4">Create your account</h2>
+                <EditForm Model="Input" method="post" OnValidSubmit="AcceptWithPasswordAsync" FormName="accept-password">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary class="text-danger" role="alert" />
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input class="form-control" value="@invite.Email" disabled />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="Input.DisplayName">Your name</label>
+                        <InputText id="Input.DisplayName" class="form-control" @bind-Value="Input.DisplayName" autocomplete="name" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="Input.Password">Password</label>
+                        <InputText id="Input.Password" type="password" class="form-control" @bind-Value="Input.Password" autocomplete="new-password" />
+                        <ValidationMessage For="() => Input.Password" class="text-danger" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="Input.ConfirmPassword">Confirm password</label>
+                        <InputText id="Input.ConfirmPassword" type="password" class="form-control" @bind-Value="Input.ConfirmPassword" autocomplete="new-password" />
+                        <ValidationMessage For="() => Input.ConfirmPassword" class="text-danger" />
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 mb-3">Create account and accept</button>
+                </EditForm>
+
+                <ExternalLoginPicker ReturnUrlOverride="@($"invite/{Token}")" />
+
+                @if (invite.Kind == InvitationKind.Owner)
+                {
+                    <p class="mt-3 small text-muted">
+                        Already have an account for @invite.Email?
+                        <a href="Account/Login?ReturnUrl=@Uri.EscapeDataString($"/invite/{Token}")">Sign in</a> and you'll come back here.
+                    </p>
+                }
+            }
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Token { get; set; } = "";
+
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm] private InputModel Input { get; set; } = default!;
+
+    // Set by Account/ExternalLogin when returning from Google without an existing account.
+    [SupplyParameterFromQuery(Name = "external")] private string? External { get; set; }
+
+    private Invitation? invite;
+    private System.Security.Claims.ClaimsPrincipal? signedIn;
+    private string? signedInEmail;
+    private string? error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Input ??= new();
+        invite = await Invitations.FindPendingAsync(Token);
+        if (HttpContext.User.Identity?.IsAuthenticated == true)
+        {
+            signedIn = HttpContext.User;
+            signedInEmail = signedIn.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? signedIn.Identity?.Name;
+        }
+
+        if (invite is not null && signedIn is null && External == "1" && HttpMethods.IsGet(HttpContext.Request.Method))
+            await AcceptWithExternalLoginAsync();
+    }
+
+    private async Task AcceptWithPasswordAsync()
+    {
+        if (invite is null)
+            return;
+        try
+        {
+            var user = await Invitations.AcceptWithPasswordAsync(Token, Input.DisplayName, Input.Password);
+            await SignInManager.SignInAsync(user, isPersistent: false);
+            RedirectManager.RedirectTo($"manage/{invite.TheaterId}");
+        }
+        catch (AppValidationException ex)
+        {
+            error = ex.Message;
+        }
+    }
+
+    private async Task AcceptWithExternalLoginAsync()
+    {
+        var info = await SignInManager.GetExternalLoginInfoAsync();
+        if (info is null)
+        {
+            error = "Couldn't read your sign-in details. Please try again.";
+            return;
+        }
+        try
+        {
+            var user = await Invitations.AcceptWithExternalLoginAsync(Token, info);
+            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+            await SignInManager.SignInAsync(user, isPersistent: false, info.LoginProvider);
+            RedirectManager.RedirectTo($"manage/{invite!.TheaterId}");
+        }
+        catch (AppValidationException ex)
+        {
+            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+            error = ex.Message;
+        }
+    }
+
+    private async Task AcceptExistingAsync()
+    {
+        if (invite is null || signedIn is null)
+            return;
+        try
+        {
+            await Invitations.AcceptAsExistingUserAsync(Token, signedIn);
+            RedirectManager.RedirectTo($"manage/{invite.TheaterId}");
+        }
+        catch (Exception ex) when (ex is AppValidationException or AccessDeniedException)
+        {
+            error = ex.Message;
+        }
+    }
+
+    private sealed class InputModel
+    {
+        [StringLength(100)]
+        public string? DisplayName { get; set; }
+
+        [Required, StringLength(100, MinimumLength = 8, ErrorMessage = "The password must be at least {2} characters long.")]
+        [DataType(DataType.Password)]
+        public string Password { get; set; } = "";
+
+        [DataType(DataType.Password)]
+        [Compare(nameof(Password), ErrorMessage = "The passwords don't match.")]
+        public string ConfirmPassword { get; set; } = "";
+    }
+}

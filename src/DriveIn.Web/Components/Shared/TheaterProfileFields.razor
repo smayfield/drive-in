@@ -1,0 +1,55 @@
+@* Profile inputs shared by the owner and admin theater forms. Place inside an EditForm. *@
+
+<div class="row g-3">
+    <div class="col-md-8">
+        <label class="form-label" for="name">Name</label>
+        <InputText id="name" class="form-control" @bind-Value="Model.Name" />
+        <ValidationMessage For="() => Model.Name" />
+    </div>
+    <div class="col-md-4">
+        <label class="form-label" for="tz">Time zone</label>
+        <InputText id="tz" class="form-control" @bind-Value="Model.TimeZone" placeholder="America/Chicago" />
+    </div>
+    <div class="col-md-6">
+        <label class="form-label" for="addr1">Address</label>
+        <InputText id="addr1" class="form-control" @bind-Value="Model.AddressLine1" />
+    </div>
+    <div class="col-md-6">
+        <label class="form-label" for="addr2">Address line 2</label>
+        <InputText id="addr2" class="form-control" @bind-Value="Model.AddressLine2" />
+    </div>
+    <div class="col-md-4">
+        <label class="form-label" for="city">City</label>
+        <InputText id="city" class="form-control" @bind-Value="Model.City" />
+    </div>
+    <div class="col-md-3">
+        <label class="form-label" for="state">State</label>
+        <InputText id="state" class="form-control" @bind-Value="Model.State" />
+    </div>
+    <div class="col-md-2">
+        <label class="form-label" for="zip">Postal code</label>
+        <InputText id="zip" class="form-control" @bind-Value="Model.PostalCode" />
+    </div>
+    <div class="col-md-3">
+        <label class="form-label" for="country">Country</label>
+        <InputText id="country" class="form-control" @bind-Value="Model.Country" />
+    </div>
+    <div class="col-md-6">
+        <label class="form-label" for="phone">Phone</label>
+        <InputText id="phone" class="form-control" @bind-Value="Model.Phone" />
+        <ValidationMessage For="() => Model.Phone" />
+    </div>
+    <div class="col-md-6">
+        <label class="form-label" for="web">Website</label>
+        <InputText id="web" class="form-control" @bind-Value="Model.Website" placeholder="https://" />
+        <ValidationMessage For="() => Model.Website" />
+    </div>
+    <div class="col-12">
+        <label class="form-label" for="desc">Description</label>
+        <InputTextArea id="desc" class="form-control" rows="4" @bind-Value="Model.Description" />
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Theater Model { get; set; } = default!;
+}

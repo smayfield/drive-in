@@ -1,0 +1,162 @@
+@page "/admin/users"
+@attribute [Authorize(Policy = Policies.Admin)]
+@rendermode InteractiveServer
+@inherits AppComponentBase
+@inject UserAdminService Users
+
+<PageTitle>Users · Admin · Drive-In Online</PageTitle>
+
+<h1>Users</h1>
+
+<Alerts Error="@Error" Success="@Success" />
+
+<details class="mb-4">
+    <summary class="h5">Create a user</summary>
+    <p class="text-muted small mt-2">
+        Creates a confirmed account and emails a link to set a password. They can also link Google afterwards.
+        To create an owner, create the theater and assign its owner there; employees are invited by their theater's owner.
+    </p>
+    <form class="row g-2 align-items-center" @onsubmit="CreateAsync">
+        <div class="col-md-4"><input type="email" class="form-control" placeholder="Email" @bind="newEmail" required /></div>
+        <div class="col-md-3"><input class="form-control" placeholder="Display name (optional)" @bind="newName" maxlength="100" /></div>
+        <div class="col-auto">
+            <div class="form-check">
+                <input id="newAdmin" type="checkbox" class="form-check-input" @bind="newAdmin" />
+                <label class="form-check-label" for="newAdmin">Admin</label>
+            </div>
+        </div>
+        <div class="col-auto"><button type="submit" class="btn btn-primary">Create</button></div>
+    </form>
+</details>
+
+<form class="row g-2 mb-3" @onsubmit="SearchAsync">
+    <div class="col-md-6"><input class="form-control" placeholder="Search by email or name" @bind="search" /></div>
+    <div class="col-auto"><button type="submit" class="btn btn-outline-secondary">Search</button></div>
+</form>
+
+@if (users is not null)
+{
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead>
+                <tr><th>Email</th><th>Name</th><th>Access</th><th>Sign-in</th><th>Created</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var u in users)
+                {
+                    var self = u.Id == User.GetUserId();
+                    <tr @key="u.Id">
+                        <td>
+                            @u.Email
+                            @if (!u.EmailConfirmed) { <span class="badge text-bg-light ms-1">Unconfirmed</span> }
+                            @if (u.IsLockedOut) { <span class="badge text-bg-warning ms-1">Locked</span> }
+                        </td>
+                        <td>
+                            @if (editingNameId == u.Id)
+                            {
+                                <div class="input-group input-group-sm">
+                                    <input class="form-control" @bind="editingName" maxlength="100" />
+                                    <button class="btn btn-primary" @onclick="() => SaveNameAsync(u)">Save</button>
+                                    <button class="btn btn-outline-secondary" @onclick="() => editingNameId = null">Cancel</button>
+                                </div>
+                            }
+                            else
+                            {
+                                @u.DisplayName
+                                <button class="btn btn-sm btn-link" @onclick="() => { editingNameId = u.Id; editingName = u.DisplayName; }">Edit</button>
+                            }
+                        </td>
+                        <td class="small">
+                            @if (u.IsAdmin) { <span class="badge text-bg-danger me-1">Admin</span> }
+                            @if (u.EmployeeTheaterName is not null) { <div>Employee: @u.EmployeeTheaterName</div> }
+                            @if (u.OwnedTheaters.Count > 0) { <div>Owner: @string.Join(", ", u.OwnedTheaters)</div> }
+                        </td>
+                        <td class="small">@string.Join(", ", (u.HasPassword ? new[] { "Password" } : []).Concat(u.Logins))</td>
+                        <td class="small">@u.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd")</td>
+                        <td class="text-end text-nowrap">
+                            @if (u.EmployeeTheaterName is null)
+                            {
+                                <button class="btn btn-sm btn-outline-secondary" disabled="@(self && u.IsAdmin)"
+                                        @onclick="() => SetAdminAsync(u, !u.IsAdmin)">@(u.IsAdmin ? "Remove admin" : "Make admin")</button>
+                            }
+                            <button class="btn btn-sm btn-outline-secondary" disabled="@self"
+                                    @onclick="() => SetLockedAsync(u, !u.IsLockedOut)">@(u.IsLockedOut ? "Unlock" : "Lock")</button>
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => ResetAsync(u)">Reset password</button>
+                            @if (confirmDeleteId == u.Id)
+                            {
+                                <button class="btn btn-sm btn-danger" @onclick="() => DeleteAsync(u)">Confirm delete</button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-sm btn-outline-danger" disabled="@self" @onclick="() => confirmDeleteId = u.Id">Delete</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    @if (users.Count == 0)
+    {
+        <p class="text-muted">No users match.</p>
+    }
+}
+
+@code {
+    private List<UserSummary>? users;
+    private string? search;
+    private string? confirmDeleteId;
+    private string? editingNameId;
+    private string? editingName;
+
+    private string newEmail = "";
+    private string? newName;
+    private bool newAdmin;
+
+    protected override async Task LoadAsync()
+    {
+        users = await Users.ListAsync(User, search);
+        confirmDeleteId = null;
+        editingNameId = null;
+    }
+
+    private Task SearchAsync() => RunAsync(LoadAsync);
+
+    private Task CreateAsync() => RunAsync(async () =>
+    {
+        if (string.IsNullOrWhiteSpace(newEmail))
+            throw new AppValidationException("Enter an email address.");
+        await Users.CreateAsync(User, newEmail, newName, newAdmin, BaseUri);
+        newEmail = "";
+        newName = null;
+        newAdmin = false;
+        await LoadAsync();
+    }, "User created and emailed a link to set their password.");
+
+    private Task SaveNameAsync(UserSummary u) => RunAsync(async () =>
+    {
+        await Users.UpdateDisplayNameAsync(User, u.Id, editingName);
+        await LoadAsync();
+    });
+
+    private Task SetAdminAsync(UserSummary u, bool isAdmin) => RunAsync(async () =>
+    {
+        await Users.SetAdminAsync(User, u.Id, isAdmin);
+        await LoadAsync();
+    }, isAdmin ? $"{u.Email} is now an admin." : $"{u.Email} is no longer an admin.");
+
+    private Task SetLockedAsync(UserSummary u, bool locked) => RunAsync(async () =>
+    {
+        await Users.SetLockedAsync(User, u.Id, locked);
+        await LoadAsync();
+    }, locked ? $"{u.Email} is locked out." : $"{u.Email} is unlocked.");
+
+    private Task ResetAsync(UserSummary u) =>
+        RunAsync(() => Users.SendPasswordResetAsync(User, u.Id, BaseUri), $"Password reset email sent to {u.Email}.");
+
+    private Task DeleteAsync(UserSummary u) => RunAsync(async () =>
+    {
+        await Users.DeleteAsync(User, u.Id);
+        await LoadAsync();
+    }, $"Deleted {u.Email}.");
+}

@@ -1,0 +1,72 @@
+@using DriveIn.Web.Services
+@using DriveIn.Web.Authorization
+
+@inject TheaterService Theaters
+
+<nav class="navbar navbar-expand-md navbar-dark app-navbar">
+    <div class="container">
+        <a class="navbar-brand brand" href="/">Drive-In Online</a>
+
+        @* CSS-only toggle so the menu works on statically rendered pages too. *@
+        <input type="checkbox" id="nav-toggle" class="nav-toggle d-none" />
+        <label for="nav-toggle" class="navbar-toggler" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </label>
+
+        <div class="collapse navbar-collapse">
+            <ul class="navbar-nav me-auto">
+                <AuthorizeView>
+                    <Authorized>
+                        <li class="nav-item"><NavLink class="nav-link" href="theaters">Theaters</NavLink></li>
+                        @if (manages)
+                        {
+                            <li class="nav-item"><NavLink class="nav-link" href="manage">Manage</NavLink></li>
+                        }
+                    </Authorized>
+                </AuthorizeView>
+                <AuthorizeView Policy="@Policies.Admin">
+                    <li class="nav-item"><NavLink class="nav-link" href="admin/theaters">Admin: Theaters</NavLink></li>
+                    <li class="nav-item"><NavLink class="nav-link" href="admin/users">Admin: Users</NavLink></li>
+                </AuthorizeView>
+            </ul>
+            <ul class="navbar-nav">
+                <AuthorizeView>
+                    <Authorized>
+                        <li class="nav-item">
+                            <NavLink class="nav-link" href="Account/Manage">
+                                @(context.User.FindFirst("drivein:display_name")?.Value ?? context.User.Identity?.Name)
+                            </NavLink>
+                        </li>
+                        <li class="nav-item">
+                            <form action="Account/Logout" method="post">
+                                <AntiforgeryToken />
+                                <input type="hidden" name="ReturnUrl" value="" />
+                                <button type="submit" class="nav-link btn btn-link">Sign out</button>
+                            </form>
+                        </li>
+                    </Authorized>
+                    <NotAuthorized>
+                        <li class="nav-item"><NavLink class="nav-link" href="Account/Login">Sign in</NavLink></li>
+                        <li class="nav-item"><NavLink class="nav-link" href="Account/Register">Register</NavLink></li>
+                    </NotAuthorized>
+                </AuthorizeView>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+
+    private bool manages;
+
+    // Owners aren't a role and can change at any time, so ask the database. The layout renders
+    // statically on each request, so this runs once per page load.
+    protected override async Task OnParametersSetAsync()
+    {
+        var user = AuthState is null ? null : (await AuthState).User;
+        manages = user?.Identity?.IsAuthenticated == true
+            && (user.IsAdmin() || user.GetEmployeeTheaterId() is not null || (await Theaters.ListManagedAsync(user)).Count > 0);
+    }
+}

@@ -1,0 +1,20 @@
+# Local development database. Port 5433 so it can run alongside other projects' Postgres on 5432.
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: drivein
+      POSTGRES_USER: drivein
+      POSTGRES_PASSWORD: drivein
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U drivein -d drivein"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:

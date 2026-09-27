@@ -1,0 +1,36 @@
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Identity
+@using DriveIn.Web.Data
+
+@inject SignInManager<ApplicationUser> SignInManager
+
+@* Renders nothing when no external providers are configured (e.g. local dev without Google credentials). *@
+@if (externalLogins.Length > 0)
+{
+    <form action="Account/PerformExternalLogin" method="post">
+        <AntiforgeryToken />
+        <input type="hidden" name="ReturnUrl" value="@(ReturnUrlOverride ?? ReturnUrl)" />
+        @foreach (var provider in externalLogins)
+        {
+            <button type="submit" class="btn btn-outline-dark w-100 mb-2" name="provider" value="@provider.Name">
+                Continue with @provider.DisplayName
+            </button>
+        }
+    </form>
+}
+
+@code {
+    private AuthenticationScheme[] externalLogins = [];
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    // Where to land after the provider round trip, when it isn't the page's ?ReturnUrl.
+    [Parameter]
+    public string? ReturnUrlOverride { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        externalLogins = (await SignInManager.GetExternalAuthenticationSchemesAsync()).ToArray();
+    }
+}

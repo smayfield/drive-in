@@ -1,0 +1,20 @@
+@page "/not-found"
+@using Microsoft.AspNetCore.Antiforgery
+@* Re-executed for failed requests of any method, including POSTs whose antiforgery token was the
+   failure; this page has no forms, so it must not validate one (else the error page itself throws). *@
+@attribute [RequireAntiforgeryToken(required: false)]
+@layout MarketingLayout
+
+<PageTitle>Not found · Drive-In Online</PageTitle>
+
+<header class="hero compact">
+    <canvas class="stars" aria-hidden="true"></canvas>
+    <div class="wrap hero-inner">
+        <div class="marquee reveal">
+            <p class="eyebrow">404</p>
+            <h1 class="title"><span class="shade">Reel</span> not found</h1>
+            <p class="tagline">This page isn't showing tonight.</p>
+        </div>
+        <a class="cta reveal" href="/">Back to the lot</a>
+    </div>
+</header>

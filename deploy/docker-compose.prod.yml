@@ -1,0 +1,85 @@
+# Production stack for drive-in.online, run on the EC2 server by deploy.sh.
+# Variables (REGISTRY, TAG, DB_PASSWORD, GOOGLE_*, ADMIN_EMAIL) come from the .env
+# file deploy.sh writes from SSM Parameter Store. Local development uses the
+# docker-compose.yml at the repo root.
+name: drive-in
+
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./caddy:/etc/caddy:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+    networks:
+      - edge
+
+  web:
+    image: ${REGISTRY}/drive-in-web:${TAG}
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__DefaultConnection: Host=postgres;Database=drivein;Username=drivein;Password=${DB_PASSWORD}
+      Authentication__Google__ClientId: ${GOOGLE_CLIENT_ID}
+      Authentication__Google__ClientSecret: ${GOOGLE_CLIENT_SECRET}
+      DataProtection__KeysPath: /keys
+      Seed__AdminEmail: ${ADMIN_EMAIL}
+      Email__Provider: Ses
+      # Trust X-Forwarded-* only from the edge network (Caddy); must match its subnet below.
+      ForwardedHeaders__KnownNetworks__0: 172.30.0.0/24
+      # SES credentials come from the EC2 instance role (IMDS hop limit is 2 for containers).
+      AWS_REGION: us-east-1
+    volumes:
+      - dpkeys:/keys
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - default
+      - edge
+
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: drivein
+      POSTGRES_USER: drivein
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U drivein -d drivein"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # One-shot EF Core migration bundle; run explicitly by deploy.sh before the app restarts.
+  migrate:
+    image: ${REGISTRY}/drive-in-migrate:${TAG}
+    profiles: ["migrate"]
+    command:
+      - --connection
+      - Host=postgres;Database=drivein;Username=drivein;Password=${DB_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  dpkeys:
+  caddy_data:
+  caddy_config:
+
+networks:
+  # Caddy <-> web. Fixed subnet so the web app can trust forwarded headers from it only.
+  edge:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24

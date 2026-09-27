@@ -1,3 +1,6 @@
+/* Styles for the public marketing pages (Home, NotFound). Everything is scoped under .marketing
+   so it does not collide with Bootstrap on the app pages. */
+
 :root {
   --bg: #f7f3ea;
   --surface: #ffffff;
@@ -28,20 +31,20 @@
   }
 }
 
-* { box-sizing: border-box; }
 
 html { -webkit-text-size-adjust: 100%; }
 
-body {
+.marketing {
+  min-height: 100vh;
   margin: 0;
   background: var(--bg);
   color: var(--text);
   font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
-a { color: var(--accent); }
+.marketing a { color: var(--accent); }
 
-.wrap {
+.marketing .wrap {
   max-width: 1040px;
   margin: 0 auto;
   padding: 0 16px;
@@ -49,7 +52,7 @@ a { color: var(--accent); }
 
 /* ---------- Hero ---------- */
 
-.hero {
+.marketing .hero {
   position: relative;
   overflow: hidden;
   isolation: isolate;
@@ -64,7 +67,7 @@ a { color: var(--accent); }
   text-align: center;
 }
 
-.stars {
+.marketing .stars {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -73,7 +76,7 @@ a { color: var(--accent); }
 }
 
 /* Projector beam from the bottom corner up to the marquee */
-.beam {
+.marketing .beam {
   position: absolute;
   z-index: -1;
   right: 4%;
@@ -94,10 +97,10 @@ a { color: var(--accent); }
   58%      { opacity: 1; }
 }
 
-.hero-inner { position: relative; display: grid; justify-items: center; }
+.marketing .hero-inner { position: relative; display: grid; justify-items: center; }
 
 /* Marquee sign with chasing bulbs */
-.marquee {
+.marketing .marquee {
   --bulb-gap: 22px;
   position: relative;
   padding: 36px clamp(20px, 5vw, 56px) 30px;
@@ -109,7 +112,7 @@ a { color: var(--accent); }
     0 0 60px rgba(255, 77, 94, 0.35),
     inset 0 0 40px rgba(0, 0, 0, 0.6);
 }
-.marquee::before {
+.marketing .marquee::before {
   content: "";
   position: absolute;
   inset: 8px;
@@ -128,7 +131,7 @@ a { color: var(--accent); }
   to { background-position: var(--bulb-gap) var(--bulb-gap); }
 }
 
-.eyebrow {
+.marketing .eyebrow {
   margin: 0 0 10px;
   font-family: var(--display);
   font-size: 0.8rem;
@@ -137,7 +140,7 @@ a { color: var(--accent); }
   text-shadow: 0 0 10px var(--neon-cyan);
 }
 
-.title {
+.marketing .title {
   margin: 0;
   font-family: var(--display);
   font-weight: 400;
@@ -146,7 +149,7 @@ a { color: var(--accent); }
   color: #fff;
   text-shadow: 0 0 18px rgba(255, 77, 94, 0.6);
 }
-.title .shade {
+.marketing .title .shade {
   display: block;
   font-family: var(--shade);
   color: var(--neon-red);
@@ -163,21 +166,21 @@ a { color: var(--accent); }
   50%      { opacity: 1; }
 }
 
-.tagline {
+.marketing .tagline {
   margin: 14px 0 0;
   font-size: clamp(0.95rem, 2.4vw, 1.2rem);
   letter-spacing: 0.04em;
   color: var(--bulb);
 }
 
-.lede {
+.marketing .lede {
   margin: 0 0 24px;
   max-width: 46ch;
   font-size: clamp(1.02rem, 2.2vw, 1.2rem);
   color: rgba(255, 255, 255, 0.85);
 }
 
-.pill {
+.marketing .pill {
   display: inline-block;
   padding: 8px 20px;
   border-radius: 999px;
@@ -189,7 +192,7 @@ a { color: var(--accent); }
   box-shadow: 0 0 24px rgba(255, 214, 107, 0.55);
 }
 
-.cars {
+.marketing .cars {
   position: absolute;
   left: 0;
   right: 0;
@@ -200,9 +203,9 @@ a { color: var(--accent); }
 
 /* ---------- Features ---------- */
 
-main { padding: 72px 16px 56px; }
+.marketing main { padding: 72px 16px 56px; }
 
-main h2 {
+.marketing main h2 {
   margin: 0 0 8px;
   font-family: var(--display);
   font-weight: 400;
@@ -210,27 +213,28 @@ main h2 {
   color: var(--accent);
 }
 
-.section-lede { margin: 0 0 28px; color: var(--muted); }
+.marketing .section-lede { margin: 0 0 28px; color: var(--muted); }
 
-.grid {
+.marketing .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 18px;
 }
 
-.card {
+.marketing .card {
+  color: var(--text); /* Bootstrap's .card sets its own color */
   padding: 22px;
   border-radius: 14px;
   background: var(--surface);
   border: 1px solid var(--border);
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
-.card:hover {
+.marketing .card:hover {
   transform: translateY(-3px);
   border-color: var(--bulb);
   box-shadow: 0 12px 36px rgba(255, 170, 60, 0.18);
 }
-.card .icon {
+.marketing .card .icon {
   display: inline-grid;
   place-items: center;
   width: 46px;
@@ -240,10 +244,10 @@ main h2 {
   font-size: 1.5rem;
   background: rgba(255, 214, 107, 0.2);
 }
-.card h3 { margin: 0 0 6px; font-size: 1.1rem; }
-.card p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+.marketing .card h3 { margin: 0 0 6px; font-size: 1.1rem; }
+.marketing .card p { margin: 0; color: var(--muted); font-size: 0.95rem; }
 
-footer {
+.marketing footer {
   padding: 24px 16px 40px;
   color: var(--muted);
   font-size: 0.875rem;
@@ -252,18 +256,18 @@ footer {
 
 /* ---------- Entrance animation ---------- */
 
-.js .reveal {
+.js .marketing .reveal {
   opacity: 0;
   transform: translateY(16px);
   transition: opacity 0.7s ease, transform 0.7s ease;
   transition-delay: calc(var(--i, 0) * 90ms);
 }
-.js .reveal.in { opacity: 1; transform: none; }
+.js .marketing .reveal.in { opacity: 1; transform: none; }
 
 /* ---------- 404 page ---------- */
 
-.hero.compact { min-height: 100vh; }
-.cta {
+.marketing .hero.compact { min-height: 100vh; }
+.marketing .cta {
   display: inline-block;
   margin-top: 8px;
   padding: 10px 22px;
@@ -274,7 +278,7 @@ footer {
   border: 1px solid rgba(255, 255, 255, 0.35);
   background: rgba(255, 255, 255, 0.08);
 }
-.cta:hover, .cta:focus-visible { background: rgba(255, 255, 255, 0.18); outline: none; }
+.marketing .cta:hover, .marketing .cta:focus-visible { background: rgba(255, 255, 255, 0.18); outline: none; }
 
 /* ---------- Respect reduced motion ---------- */
 
@@ -283,5 +287,21 @@ footer {
     animation: none !important;
     transition: none !important;
   }
-  .js .reveal { opacity: 1; transform: none; }
+  .js .marketing .reveal { opacity: 1; transform: none; }
 }
+
+/* ---------- Top bar (sign in / app links over the hero) ---------- */
+
+.marketing .topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px;
+}
+.marketing .topbar .cta { margin-top: 0; padding: 6px 16px; font-size: 0.9rem; }
+.marketing .hero .cta-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 12px; }

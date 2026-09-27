@@ -1,0 +1,168 @@
+@page "/manage/{Id:int}"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inherits AppComponentBase
+@inject TheaterService Theaters
+@inject ScreenService Screens
+@inject IAuthorizationService Auth
+
+<PageTitle>@(theater?.Name ?? "Theater") · Manage · Drive-In Online</PageTitle>
+
+<p><a href="manage">&larr; Manage</a></p>
+
+@if (theater is null)
+{
+    <Alerts Error="@Error" />
+    @if (Error is null) { <p>Loading…</p> }
+}
+else
+{
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <h1 class="mb-0">@theater.Name</h1>
+        <div class="d-flex gap-2">
+            @if (theater.IsActive)
+            {
+                <a class="btn btn-outline-secondary" href="theaters/@theater.Slug">View public page</a>
+            }
+            @if (canManageEmployees)
+            {
+                <a class="btn btn-outline-primary" href="manage/@theater.Id/employees">Employees</a>
+            }
+        </div>
+    </div>
+
+    <Alerts Error="@Error" Success="@Success" />
+
+    <section class="mb-5">
+        <h2 class="h4">Profile</h2>
+        <EditForm Model="profile" OnValidSubmit="SaveProfileAsync">
+            <DataAnnotationsValidator />
+            <TheaterProfileFields Model="profile" />
+            <button type="submit" class="btn btn-primary mt-3">Save profile</button>
+        </EditForm>
+    </section>
+
+    <section>
+        <h2 class="h4">Screens</h2>
+        <table class="table align-middle">
+            <thead>
+                <tr><th style="width: 6rem"></th><th>Name</th><th style="width: 10rem">Car capacity</th><th style="width: 14rem"></th></tr>
+            </thead>
+            <tbody>
+                @for (var i = 0; i < theater.Screens.Count; i++)
+                {
+                    var screen = theater.Screens[i];
+                    var first = i == 0;
+                    var last = i == theater.Screens.Count - 1;
+                    <tr @key="screen.Id">
+                        <td>
+                            <button class="btn btn-sm btn-link px-1" disabled="@first" title="Move up" @onclick="() => MoveAsync(screen, -1)">▲</button>
+                            <button class="btn btn-sm btn-link px-1" disabled="@last" title="Move down" @onclick="() => MoveAsync(screen, 1)">▼</button>
+                        </td>
+                        @if (editing?.Id == screen.Id)
+                        {
+                            <td><input class="form-control form-control-sm" @bind="editing.Name" maxlength="100" /></td>
+                            <td><input class="form-control form-control-sm" type="number" min="0" @bind="editing.CarCapacity" /></td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-primary" @onclick="SaveScreenAsync">Save</button>
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => editing = null">Cancel</button>
+                            </td>
+                        }
+                        else
+                        {
+                            <td>@screen.Name</td>
+                            <td>@screen.CarCapacity</td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => StartEdit(screen)">Edit</button>
+                                @if (confirmDeleteId == screen.Id)
+                                {
+                                    <button class="btn btn-sm btn-danger" @onclick="() => DeleteScreenAsync(screen)">Confirm delete</button>
+                                }
+                                else
+                                {
+                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => confirmDeleteId = screen.Id">Delete</button>
+                                }
+                            </td>
+                        }
+                    </tr>
+                }
+                <tr>
+                    <td></td>
+                    <td><input class="form-control form-control-sm" placeholder="New screen name" @bind="newScreen.Name" maxlength="100" /></td>
+                    <td><input class="form-control form-control-sm" type="number" min="0" @bind="newScreen.CarCapacity" /></td>
+                    <td class="text-end"><button class="btn btn-sm btn-success" @onclick="AddScreenAsync">Add screen</button></td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private Theater? theater;
+    private Theater profile = new();
+    private bool canManageEmployees;
+    private Screen newScreen = new();
+    private Screen? editing;
+    private int? confirmDeleteId;
+
+    protected override async Task LoadAsync()
+    {
+        theater = await Theaters.GetForOperateAsync(User, Id);
+        profile = theater.CopyForEdit();
+        canManageEmployees = (await Auth.AuthorizeAsync(User, theater, TheaterOperations.ManageEmployees)).Succeeded;
+    }
+
+    private async Task ReloadAsync()
+    {
+        theater = await Theaters.GetForOperateAsync(User, Id);
+        editing = null;
+        confirmDeleteId = null;
+    }
+
+    private Task SaveProfileAsync() => RunAsync(async () =>
+    {
+        await Theaters.UpdateProfileAsync(User, profile);
+        theater!.Name = profile.Name;
+    }, "Profile saved.");
+
+    private Task AddScreenAsync() => RunAsync(async () =>
+    {
+        if (string.IsNullOrWhiteSpace(newScreen.Name))
+            throw new AppValidationException("Give the screen a name.");
+        if (newScreen.CarCapacity < 0)
+            throw new AppValidationException("Car capacity can't be negative.");
+        await Screens.AddAsync(User, Id, newScreen.Name, newScreen.CarCapacity);
+        newScreen = new();
+        await ReloadAsync();
+    });
+
+    private void StartEdit(Screen screen)
+    {
+        confirmDeleteId = null;
+        editing = new Screen { Id = screen.Id, Name = screen.Name, CarCapacity = screen.CarCapacity };
+    }
+
+    private Task SaveScreenAsync() => RunAsync(async () =>
+    {
+        if (string.IsNullOrWhiteSpace(editing!.Name))
+            throw new AppValidationException("Give the screen a name.");
+        if (editing.CarCapacity < 0)
+            throw new AppValidationException("Car capacity can't be negative.");
+        await Screens.UpdateAsync(User, editing.Id, editing.Name, editing.CarCapacity);
+        await ReloadAsync();
+    });
+
+    private Task DeleteScreenAsync(Screen screen) => RunAsync(async () =>
+    {
+        await Screens.DeleteAsync(User, screen.Id);
+        await ReloadAsync();
+    });
+
+    private Task MoveAsync(Screen screen, int direction) => RunAsync(async () =>
+    {
+        await Screens.MoveAsync(User, screen.Id, direction);
+        await ReloadAsync();
+    });
+}

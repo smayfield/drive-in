@@ -1,0 +1,69 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  drive-in.online outbound email through Amazon SES: a verified domain identity
+  with Easy DKIM and a custom MAIL FROM domain (so SPF aligns for DMARC). The
+  existing DMARC record lives in dns.yml. Deploy in us-east-1, before app.yml.
+
+Parameters:
+  DomainName:
+    Type: String
+    Default: drive-in.online
+
+Resources:
+  Identity:
+    Type: AWS::SES::EmailIdentity
+    Properties:
+      EmailIdentity: !Ref DomainName
+      DkimSigningAttributes:
+        NextSigningKeyLength: RSA_2048_BIT
+      MailFromAttributes:
+        MailFromDomain: !Sub mail.${DomainName}
+        BehaviorOnMxFailure: USE_DEFAULT_VALUE
+
+  # Easy DKIM: SES verifies the domain once these three CNAMEs resolve.
+  Dkim1:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !ImportValue drive-in-HostedZoneId
+      Name: !GetAtt Identity.DkimDNSTokenName1
+      Type: CNAME
+      TTL: "1800"
+      ResourceRecords: [!GetAtt Identity.DkimDNSTokenValue1]
+  Dkim2:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !ImportValue drive-in-HostedZoneId
+      Name: !GetAtt Identity.DkimDNSTokenName2
+      Type: CNAME
+      TTL: "1800"
+      ResourceRecords: [!GetAtt Identity.DkimDNSTokenValue2]
+  Dkim3:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !ImportValue drive-in-HostedZoneId
+      Name: !GetAtt Identity.DkimDNSTokenName3
+      Type: CNAME
+      TTL: "1800"
+      ResourceRecords: [!GetAtt Identity.DkimDNSTokenValue3]
+
+  # Custom MAIL FROM: bounces go to SES, and SPF passes for mail.<domain>.
+  MailFromMx:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !ImportValue drive-in-HostedZoneId
+      Name: !Sub mail.${DomainName}
+      Type: MX
+      TTL: "1800"
+      ResourceRecords: [!Sub "10 feedback-smtp.${AWS::Region}.amazonses.com"]
+  MailFromSpf:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !ImportValue drive-in-HostedZoneId
+      Name: !Sub mail.${DomainName}
+      Type: TXT
+      TTL: "1800"
+      ResourceRecords: ['"v=spf1 include:amazonses.com ~all"']
+
+Outputs:
+  IdentityArn:
+    Value: !Sub arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/${DomainName}
