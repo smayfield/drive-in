@@ -218,5 +218,7 @@ the lesser of the SOA record's TTL, 900 s on Route 53, and its MINIMUM field, 86
 ### Operations
 
 - Shell on the server: `aws ssm start-session --target <InstanceId>`; the stack lives in `/opt/drive-in`.
+- Logs: `docker compose logs web` there (lost when the container is recreated on deploy). Production logs include
+  scopes, so a request ID from the error page (`00-<trace id>-<span id>-00`) can be found by grepping for its trace id.
 - Backups: nightly `pg_dump` to `s3://<OpsBucket>/backups/` (30 days), plus daily EBS snapshots (7).
   Run one now with `sudo drive-in-backup <OpsBucket>`.

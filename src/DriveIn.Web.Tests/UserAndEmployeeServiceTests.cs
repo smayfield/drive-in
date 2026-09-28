@@ -67,6 +67,23 @@ public class UserAdminServiceTests
         Assert.Equal(("new@example.com", true, true, false), (listed.Email, listed.EmailConfirmed, listed.IsAdmin, listed.HasPassword));
         Assert.Contains("Account/ResetPassword?code=", app.Email.Sent.Single().Body);
     }
+
+    // Unlike the self-service account pages, an admin must hear that the email didn't go out.
+    [Fact]
+    public async Task Failed_emails_are_reported_to_the_admin()
+    {
+        await using var app = new TestApp();
+        var admin = Principals.For(await app.CreateUserAsync("admin@example.com", admin: true), admin: true);
+        var user = await app.CreateUserAsync("user@example.com");
+        var service = app.Get<UserAdminService>();
+        app.Email.FailWith = new EmailSendException("SES couldn't send the email: MessageRejected (HTTP 400).");
+
+        var create = await Assert.ThrowsAsync<AppValidationException>(
+            () => service.CreateAsync(admin, "new@example.com", null, makeAdmin: false, TestApp.BaseUri));
+        Assert.Contains("account was created", create.Message);
+        Assert.Single(await service.ListAsync(admin, "new@"));
+        await Assert.ThrowsAsync<AppValidationException>(() => service.SendPasswordResetAsync(admin, user.Id, TestApp.BaseUri));
+    }
 }
 
 public class EmployeeServiceTests
@@ -92,6 +109,19 @@ public class EmployeeServiceTests
 
         Assert.Empty(await service.ListAsync(Principals.For(owner), mine.Id));
         Assert.Equal("mine@example.com", app.Email.Sent.Single().To);
+    }
+
+    [Fact]
+    public async Task Failed_password_reset_email_is_reported()
+    {
+        await using var app = new TestApp();
+        var owner = await app.CreateUserAsync("owner@example.com");
+        var theater = await app.CreateTheaterAsync("Mine", owner.Id);
+        var employee = await app.CreateUserAsync("mine@example.com", employeeTheaterId: theater.Id);
+        app.Email.FailWith = new EmailSendException("SES couldn't send the email: Throttling (HTTP 400).");
+
+        await Assert.ThrowsAsync<AppValidationException>(() =>
+            app.Get<EmployeeService>().SendPasswordResetAsync(Principals.For(owner), theater.Id, employee.Id, TestApp.BaseUri));
     }
 
     [Fact]
