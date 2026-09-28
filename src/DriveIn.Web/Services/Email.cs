@@ -54,7 +54,9 @@ public sealed class SesEmailSender(IAmazonSimpleEmailServiceV2 ses, Microsoft.Ex
     }
 }
 
-// Development: writes the email (and any links in it) to the log so flows can be tested without SES.
+// Development: writes the email (and any links in it) to the log so flows can be tested without SES. Logging the
+// recipient and body is the point (it's how a developer gets confirmation, invite and ticket links locally), so the
+// CodeQL "exposure of private information" alert here is deliberate. Production sets Email:Provider=Ses.
 public sealed class LoggingEmailSender(ILogger<LoggingEmailSender> logger) : IAppEmailSender
 {
     public Task SendAsync(string to, string subject, string htmlBody, IReadOnlyList<InlineImage>? images = null,
