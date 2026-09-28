@@ -1,0 +1,62 @@
+@page "/tickets"
+@attribute [Authorize]
+@inject TicketSalesService Sales
+@inject TimeProvider Time
+
+<PageTitle>My tickets · Drive-In Online</PageTitle>
+
+<h1>My tickets</h1>
+
+@if (tickets is null)
+{
+    <p>Loading…</p>
+}
+else if (tickets.Count == 0)
+{
+    <p class="text-muted">You haven't bought any tickets yet. <a href="theaters">Find a showing</a></p>
+}
+else
+{
+    var now = Time.GetUtcNow();
+    var upcoming = tickets.Where(t => t.Ticket.Showtime!.EndsAt > now).ToList();
+    var past = tickets.Except(upcoming).OrderByDescending(t => t.Ticket.Showtime!.StartsAt).ToList();
+
+    <h2 class="h5">Upcoming</h2>
+    @if (upcoming.Count == 0)
+    {
+        <p class="text-muted">No upcoming showings. <a href="theaters">Find a showing</a></p>
+    }
+    <div class="list-group mb-4">
+        @foreach (var t in upcoming)
+        {
+            <a class="list-group-item list-group-item-action" href="tickets/@t.Code">
+                <div class="d-flex justify-content-between flex-wrap gap-2">
+                    <strong>@t.Showing.Title</strong>
+                    <span>Spot <strong>@t.Ticket.SpotLabel</strong></span>
+                </div>
+                <div class="small text-muted">@t.Theater.Name · @t.Showing.ScreenName · @t.Showing.StartsLocal.ToString("ddd, MMM d · h:mm tt")</div>
+            </a>
+        }
+    </div>
+
+    @if (past.Count > 0)
+    {
+        <h2 class="h5">Past</h2>
+        <div class="list-group">
+            @foreach (var t in past)
+            {
+                <a class="list-group-item list-group-item-action text-muted" href="tickets/@t.Code">
+                    @t.Showing.Title · @t.Theater.Name · @t.Showing.StartsLocal.ToString("MMM d, yyyy") · spot @t.Ticket.SpotLabel
+                </a>
+            }
+        </div>
+    }
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private List<TicketView>? tickets;
+
+    protected override async Task OnInitializedAsync() => tickets = await Sales.ListMyTicketsAsync((await AuthState).User);
+}

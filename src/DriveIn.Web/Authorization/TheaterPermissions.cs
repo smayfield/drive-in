@@ -18,6 +18,7 @@ public static class TheaterPermissions
     public const string InviteEmployees = "employees.invite";
     public const string ManageEmployees = "employees.manage";
     public const string ManageRoles = "roles.manage";
+    public const string AdmitGuests = "tickets.admit";
 
     public static readonly IReadOnlyList<TheaterPermission> All =
     [
@@ -29,6 +30,7 @@ public static class TheaterPermissions
         new(InviteEmployees, "Staff", "Invite employees", "Send, resend and revoke employee invitations."),
         new(ManageEmployees, "Staff", "Manage employees", "Send employees password resets and delete employee accounts."),
         new(ManageRoles, "Staff", "Manage roles", "Create, edit and delete roles and assign them to employees. Only actions you have yourself can be granted."),
+        new(AdmitGuests, "Tickets", "Admit guests", "Check tickets at the gate (scan the QR code on a guest's receipt) and let the car in."),
     ];
 
     public static readonly IReadOnlySet<string> AllKeys = All.Select(p => p.Key).ToHashSet();
@@ -45,8 +47,8 @@ public static class DefaultTheaterRoles
             TheaterPermissions.All.Select(p => p.Key).ToArray()),
         ("Operations", "Keeps the theater's details, screens and schedule up to date.",
             [TheaterPermissions.EditProfile, TheaterPermissions.ManageScreens, TheaterPermissions.ManageSchedule]),
-        ("Ticketing", "Box office staff. Ticket-sales actions will be added here as ticketing features ship.",
-            []),
+        ("Ticketing", "Gate and box office staff: checks tickets and admits guests.",
+            [TheaterPermissions.AdmitGuests]),
         ("Concessions", "Snack bar staff. Concessions actions will be added here as concessions features ship.",
             []),
     ];

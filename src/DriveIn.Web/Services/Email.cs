@@ -5,9 +5,13 @@ using Microsoft.AspNetCore.Identity;
 
 namespace DriveIn.Web.Services;
 
+// An image shown in the body with <img src="cid:{ContentId}">. Inline attachments display in mail clients that
+// block data: URIs and remote images.
+public sealed record InlineImage(string ContentId, string FileName, string ContentType, byte[] Content);
+
 public interface IAppEmailSender
 {
-    Task SendAsync(string to, string subject, string htmlBody, CancellationToken ct = default);
+    Task SendAsync(string to, string subject, string htmlBody, IReadOnlyList<InlineImage>? images = null, CancellationToken ct = default);
 }
 
 public sealed class EmailOptions
@@ -22,7 +26,8 @@ public sealed class EmailOptions
 public sealed class SesEmailSender(IAmazonSimpleEmailServiceV2 ses, Microsoft.Extensions.Options.IOptions<EmailOptions> options, ILogger<SesEmailSender> logger)
     : IAppEmailSender
 {
-    public async Task SendAsync(string to, string subject, string htmlBody, CancellationToken ct = default)
+    public async Task SendAsync(string to, string subject, string htmlBody, IReadOnlyList<InlineImage>? images = null,
+        CancellationToken ct = default)
     {
         await ses.SendEmailAsync(new SendEmailRequest
         {
@@ -34,6 +39,14 @@ public sealed class SesEmailSender(IAmazonSimpleEmailServiceV2 ses, Microsoft.Ex
                 {
                     Subject = new Content { Data = subject, Charset = "UTF-8" },
                     Body = new Body { Html = new Content { Data = htmlBody, Charset = "UTF-8" } },
+                    Attachments = images?.Select(i => new Attachment
+                    {
+                        FileName = i.FileName,
+                        ContentType = i.ContentType,
+                        ContentId = i.ContentId,
+                        ContentDisposition = AttachmentContentDisposition.INLINE,
+                        RawContent = new MemoryStream(i.Content),
+                    }).ToList(),
                 },
             },
         }, ct);
@@ -44,9 +57,10 @@ public sealed class SesEmailSender(IAmazonSimpleEmailServiceV2 ses, Microsoft.Ex
 // Development: writes the email (and any links in it) to the log so flows can be tested without SES.
 public sealed class LoggingEmailSender(ILogger<LoggingEmailSender> logger) : IAppEmailSender
 {
-    public Task SendAsync(string to, string subject, string htmlBody, CancellationToken ct = default)
+    public Task SendAsync(string to, string subject, string htmlBody, IReadOnlyList<InlineImage>? images = null,
+        CancellationToken ct = default)
     {
-        logger.LogWarning("EMAIL to {To}: {Subject}\n{Body}", to, subject, htmlBody);
+        logger.LogWarning("EMAIL to {To}: {Subject} ({Images} inline images)\n{Body}", to, subject, images?.Count ?? 0, htmlBody);
         return Task.CompletedTask;
     }
 }

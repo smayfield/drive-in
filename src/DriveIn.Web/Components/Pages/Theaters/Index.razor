@@ -25,6 +25,11 @@ else
                         <h2 class="h5 card-title"><a href="theaters/@t.Slug">@t.Name</a></h2>
                         <p class="card-text text-muted mb-1">@Location(t)</p>
                         <p class="card-text small">@t.Screens.Count screen@(t.Screens.Count == 1 ? "" : "s") · @t.Screens.Sum(s => s.SpotCount) spots</p>
+                        @if (t.SeasonOpensOn is not null || t.SeasonClosesOn is not null)
+                        {
+                            <p class="card-text small text-muted">Season: @Seasons.Describe(t)</p>
+                        }
+                        <a class="btn btn-sm btn-outline-primary" href="theaters/@t.Slug">Showings &amp; tickets</a>
                     </div>
                 </div>
             </div>

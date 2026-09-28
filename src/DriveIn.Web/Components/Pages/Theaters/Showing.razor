@@ -1,0 +1,363 @@
+@page "/theaters/{Slug}/showings/{ShowtimeId:int}"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inherits AppComponentBase
+@implements IDisposable
+@inject TicketSalesService Sales
+@inject SpotEvents Events
+@inject TimeProvider Time
+
+<PageTitle>@(sale?.Showing.Title ?? "Showing") · Tickets · Drive-In Online</PageTitle>
+
+<p><a href="theaters/@Slug">&larr; @(sale?.Theater.Name ?? "Theater")</a></p>
+
+@if (sale is null || availability is null)
+{
+    <Alerts Error="@Error" />
+    @if (Error is null) { <p>Loading…</p> }
+}
+else
+{
+    var s = sale.Showing;
+    <h1 class="mb-1">@s.Title</h1>
+    <p class="text-muted">
+        @s.StartsLocal.ToString("dddd, MMMM d · h:mm tt") · @s.ScreenName · ends about @s.EndsLocal.ToString("h:mm tt")
+        @if (s.IsMultiFeature)
+        {
+            <br />
+            @string.Join(" · ", s.Features.Select(f => $"{f.StartsLocal:h:mm tt} {f.Title}{(f.Rating is null ? "" : $" ({f.Rating})")}"))
+            @($" · {s.IntermissionMinutes} min intermission")
+        }
+        else if (s.Features.FirstOrDefault()?.Rating is string rating)
+        {
+            @($" · {rating}")
+        }
+    </p>
+
+    <Alerts Error="@Error" Success="@Success" />
+    @if (notice is not null)
+    {
+        <div class="alert alert-warning" role="alert">@notice</div>
+    }
+    @if (!sale.OnSale)
+    {
+        <div class="alert alert-info">@sale.NotOnSaleReason</div>
+    }
+
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <h2 class="h5">
+                @(Hold is null ? "Choose your spot" : $"Spot {Hold.SpotLabel}")
+                <small class="text-muted">@AvailableCount of @sale.Screen.SpotCount available</small>
+            </h2>
+            <div class="spot-legend mb-2" aria-hidden="true">
+                <span class="spot-available">Available</span>
+                <span class="spot-held">On hold</span>
+                <span class="spot-sold">Sold</span>
+                <span class="spot-mine">Yours</span>
+            </div>
+            <LotMap Screens="[sale.Screen]" SpotStatus="StatusOf" OnSpotClick="HoldAsync" />
+            <p class="small text-muted mt-2">
+                The screen is at the top; the first row is nearest it. Spots update live as others buy.
+                Spots on hold come back if the buyer doesn't finish within @Ticket.HoldMinutes minutes.
+            </p>
+        </div>
+
+        <div class="col-lg-5">
+            @if (Hold is null)
+            {
+                <section class="card">
+                    <div class="card-body">
+                        <h2 class="h5">Tickets</h2>
+                        @if (sale.Prices.Options.Count == 0)
+                        {
+                            <p class="text-muted mb-0">Prices haven't been set for this showing yet.</p>
+                        }
+                        else
+                        {
+                            <ul class="list-unstyled mb-2">
+                                @foreach (var o in sale.Prices.Options)
+                                {
+                                    <li><strong>@Money.Format(o.Price)</strong> @o.Name @if (o.Description is not null) { <span class="text-muted small ms-1">— @o.Description</span> }</li>
+                                }
+                            </ul>
+                            <p class="mb-0 small text-muted">
+                                @(sale.OnSale ? "Pick a green spot on the map to hold it while you pay." : "")
+                                A ticket admits one car to this showing only.
+                            </p>
+                        }
+                    </div>
+                </section>
+            }
+            else
+            {
+                <section class="card border-warning">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start gap-2">
+                            <h2 class="h5 mb-1">Spot @Hold.SpotLabel is yours for</h2>
+                            <span class="badge text-bg-warning fs-6" role="timer" aria-live="off">@Remaining</span>
+                        </div>
+                        <p class="small text-muted">Finish before the timer runs out or the spot goes back on sale.</p>
+
+                        <fieldset class="mb-3">
+                            <legend class="form-label fs-6 fw-semibold">Ticket</legend>
+                            @foreach (var o in sale.Prices.Options)
+                            {
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="option" id="option-@o.Id"
+                                           checked="@(optionId == o.Id)" @onchange="() => optionId = o.Id" />
+                                    <label class="form-check-label d-flex justify-content-between" for="option-@o.Id">
+                                        <span>@o.Name @if (o.Description is not null) { <span class="text-muted small ms-1">— @o.Description</span> }</span>
+                                        <span>@Money.Format(o.Price)</span>
+                                    </label>
+                                </div>
+                            }
+                        </fieldset>
+
+                        @if (sale.AddOns.Count > 0)
+                        {
+                            <fieldset class="mb-3">
+                                <legend class="form-label fs-6 fw-semibold">Add-ons</legend>
+                                @foreach (var a in sale.AddOns)
+                                {
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="addon-@a.Id"
+                                               checked="@addOnIds.Contains(a.Id)" @onchange="() => ToggleAddOn(a.Id)" />
+                                        <label class="form-check-label d-flex justify-content-between" for="addon-@a.Id">
+                                            <span>@a.Name @if (a.Description is not null) { <span class="text-muted small ms-1">— @a.Description</span> }</span>
+                                            <span>@a.Display</span>
+                                        </label>
+                                    </div>
+                                }
+                            </fieldset>
+                        }
+
+                        @if (Quote is TicketQuote quote)
+                        {
+                            <table class="table table-sm mb-3">
+                                <tbody>
+                                    <tr><td>@quote.Option.Name</td><td class="text-end">@Money.Format(quote.Option.Price)</td></tr>
+                                    @foreach (var line in quote.Lines)
+                                    {
+                                        <tr><td>@line.AddOn.Name</td><td class="text-end">@TicketReceipt.SignedMoney(line.Effect)</td></tr>
+                                    }
+                                    <tr class="fw-bold"><td>Total</td><td class="text-end">@Money.Format(quote.Total)</td></tr>
+                                </tbody>
+                            </table>
+
+                            @if (quote.Total > 0)
+                            {
+                                <fieldset class="mb-3">
+                                    <legend class="form-label fs-6 fw-semibold">Credit card</legend>
+                                    <div class="mb-2">
+                                        <label class="form-label small" for="cc-name">Name on card</label>
+                                        <input id="cc-name" class="form-control" autocomplete="cc-name" maxlength="100" @bind="cardName" />
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label small" for="cc-number">Card number</label>
+                                        <input id="cc-number" class="form-control" inputmode="numeric" autocomplete="cc-number" maxlength="23" @bind="cardNumber" />
+                                    </div>
+                                    <div class="row g-2">
+                                        <div class="col-4">
+                                            <label class="form-label small" for="cc-month">Month</label>
+                                            <select id="cc-month" class="form-select" autocomplete="cc-exp-month" @bind="expMonth">
+                                                <option value="0">MM</option>
+                                                @for (var m = 1; m <= 12; m++)
+                                                {
+                                                    <option value="@m">@m.ToString("00")</option>
+                                                }
+                                            </select>
+                                        </div>
+                                        <div class="col-4">
+                                            <label class="form-label small" for="cc-year">Year</label>
+                                            <select id="cc-year" class="form-select" autocomplete="cc-exp-year" @bind="expYear">
+                                                <option value="0">YYYY</option>
+                                                @for (var y = ThisYear; y <= ThisYear + 15; y++)
+                                                {
+                                                    <option value="@y">@y</option>
+                                                }
+                                            </select>
+                                        </div>
+                                        <div class="col-4">
+                                            <label class="form-label small" for="cc-cvc">Security code</label>
+                                            <input id="cc-cvc" class="form-control" inputmode="numeric" autocomplete="cc-csc" maxlength="4" @bind="cvc" />
+                                        </div>
+                                    </div>
+                                </fieldset>
+                            }
+                        }
+
+                        <p class="small text-muted">
+                            This ticket is good only for this showing on @s.StartsLocal.ToString("MMMM d") and can't be used on a later date.
+                            <strong>All sales are final:</strong> no refunds or exchanges for any reason, including bad weather.
+                        </p>
+                        <div class="d-flex flex-wrap gap-2">
+                            <button class="btn btn-primary" disabled="@(busy || Quote is null)" @onclick="PayAsync">
+                                @(busy ? "Processing…" : Quote is { Total: > 0 } q ? $"Pay {Money.Format(q.Total)}" : "Get ticket")
+                            </button>
+                            <button class="btn btn-outline-secondary" disabled="@busy" @onclick="ReleaseAsync">Choose a different spot</button>
+                        </div>
+                    </div>
+                </section>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string Slug { get; set; } = "";
+    [Parameter] public int ShowtimeId { get; set; }
+
+    private ShowingForSale? sale;
+    private SpotAvailability? availability;
+    private string? notice;
+    private bool busy;
+    private Timer? countdown;
+
+    private int optionId;
+    private readonly HashSet<int> addOnIds = [];
+    private string cardName = "";
+    private string cardNumber = "";
+    private int expMonth;
+    private int expYear;
+    private string cvc = "";
+
+    private HoldView? Hold => availability?.MyHold;
+    private int ThisYear => Time.GetUtcNow().Year;
+    private int AvailableCount => sale!.Screen.SpotCount - availability!.Spots.Count;
+
+    private TicketQuote? Quote => sale?.Prices.Options.FirstOrDefault(o => o.Id == optionId) is PriceOption option
+        ? TicketQuote.For(option, sale.AddOns.Where(a => addOnIds.Contains(a.Id)))
+        : null;
+
+    private string Remaining
+    {
+        get
+        {
+            var left = Hold is null ? TimeSpan.Zero : Hold.HeldUntil - Time.GetUtcNow();
+            return left <= TimeSpan.Zero ? "0:00" : $"{(int)left.TotalMinutes}:{left.Seconds:00}";
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        Events.Changed += OnSpotsChanged;
+        countdown = new Timer(_ => InvokeAsync(TickAsync), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+    }
+
+    protected override async Task LoadAsync()
+    {
+        sale = await Sales.GetShowingAsync(User, ShowtimeId);
+        if (sale.Theater.Slug != Slug)
+            throw new NotFoundException("Showing not found.");
+        optionId = sale.Prices.Options.FirstOrDefault()?.Id ?? 0;
+        availability = await Sales.GetAvailabilityAsync(User, ShowtimeId);
+    }
+
+    private LotSpotStatus? StatusOf(int row, int spot) => availability![row, spot] switch
+    {
+        SpotState.Mine => new("spot-mine", "your spot", false),
+        SpotState.Held => new("spot-held", "on hold for another buyer", false),
+        SpotState.Sold => new("spot-sold", "sold", false),
+        _ => new("spot-available", "available", sale!.OnSale && !busy),
+    };
+
+    private Task HoldAsync(LotSpot spot) => RunAsync(async () =>
+    {
+        notice = null;
+        try
+        {
+            await Sales.HoldAsync(User, ShowtimeId, spot.Row, spot.Number);
+        }
+        finally
+        {
+            // Either way the map should show what just happened (including a spot someone else got first).
+            await RefreshAsync();
+        }
+    });
+
+    private Task ReleaseAsync() => RunAsync(async () =>
+    {
+        notice = null;
+        if (Hold is HoldView hold)
+            await Sales.ReleaseHoldAsync(User, hold.TicketId);
+        await RefreshAsync();
+    });
+
+    private Task PayAsync() => RunAsync(async () =>
+    {
+        if (Hold is not HoldView hold || busy)
+            return;
+        busy = true;
+        try
+        {
+            var card = new CardInput(cardName, cardNumber, expMonth, expYear, cvc);
+            var result = await Sales.PurchaseAsync(User, hold.TicketId, new PurchaseInput(optionId, addOnIds.ToList(), card), BaseUri);
+            cardNumber = cvc = "";
+            Nav.NavigateTo($"tickets/{Uri.EscapeDataString(result.Code)}?new={(result.ReceiptSent ? "sent" : "unsent")}");
+        }
+        finally
+        {
+            busy = false;
+            await RefreshAsync();
+        }
+    });
+
+    private void ToggleAddOn(int id)
+    {
+        if (!addOnIds.Remove(id))
+            addOnIds.Add(id);
+    }
+
+    private async Task RefreshAsync()
+    {
+        var had = Hold;
+        availability = await Sales.GetAvailabilityAsync(User, ShowtimeId);
+        if (had is not null && Hold is null && !busy && notice is null && Error is null)
+            notice = $"Your hold on spot {had.SpotLabel} ran out, so it went back on sale. Please choose a spot again.";
+    }
+
+    // Another buyer (or the hold sweeper) changed this showing's spots.
+    private void OnSpotsChanged(int showtimeId)
+    {
+        if (showtimeId != ShowtimeId || availability is null)
+            return;
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                await RefreshAsync();
+                StateHasChanged();
+            }
+            catch (Exception)
+            {
+                // The circuit may be going away; the next change or action refreshes again.
+            }
+        });
+    }
+
+    // Redraws the countdown; once the hold runs out, reloads (expired holds count as available).
+    private async Task TickAsync()
+    {
+        if (Hold is not HoldView hold)
+            return;
+        if (hold.HeldUntil <= Time.GetUtcNow() && !busy)
+        {
+            try
+            {
+                await RefreshAsync();
+            }
+            catch (Exception)
+            {
+                return;
+            }
+        }
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        Events.Changed -= OnSpotsChanged;
+        countdown?.Dispose();
+    }
+}

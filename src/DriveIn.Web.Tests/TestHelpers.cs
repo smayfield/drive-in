@@ -17,9 +17,13 @@ public sealed class FakeEmailSender : IAppEmailSender
 {
     public List<(string To, string Subject, string Body)> Sent { get; } = [];
 
-    public Task SendAsync(string to, string subject, string htmlBody, CancellationToken ct = default)
+    public List<IReadOnlyList<InlineImage>?> Images { get; } = [];
+
+    public Task SendAsync(string to, string subject, string htmlBody, IReadOnlyList<InlineImage>? images = null,
+        CancellationToken ct = default)
     {
         Sent.Add((to, subject, htmlBody));
+        Images.Add(images);
         return Task.CompletedTask;
     }
 
@@ -38,6 +42,8 @@ public sealed class TestApp : IAsyncDisposable
 
     public ServiceProvider Services { get; }
     public FakeEmailSender Email { get; } = new();
+    public FakePaymentProcessor Payments { get; } = new();
+    public SpotEvents Events { get; } = new();
     public FakeTimeProvider Time { get; } = new(new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero));
 
     public TestApp(string? adminEmail = null)
@@ -76,6 +82,9 @@ public sealed class TestApp : IAsyncDisposable
         services.AddScoped<EmployeeService>();
         services.AddScoped<UserAdminService>();
         services.AddScoped<RoleService>();
+        services.AddSingleton<IPaymentProcessor>(Payments);
+        services.AddSingleton(Events);
+        services.AddScoped<TicketSalesService>();
         Services = services.BuildServiceProvider();
         DbSeeder.SeedAsync(Services).GetAwaiter().GetResult();
     }
@@ -148,4 +157,18 @@ public static class Principals
     }
 
     public static ClaimsPrincipal Anonymous => new(new ClaimsIdentity());
+}
+
+// Approves every charge (like the dummy processor) unless told to decline; records what was charged.
+public sealed class FakePaymentProcessor : IPaymentProcessor
+{
+    public bool IsAvailable { get; set; } = true;
+    public string? DeclineWith { get; set; }
+    public List<PaymentRequest> Charges { get; } = [];
+
+    public Task<PaymentResult> ChargeAsync(PaymentRequest request, CancellationToken ct = default)
+    {
+        Charges.Add(request);
+        return Task.FromResult(DeclineWith is null ? new PaymentResult(true, $"FAKE-{Charges.Count}") : PaymentResult.Declined(DeclineWith));
+    }
 }

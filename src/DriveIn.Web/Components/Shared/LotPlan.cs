@@ -73,7 +73,7 @@ public sealed class LotPlan
     public static string N(double value) => Math.Round(value, 2).ToString(CultureInfo.InvariantCulture);
 }
 
-public sealed record LotSpot(double X, double Y, string Label);
+public sealed record LotSpot(double X, double Y, int Row, int Number, string Label);
 
 public sealed record LotRow(double Y, double HalfWidth, string Label, IReadOnlyList<LotSpot> Spots);
 
@@ -98,7 +98,7 @@ public sealed class LotField
             var top = RowTop(row);
             var left = -RowWidth(count) / 2;
             var spots = Enumerable.Range(1, count)
-                .Select(s => new LotSpot(left + (s - 1) * (LotPlan.SpotWidth + LotPlan.SpotGap), top,
+                .Select(s => new LotSpot(left + (s - 1) * (LotPlan.SpotWidth + LotPlan.SpotGap), top, row, s,
                     SpotLabels.Spot(screen.LabelScheme, row, s)))
                 .ToList();
             return new LotRow(top, RowWidth(count) / 2, SpotLabels.Row(screen.LabelScheme, row), spots);
@@ -143,3 +143,6 @@ public readonly record struct LotRect(double X, double Y, double Width, double H
 
     public string ViewBox => $"{LotPlan.N(X)} {LotPlan.N(Y)} {LotPlan.N(Width)} {LotPlan.N(Height)}";
 }
+
+// How LotMap shows one spot: a CSS class, the word for it in the tooltip (e.g. "available"), and whether it can be clicked.
+public readonly record struct LotSpotStatus(string CssClass, string Label, bool Clickable);

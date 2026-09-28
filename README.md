@@ -34,9 +34,9 @@ Docker on one EC2 server. The setup mirrors LegoList.
 - **Employees** are separate accounts bound to one theater, created only by invitation from its
   owner or anyone with "Invite employees". What they can do is set by **roles**.
 - **Roles** are defined per theater by its owner (Manage → Roles). A role is a named set of actions
-  (edit profile, manage screens, manage schedule, manage pricing, view/invite/manage employees, manage roles). Employees can have several
+  (edit profile, manage screens, manage schedule, manage pricing, view/invite/manage employees, manage roles, admit guests). Employees can have several
   roles and get the union of their actions; new employees have none, so they can't do anything until
-  assigned a role. New theaters start with Manager (everything), Operations, Ticketing and Concessions,
+  assigned a role. New theaters start with Manager (everything), Operations, Ticketing (admit guests) and Concessions,
   which owners can change or delete. Someone with "Manage roles" can only grant, change or remove
   actions they hold themselves, and can't delete an employee who has more authority than they do.
 
@@ -60,6 +60,8 @@ invitee sets a password or continues with Google using the invited address.
   can't overlap at any point from the first film's start to the last film's end (intermissions included).
   Times are entered and shown in the theater's time zone (profile → Time zone, an IANA name such as
   `America/Chicago`) and stored in UTC.
+- A theater may set an operating **season** (profile → Season opens / closes, either end optional). Showings
+  can only be scheduled within it, and it can't be changed to leave out showings already scheduled.
 
 ## Pricing
 
@@ -71,6 +73,28 @@ invitee sets a password or continues with Google using the invited address.
 - **Add-ons** are per-theater fees (e.g. outside food) and discounts, either a dollar amount or a percent
   (e.g. veterans, seniors). Inactive add-ons are kept but not offered.
 - "Manage pricing" controls schedules and add-ons; choosing a showtime's schedule is part of "Manage schedule".
+
+## Ticket sales
+
+- Any signed-in user can buy tickets online: Theaters → a theater → a showing → **choose a spot** on the screen's
+  map. A ticket is one spot (one car) at one showing.
+- Choosing a spot **holds** it for 10 minutes while the buyer picks a ticket option and add-ons and pays; the first
+  to hold a spot gets it (a unique index on showing + spot), and anyone else who tries is told to choose another.
+  A buyer holds one spot at a time. Expired holds are released every 10 seconds (`HoldExpiryService`).
+- Seat maps update live: every hold, release and sale is published in-process (`SpotEvents`) to open maps. That
+  works because the app is a single server; running several would need a shared bus such as Postgres LISTEN/NOTIFY.
+- **Payment** is by credit card only, through `IPaymentProcessor`. There's no real processor yet: set
+  `Payments:Provider` to `Dummy` (on in `appsettings.Development.json`) for one that approves everything without
+  taking money. With it unset, as in production, nothing is sold online. Only the card brand and last four digits
+  are stored. A ticket whose total is $0 after discounts needs no card.
+- On approval the spot is sold to the buyer and a **receipt** is emailed with a QR code (an inline image) linking to
+  `tickets/{code}`, a random 128-bit code. Buyers see their tickets under My tickets and can resend the receipt.
+- **At the gate**, staff with "Admit guests" scan the QR code with a phone camera (or type the code on Manage →
+  Gate) and admit the car. A ticket admits once, only from 3 hours before its showing until it ends, so it can't
+  be used on a later date.
+- **All sales are final**: there are no refunds or cancellations, including for weather. Sold tickets are records,
+  so a showing with sales can't be removed or moved to another screen, a film or screen with sales can't be
+  deleted, and a screen can't drop or relabel spots sold for upcoming showings.
 
 ## Local development
 

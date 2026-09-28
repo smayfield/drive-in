@@ -1,6 +1,7 @@
 @page "/theaters/{Slug}"
 @attribute [Authorize]
 @inject TheaterService Theaters
+@inject TicketSalesService Sales
 
 @if (theater is null)
 {
@@ -14,12 +15,53 @@ else
 
     <p><a href="theaters">&larr; All theaters</a></p>
     <h1>@theater.Name</h1>
+    @if (theater.SeasonOpensOn is not null || theater.SeasonClosesOn is not null)
+    {
+        <p class="text-muted">Season: @Seasons.Describe(theater)</p>
+    }
 
     <div class="row g-4">
         <div class="col-md-7">
             @if (!string.IsNullOrWhiteSpace(theater.Description))
             {
                 <p style="white-space: pre-line">@theater.Description</p>
+            }
+
+            <h2 class="h5 mt-4">Showings</h2>
+            @if (showings.Count == 0)
+            {
+                <p class="text-muted">No upcoming showings are scheduled.</p>
+            }
+            @foreach (var day in showings.GroupBy(s => s.StartsLocal.Date))
+            {
+                <h3 class="h6 mt-3">@day.Key.ToString("dddd, MMMM d")</h3>
+                <ul class="list-group mb-2">
+                    @foreach (var s in day)
+                    {
+                        <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2">
+                            <div>
+                                <strong>@s.StartsLocal.ToString("h:mm tt")</strong> · @s.Title
+                                <div class="small text-muted">
+                                    @s.ScreenName
+                                    @if (s.IsMultiFeature)
+                                    {
+                                        @($" · {s.Features.Count} films, {s.IntermissionMinutes} min intermission")
+                                    }
+                                    @foreach (var f in s.Features.Where(f => !string.IsNullOrWhiteSpace(f.Rating)))
+                                    {
+                                        @($" · {f.Title} ({f.Rating})")
+                                    }
+                                    · ends @s.EndsLocal.ToString("h:mm tt")
+                                </div>
+                            </div>
+                            <a class="btn btn-sm btn-primary" href="theaters/@theater.Slug/showings/@s.Id">Choose a spot</a>
+                        </li>
+                    }
+                </ul>
+            }
+            @if (showings.Count > 0 && !TheaterTime.IsValidZone(theater.TimeZone))
+            {
+                <p class="small text-muted">Times are UTC.</p>
             }
             <h2 class="h5 mt-4">Screens</h2>
             @if (theater.Screens.Count == 0)
@@ -60,7 +102,14 @@ else
 @code {
     [Parameter] public string Slug { get; set; } = "";
 
-    private Theater? theater;
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
 
-    protected override async Task OnParametersSetAsync() => theater = await Theaters.GetBySlugAsync(Slug);
+    private Theater? theater;
+    private List<ShowtimeView> showings = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        theater = await Theaters.GetBySlugAsync(Slug);
+        showings = theater is null ? [] : (await Sales.ListOnSaleAsync((await AuthState).User, Slug)).Showings;
+    }
 }

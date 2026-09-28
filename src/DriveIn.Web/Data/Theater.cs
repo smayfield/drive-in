@@ -27,6 +27,14 @@ public class Theater
     [Range(0, Showtime.MaxIntermissionMinutes)]
     public int DefaultIntermissionMinutes { get; set; } = 15;
 
+    // The operating season, inclusive, as dates in the theater's time zone; either end may be left open. Showings
+    // can only be scheduled within it, and it can't be changed to leave out upcoming showings.
+    public DateOnly? SeasonOpensOn { get; set; }
+    public DateOnly? SeasonClosesOn { get; set; }
+
+    public bool IsInSeason(DateOnly date) =>
+        (SeasonOpensOn is not DateOnly opens || date >= opens) && (SeasonClosesOn is not DateOnly closes || date <= closes);
+
     public bool IsActive { get; set; } = true;
 
     // Nullable only so an admin can create a theater before its owner accepts an invite.
@@ -45,6 +53,18 @@ public class Theater
         Id = Id, Name = Name, Slug = Slug, IsActive = IsActive, OwnerId = OwnerId,
         AddressLine1 = AddressLine1, AddressLine2 = AddressLine2, City = City, State = State,
         PostalCode = PostalCode, Country = Country, Phone = Phone, Website = Website,
-        Description = Description, TimeZone = TimeZone,
+        Description = Description, TimeZone = TimeZone, SeasonOpensOn = SeasonOpensOn, SeasonClosesOn = SeasonClosesOn,
+    };
+}
+
+public static class Seasons
+{
+    // e.g. "May 1, 2026 – Sep 30, 2026", "from May 1, 2026", "year-round".
+    public static string Describe(Theater theater) => (theater.SeasonOpensOn, theater.SeasonClosesOn) switch
+    {
+        (DateOnly opens, DateOnly closes) => $"{opens:MMM d, yyyy} – {closes:MMM d, yyyy}",
+        (DateOnly opens, null) => $"from {opens:MMM d, yyyy}",
+        (null, DateOnly closes) => $"through {closes:MMM d, yyyy}",
+        _ => "year-round",
     };
 }

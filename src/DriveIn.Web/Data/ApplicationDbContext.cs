@@ -14,6 +14,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<PriceSchedule> PriceSchedules => Set<PriceSchedule>();
     public DbSet<PriceOption> PriceOptions => Set<PriceOption>();
     public DbSet<AddOn> AddOns => Set<AddOn>();
+    public DbSet<Ticket> Tickets => Set<Ticket>();
+    public DbSet<TicketAddOn> TicketAddOns => Set<TicketAddOn>();
     public DbSet<Invitation> Invitations => Set<Invitation>();
     public DbSet<TheaterRole> TheaterRoles => Set<TheaterRole>();
     public DbSet<TheaterRolePermission> TheaterRolePermissions => Set<TheaterRolePermission>();
@@ -128,6 +130,40 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             a.HasOne(x => x.Theater)
                 .WithMany()
                 .HasForeignKey(x => x.TheaterId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<Ticket>(t =>
+        {
+            // First to hold a spot wins: a second hold on it fails here.
+            t.HasIndex(x => new { x.ShowtimeId, x.Row, x.Spot }).IsUnique();
+            t.HasIndex(x => x.Code).IsUnique();
+            t.HasIndex(x => new { x.Status, x.HeldUntil });
+            t.HasIndex(x => x.UserId);
+            t.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+            t.Property(x => x.Stamp).IsConcurrencyToken();
+            t.Property(x => x.OptionPrice).HasPrecision(8, 2);
+            t.Property(x => x.Total).HasPrecision(8, 2);
+            // Sales are records: a showing with sold tickets can't be deleted (ScheduleService, ScreenService).
+            t.HasOne(x => x.Showtime)
+                .WithMany()
+                .HasForeignKey(x => x.ShowtimeId)
+                .OnDelete(DeleteBehavior.Restrict);
+            t.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<TicketAddOn>(a =>
+        {
+            a.HasKey(x => new { x.TicketId, x.Position });
+            a.Property(x => x.Kind).HasConversion<string>().HasMaxLength(20);
+            a.Property(x => x.Amount).HasPrecision(8, 2);
+            a.Property(x => x.Effect).HasPrecision(8, 2);
+            a.HasOne(x => x.Ticket)
+                .WithMany(t => t.AddOns)
+                .HasForeignKey(x => x.TicketId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
