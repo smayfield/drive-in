@@ -56,7 +56,9 @@ public sealed class ScreenService(IDbContextFactory<ApplicationDbContext> dbFact
         await db.SaveChangesAsync();
     }
 
-    // Past showtimes go with the screen; a screen with upcoming showtimes can't be deleted.
+    // Past showtimes go with the screen; a screen with upcoming showtimes can't be deleted. They're removed
+    // explicitly rather than left to the FK cascade so every provider (including tests) sees the same result;
+    // volume is small (a few showtimes per screen per night) and deleting a screen is rare.
     public async Task DeleteAsync(ClaimsPrincipal user, int screenId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();

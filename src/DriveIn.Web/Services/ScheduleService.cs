@@ -54,7 +54,8 @@ public sealed class ScheduleService(IDbContextFactory<ApplicationDbContext> dbFa
         await db.SaveChangesAsync();
     }
 
-    // Past showtimes go with the film; a film with upcoming showtimes can't be deleted.
+    // Past showtimes go with the film; a film with upcoming showtimes can't be deleted. Removed explicitly for
+    // the same reason as in ScreenService.DeleteAsync.
     public async Task DeleteFilmAsync(ClaimsPrincipal user, int filmId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
