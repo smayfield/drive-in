@@ -50,7 +50,8 @@ public sealed class SesEmailSender(IAmazonSimpleEmailServiceV2 ses, Microsoft.Ex
                 },
             },
         }, ct);
-        logger.LogInformation("Sent email {Subject} to {To}", subject, to);
+        // The recipient isn't logged: email addresses don't belong in production logs.
+        logger.LogInformation("Sent email {Subject}", subject);
     }
 }
 
