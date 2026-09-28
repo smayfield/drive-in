@@ -490,6 +490,8 @@ public class TicketSalesTests
     [InlineData("https://drive-in.online/tickets/abc_DEF-123?new=sent", "abc_DEF-123")]
     [InlineData("https://drive-in.online/tickets/abc_DEF-123/#top", "abc_DEF-123")]
     [InlineData("", "")]
+    [InlineData("https://drive-in.online/tickets/abc%ZZ%", "abc%ZZ%")] // malformed escapes are left as typed, not thrown
+    [InlineData("https://drive-in.online/tickets/abc%2Dx", "abc-x")]
     public void Gate_staff_can_type_a_code_or_paste_a_ticket_link(string input, string code) =>
         Assert.Equal(code, TicketLinks.CodeFrom(input));
 

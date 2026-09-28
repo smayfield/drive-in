@@ -15,6 +15,7 @@ public static class TicketLinks
     {
         var text = (input ?? "").Trim();
         text = text.Split('?', '#')[0].TrimEnd('/');
+        // UnescapeDataString leaves malformed escapes (e.g. "%ZZ") as they are rather than throwing (see tests).
         return Uri.UnescapeDataString(text[(text.LastIndexOf('/') + 1)..]).Trim();
     }
 }

@@ -69,6 +69,8 @@ public class Ticket
 public enum TicketStatus
 {
     Held,
+    // Being charged. Deliberately never swept: if the server dies mid-charge we can't tell whether the card was
+    // charged, so the spot stays off sale until someone checks with the processor rather than risk selling it twice.
     Paying,
     Sold,
 }
