@@ -196,6 +196,27 @@ public class TicketSalesTests
     }
 
     [Fact]
+    public async Task A_buyer_cannot_hold_another_spot_while_paying_for_one()
+    {
+        await using var s = await SetUpAsync();
+        var buyer = await BuyerAsync(s.App);
+        var hold = await s.Sales.HoldAsync(buyer, s.Showing.Id, 1, 1);
+        await using (var db = s.App.Db())
+        {
+            (await db.Tickets.SingleAsync()).Status = TicketStatus.Paying; // mid-charge, e.g. in another tab
+            await db.SaveChangesAsync();
+        }
+
+        var ex = await Assert.ThrowsAsync<AppValidationException>(() => s.Sales.HoldAsync(buyer, s.Showing.Id, 1, 2));
+        Assert.Contains("Finish that checkout", ex.Message);
+
+        // A payment stuck past its hold window (e.g. the server crashed mid-charge) doesn't block them forever.
+        s.App.Time.Advance(TimeSpan.FromMinutes(Ticket.HoldMinutes));
+        var next = await s.Sales.HoldAsync(buyer, s.Showing.Id, 1, 2);
+        Assert.NotEqual(hold.TicketId, next.TicketId);
+    }
+
+    [Fact]
     public async Task A_declined_card_keeps_the_hold_and_sells_nothing()
     {
         await using var s = await SetUpAsync();

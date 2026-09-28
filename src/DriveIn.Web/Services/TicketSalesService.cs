@@ -156,6 +156,10 @@ public sealed class TicketSalesService(
         if (existing is not null && !(existing.Status == TicketStatus.Held && existing.HeldUntil <= now))
             throw Taken(label);
 
+        // One spot at a time includes a checkout that's being charged (e.g. in another tab). Only within its hold
+        // window, so a payment interrupted by a crash can't lock the buyer out for good.
+        if (await db.Tickets.AnyAsync(t => t.UserId == userId && t.Status == TicketStatus.Paying && t.HeldUntil > now))
+            throw new AppValidationException("You're paying for another spot right now. Finish that checkout first.");
         var released = await db.Tickets.Where(t => t.UserId == userId && t.Status == TicketStatus.Held).ToListAsync();
         var ticket = new Ticket
         {
