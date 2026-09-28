@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
   drive-in.online Route 53 hosted zone. Carries over the records worth keeping
-  from GoDaddy DNS. Website alias records live in site.yml.
+  from GoDaddy DNS. The website records (apex, www, app) live in app.yml.
 
 Parameters:
   DomainName:
@@ -27,8 +27,8 @@ Resources:
         - '"v=DMARC1; p=quarantine; adkim=r; aspf=r; rua=mailto:dmarc_rua@onsecureserver.net;"'
 
   # Intentionally not carried over from GoDaddy:
-  #   @ A 3.33.130.190 / 15.197.148.33  - GoDaddy parking; replaced by CloudFront
-  #   www CNAME @                       - replaced by CloudFront alias in site.yml
+  #   @ A 3.33.130.190 / 15.197.148.33  - GoDaddy parking; replaced by the app server (app.yml)
+  #   www CNAME @                       - replaced by an A record to the app server (app.yml)
   #   _domainconnect CNAME              - GoDaddy-DNS-only feature, meaningless off GoDaddy nameservers
 
 Outputs:
