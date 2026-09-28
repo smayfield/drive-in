@@ -1,0 +1,29 @@
+@using Microsoft.Extensions.Options
+@inject IOptions<CompanyOptions> Company
+
+<footer class="site-footer">
+    <div class="wrap site-footer-inner">
+        <div>
+            <p class="site-brand mb-1">Drive-In Online</p>
+            <p>Turn-key software for drive-in theaters.</p>
+        </div>
+        <nav aria-label="Product">
+            <p class="footer-heading">Product</p>
+            <a href="features">Features</a>
+            <a href="pricing">Pricing</a>
+            <a href="faq">FAQ</a>
+            <a href="get-started">Start free demo</a>
+        </nav>
+        <nav aria-label="Legal">
+            <p class="footer-heading">Legal</p>
+            <a href="legal/terms">Terms of Service</a>
+            <a href="legal/privacy">Privacy Policy</a>
+            <a href="legal/license">License &amp; notices</a>
+            @if (Company.Value.ContactEmail is string contact && !string.IsNullOrWhiteSpace(contact))
+            {
+                <a href="mailto:@contact">Contact us</a>
+            }
+        </nav>
+    </div>
+    <p class="wrap copyright">&copy; @DateTime.UtcNow.Year @(Company.Value.IsConfigured ? Company.Value.Name : "Drive-In Online")</p>
+</footer>

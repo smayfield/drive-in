@@ -43,6 +43,8 @@ else
 
     <Alerts Error="@Error" Success="@Success" />
 
+    <TheaterPlanPanel Theater="theater" User="User" BaseUri="@BaseUri" OnChanged="ReloadPlanAsync" />
+
     @if (permissions.Count == 0)
     {
         <div class="alert alert-info">
@@ -152,6 +154,12 @@ else
         permissions = await Access.GetPermissionsAsync(User, theater);
     }
 
+    private async Task ReloadPlanAsync()
+    {
+        theater = await Theaters.GetForManageAsync(User, Id);
+        Success = "Thanks! We'll review your theater and email you when it's live.";
+    }
+
     private async Task ReloadAsync()
     {
         theater = await Theaters.GetForManageAsync(User, Id);
@@ -161,7 +169,8 @@ else
     private Task SaveProfileAsync() => RunAsync(async () =>
     {
         await Theaters.UpdateProfileAsync(User, profile);
-        theater!.Name = profile.Name;
+        // Reload: the plan panel's checklist and billing estimate depend on the profile (time zone, season).
+        theater = await Theaters.GetForManageAsync(User, Id);
     }, "Profile saved.");
 
     private Task AddScreenAsync() => RunAsync(async () =>

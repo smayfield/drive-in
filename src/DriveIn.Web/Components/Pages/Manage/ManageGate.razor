@@ -59,7 +59,7 @@ else
                                     <p class="mb-1 small">@s.StartsLocal.ToString("ddd, MMM d · h:mm tt") · gate code <span class="font-monospace">@t.ShortCode</span></p>
                                     <p class="mb-2 small text-muted">
                                         @t.OptionName@foreach (var a in t.AddOns) { @($" · {a.Name}") }
-                                        · @(t.SoldAtGate ? "sold at the gate" : "bought online")
+                                        · @(t.SoldAtGate ? "sold at the gate" : "bought online")@(t.IsTest ? " · test ticket" : "")
                                     </p>
                                     @if (valid)
                                     {

@@ -1,0 +1,12 @@
+@using Microsoft.Extensions.Options
+@inject IOptions<CompanyOptions> Company
+
+@* The contact email as a mailto link, or its placeholder text while it isn't configured. *@
+@if (string.IsNullOrWhiteSpace(Company.Value.ContactEmail))
+{
+    @Company.Value.Email
+}
+else
+{
+    <a href="mailto:@Company.Value.ContactEmail">@Company.Value.ContactEmail</a>
+}

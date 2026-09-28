@@ -129,12 +129,16 @@ builder.Services.AddScoped<InvitationService>();
 builder.Services.AddScoped<EmployeeService>();
 builder.Services.AddScoped<UserAdminService>();
 builder.Services.AddScoped<RoleService>();
+builder.Services.Configure<PlanOptions>(builder.Configuration.GetSection(PlanOptions.Section));
+builder.Services.Configure<CompanyOptions>(builder.Configuration.GetSection(CompanyOptions.Section));
+builder.Services.AddScoped<OnboardingService>();
 
 // Online ticket sales. Card payments are off unless a processor is configured; "Dummy" (development only) approves
 // everything without taking money.
 builder.Services.Configure<PaymentOptions>(builder.Configuration.GetSection(PaymentOptions.Section));
+builder.Services.AddSingleton<DummyPaymentProcessor>(); // also used for demo theaters' test sales
 if (builder.Configuration[$"{PaymentOptions.Section}:Provider"] == "Dummy")
-    builder.Services.AddSingleton<IPaymentProcessor, DummyPaymentProcessor>();
+    builder.Services.AddSingleton<IPaymentProcessor>(sp => sp.GetRequiredService<DummyPaymentProcessor>());
 else
     builder.Services.AddSingleton<IPaymentProcessor, UnavailablePaymentProcessor>();
 builder.Services.AddSingleton<SpotEvents>();

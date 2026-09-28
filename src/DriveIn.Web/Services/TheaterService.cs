@@ -8,31 +8,43 @@ namespace DriveIn.Web.Services;
 
 public sealed record TheaterSummary(
     int Id, string Name, string Slug, string? City, string? State, bool IsActive,
-    string? OwnerEmail, int ScreenCount, int EmployeeCount);
+    string? OwnerEmail, int ScreenCount, int EmployeeCount, TheaterMode Mode = TheaterMode.Live, DateTimeOffset? GoLiveRequestedAt = null);
 
 public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFactory, IAuthorizationService auth, TimeProvider time)
 {
     // --- Browsing (any signed-in user) ---
 
-    public async Task<List<Theater>> ListActiveAsync()
+    // Live theaters, plus any demo theaters the user belongs to (so owners and staff can try them out).
+    public async Task<List<Theater>> ListActiveAsync(ClaimsPrincipal user)
     {
+        // CanBrowse as a query, so private demo theaters aren't loaded only to be filtered out.
+        var userId = user.GetUserId();
+        var admin = userId is not null && user.IsAdmin();
+        var employeeTheaterId = userId is null ? null : user.GetEmployeeTheaterId();
         await using var db = await dbFactory.CreateDbContextAsync();
         return await db.Theaters.AsNoTracking()
-            .Where(t => t.IsActive)
+            .Where(t => t.IsActive && (t.Mode == TheaterMode.Live || admin
+                || (userId != null && t.OwnerId == userId) || t.Id == employeeTheaterId))
             .Include(t => t.Screens)
             .OrderBy(t => t.Name)
             .ToListAsync();
     }
 
-    public async Task<Theater?> GetBySlugAsync(string slug)
+    public async Task<Theater?> GetBySlugAsync(ClaimsPrincipal user, string slug)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var theater = await db.Theaters.AsNoTracking()
             .Include(t => t.Screens)
             .FirstOrDefaultAsync(t => t.Slug == slug && t.IsActive);
-        theater?.Screens.Sort((a, b) => a.SortOrder.CompareTo(b.SortOrder));
+        if (theater is null || !CanBrowse(user, theater))
+            return null;
+        theater.Screens.Sort((a, b) => a.SortOrder.CompareTo(b.SortOrder));
         return theater;
     }
+
+    // Live theaters are public; a demo theater is only visible to its members (admins, owner, employees).
+    public static bool CanBrowse(ClaimsPrincipal user, Theater theater) =>
+        theater.IsActive && (theater.IsPublic || TheaterAccess.IsMember(user, theater));
 
     // --- Owner / employee management ---
 
@@ -83,7 +95,7 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
         return await db.Theaters.AsNoTracking()
             .OrderBy(t => t.Name)
             .Select(t => new TheaterSummary(t.Id, t.Name, t.Slug, t.City, t.State, t.IsActive,
-                t.Owner != null ? t.Owner.Email : null, t.Screens.Count, t.Employees.Count))
+                t.Owner != null ? t.Owner.Email : null, t.Screens.Count, t.Employees.Count, t.Mode, t.GoLiveRequestedAt))
             .ToListAsync();
     }
 
@@ -100,14 +112,43 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
         Guard.RequireAdmin(user);
         await using var db = await dbFactory.CreateDbContextAsync();
         await EnsureSlugFreeAsync(db, input.Slug, exceptId: null);
-        var theater = new Theater { Slug = input.Slug, IsActive = input.IsActive, CreatedAt = time.GetUtcNow(), UpdatedAt = time.GetUtcNow() };
+        // Admins set up theaters for owners they've signed, so these are live from the start.
+        var theater = new Theater
+        {
+            Slug = input.Slug, IsActive = input.IsActive, CreatedAt = time.GetUtcNow(), UpdatedAt = time.GetUtcNow(),
+            Mode = TheaterMode.Live, LiveSince = time.GetUtcNow(),
+        };
         CopyProfile(input, theater);
-        db.Theaters.Add(theater);
-        db.TheaterRoles.AddRange(DefaultTheaterRoles.CreateFor(theater, time.GetUtcNow()));
-        db.Screens.Add(new Screen { Theater = theater, Name = "Screen 1" });
-        db.PriceSchedules.Add(new PriceSchedule { Theater = theater, Name = PricingService.DefaultScheduleName, IsDefault = true });
+        AddStarterSetup(db, theater, time.GetUtcNow());
         await db.SaveChangesAsync();
         return theater;
+    }
+
+    // Adds a new theater with what every theater starts with: the default roles, its screens and a default price
+    // schedule. With samples (self sign-up), the screens get a starter layout and the schedule starter prices, so a
+    // demo theater can try a sale right away; the owner changes them during setup.
+    internal static void AddStarterSetup(ApplicationDbContext db, Theater theater, DateTimeOffset now, int screens = 1, bool samples = false)
+    {
+        db.Theaters.Add(theater);
+        db.TheaterRoles.AddRange(DefaultTheaterRoles.CreateFor(theater, now));
+        for (var i = 1; i <= screens; i++)
+            db.Screens.Add(new Screen
+            {
+                Theater = theater, Name = $"Screen {i}", SortOrder = i - 1,
+                RowSpots = samples ? Enumerable.Repeat(15, 8).ToList() : [],
+            });
+        db.PriceSchedules.Add(new PriceSchedule
+        {
+            Theater = theater, Name = PricingService.DefaultScheduleName, IsDefault = true,
+            Options = samples
+                ?
+                [
+                    new PriceOption { Name = "1 occupant", Price = 10m, SortOrder = 0 },
+                    new PriceOption { Name = "2 occupants", Price = 15m, SortOrder = 1 },
+                    new PriceOption { Name = "Car load", Description = "Up to 6 people", Price = 25m, SortOrder = 2 },
+                ]
+                : [],
+        });
     }
 
     public async Task AdminUpdateAsync(ClaimsPrincipal user, Theater input)
@@ -156,14 +197,14 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
         await tx.CommitAsync();
     }
 
-    private static async Task EnsureSlugFreeAsync(ApplicationDbContext db, string slug, int? exceptId)
+    internal static async Task EnsureSlugFreeAsync(ApplicationDbContext db, string slug, int? exceptId)
     {
         if (await db.Theaters.AnyAsync(t => t.Slug == slug && t.Id != exceptId))
             throw new AppValidationException($"The slug \"{slug}\" is already used by another theater.");
     }
 
     // Showtimes are entered in the theater's time zone, so it has to be one we can resolve.
-    private static void CopyProfile(Theater from, Theater to)
+    internal static void CopyProfile(Theater from, Theater to)
     {
         var timeZone = string.IsNullOrWhiteSpace(from.TimeZone) ? null : from.TimeZone.Trim();
         if (timeZone is not null && !TheaterTime.IsValidZone(timeZone))

@@ -1,0 +1,11 @@
+@using Microsoft.Extensions.Options
+@inject IOptions<CompanyOptions> Company
+
+@* Shown on the legal pages until the provider's details are configured (Company:LegalName). *@
+@if (!Company.Value.IsConfigured)
+{
+    <div class="draft-banner" role="note">
+        <strong>Draft.</strong> This document is a draft that hasn't been reviewed or adopted yet, and isn't in effect.
+        Bracketed items like @Company.Value.Name are placeholders.
+    </div>
+}

@@ -52,6 +52,7 @@ public sealed partial class TicketSalesService(
     IDbContextFactory<ApplicationDbContext> dbFactory,
     IAuthorizationService auth,
     IPaymentProcessor payments,
+    DummyPaymentProcessor testPayments,
     IAppEmailSender email,
     SpotEvents events,
     TimeProvider time,
@@ -69,6 +70,8 @@ public sealed partial class TicketSalesService(
         await using var db = await dbFactory.CreateDbContextAsync();
         var theater = await db.Theaters.AsNoTracking().FirstOrDefaultAsync(t => t.Slug == slug && t.IsActive)
             ?? throw new NotFoundException("Theater not found.");
+        if (!TheaterService.CanBrowse(user, theater))
+            throw new NotFoundException("Theater not found.");
         var now = time.GetUtcNow();
         var showtimes = await ScheduleService.WithFeatures(db.Showtimes.AsNoTracking()).Include(s => s.Screen)
             .Where(s => s.Screen!.TheaterId == theater.Id && s.StartsAt > now)
@@ -83,7 +86,10 @@ public sealed partial class TicketSalesService(
     {
         Guard.RequireUserId(user);
         await using var db = await dbFactory.CreateDbContextAsync();
-        return await LoadShowingForSaleAsync(db, showtimeId, atGate: false);
+        var sale = await LoadShowingForSaleAsync(db, showtimeId, atGate: false);
+        if (!TheaterService.CanBrowse(user, sale.Theater))
+            throw new NotFoundException("Showing not found.");
+        return sale;
     }
 
     private async Task<ShowingForSale> LoadShowingForSaleAsync(ApplicationDbContext db, int showtimeId, bool atGate)
@@ -124,8 +130,14 @@ public sealed partial class TicketSalesService(
 
     // Holds a spot for the user while they pay; the first to hold a spot gets it. Holding another spot lets go of
     // any spot the user already holds, so one person can't tie up several at once.
-    public Task<HoldView> HoldAsync(ClaimsPrincipal user, int showtimeId, int row, int spot) =>
-        HoldAsync(Guard.RequireUserId(user), showtimeId, row, spot, atGate: false);
+    public async Task<HoldView> HoldAsync(ClaimsPrincipal user, int showtimeId, int row, int spot)
+    {
+        var userId = Guard.RequireUserId(user);
+        await using (var db = await dbFactory.CreateDbContextAsync())
+            if (!TheaterService.CanBrowse(user, await TheaterOfShowtimeAsync(db, showtimeId)))
+                throw new NotFoundException("Showing not found.");
+        return await HoldAsync(userId, showtimeId, row, spot, atGate: false);
+    }
 
     private async Task<HoldView> HoldAsync(string userId, int showtimeId, int row, int spot, bool atGate)
     {
@@ -282,7 +294,7 @@ public sealed partial class TicketSalesService(
         {
             result = quote.Total == 0
                 ? new PaymentResult(true, null)
-                : await payments.ChargeAsync(new PaymentRequest(quote.Total,
+                : await ProcessorFor(theater).ChargeAsync(new PaymentRequest(quote.Total,
                     $"{theater.Name}: {ScheduleService.ToView(theater, await WithFeaturesAsync(db, showtime)).Title}, spot {ticket.SpotLabel}", card));
         }
         catch
@@ -309,6 +321,7 @@ public sealed partial class TicketSalesService(
         }).ToList();
         ticket.Total = quote.Total;
         ticket.PaymentReference = result.Reference;
+        ticket.IsTest = theater.IsDemo;
         ticket.Code = NewCode();
         ticket.ShortCode = shortCode;
         if (atGate)
@@ -419,6 +432,10 @@ public sealed partial class TicketSalesService(
 
     // --- Helpers ---
 
+    // Demo theaters always sell through the dummy processor (test tickets, no money), even where real payments
+    // aren't set up, so prospective owners can try the whole flow.
+    private IPaymentProcessor ProcessorFor(Theater theater) => theater.IsDemo ? testPayments : payments;
+
     // Online sales stop when the showing starts; the gate keeps selling to latecomers until it ends.
     // Showtime.Screen.Theater must be loaded.
     private string? NotOnSaleReason(Showtime showtime, PriceSchedule prices, bool atGate = false)
@@ -429,7 +446,7 @@ public sealed partial class TicketSalesService(
             return "This showing has ended.";
         if (!atGate && showtime.StartsAt <= time.GetUtcNow())
             return "This showing has started, so tickets are no longer sold online.";
-        if (!payments.IsAvailable)
+        if (!ProcessorFor(showtime.Screen.Theater).IsAvailable)
             return atGate ? "Card payments aren't set up yet, so tickets can't be sold at the gate."
                 : "Online ticket sales aren't available yet.";
         if (prices.Options.Count == 0)

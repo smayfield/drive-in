@@ -1,0 +1,141 @@
+@page "/legal/terms"
+@layout MarketingLayout
+@using Microsoft.Extensions.Options
+@inject IOptions<CompanyOptions> CompanyOptions
+@inject IOptions<PlanOptions> Plans
+
+<PageTitle>Terms of Service · Drive-In Online</PageTitle>
+
+<MarketingNav />
+<PageHero Eyebrow="Legal" Title="Terms of Service" Lede="@($"Effective {C.EffectiveDate} · Version {C.TermsVersion}")" />
+
+<main class="wrap page">
+    <div class="prose">
+        <LegalDraftBanner />
+
+        <p>
+            These Terms of Service ("Terms") govern your use of Drive-In Online (the "Service"), provided by @C.Name
+            ("we", "us"). By creating an account, signing up a theater, or buying a ticket through the Service, you agree to these Terms.
+            If you use the Service for a business, you accept these Terms on its behalf and confirm you have authority to do so.
+        </p>
+
+        <h2>1. Accounts</h2>
+        <p>
+            You must give accurate information, keep your password secure, and tell us promptly about any unauthorized use of your account.
+            You're responsible for what happens under your account. Employee accounts are created by a theater's owner or staff and belong to that theater.
+        </p>
+
+        <h2>2. Theaters</h2>
+        <p>
+            A theater "Owner" signs up a theater and is responsible for it, including everyone they invite to work there and the roles they give them.
+            The Owner sets the theater's showtimes, prices, add-ons and ticket policies, and is responsible for them: for honoring tickets sold,
+            for its refund and weather policies, for taxes on its sales, and for complying with the laws that apply to its business.
+            We provide the software; we don't operate theaters and aren't a party to the sale of tickets between a theater and its guests.
+        </p>
+
+        <h2>3. Guests buying tickets</h2>
+        <p>
+            When you buy a ticket, you're buying it from the theater, under its policies shown at checkout. A ticket admits one car to the showing
+            it was bought for and can't be used for another showing or date. Unless the theater says otherwise at checkout, sales are final:
+            no refunds or exchanges for any reason, including weather. Questions about a showing or a ticket go to the theater.
+        </p>
+
+        <h2>4. Demo mode</h2>
+        <p>
+            A newly signed-up theater starts in demo mode, free of charge. Demo theaters aren't public, and their sales are test transactions:
+            no money is charged and test tickets aren't valid for admission. We may delete test data when a theater goes live, and may remove
+            demo theaters that have been inactive for a long time after notifying the Owner.
+        </p>
+
+        <h2>5. Subscription and billing</h2>
+        <p>
+            A theater that goes live subscribes to the Standard plan at the price shown on our <a href="pricing">Pricing</a> page when it goes live
+            (currently @Plans.Value.PriceDisplay per screen, per month). Fees are charged for each calendar month in which the theater's operating
+            season, as set in its profile, is open; if no season is set, every month is billed. Fees are billed monthly in advance, exclusive of
+            taxes, and are non-refundable except where the law requires otherwise. We'll give at least 30 days' notice of any price change,
+            effective from your next season. [Billing method, payment terms and late-payment terms to be confirmed.]
+        </p>
+
+        <h2>6. Payment processing</h2>
+        <p>
+            Card payments for tickets are processed by a third-party payment processor under its own terms. Ticket proceeds belong to the theater.
+            We don't store full card numbers. The processor's fees are separate from our subscription fees.
+        </p>
+
+        <h2>7. Acceptable use</h2>
+        <p>You agree not to:</p>
+        <ul>
+            <li>break the law, infringe others' rights, or sell tickets to events you don't have the right to show;</li>
+            <li>send spam, or collect other users' information without permission;</li>
+            <li>probe, scan or test the Service's security, overload it, or interfere with its operation;</li>
+            <li>access it by automated means except as we allow, or copy, resell or reverse engineer it (see <a href="legal/license">License</a>);</li>
+            <li>upload malicious code, or content that is unlawful, hateful or misleading.</li>
+        </ul>
+
+        <h2>8. Your data</h2>
+        <p>
+            Theaters own the data they put into the Service (their schedule, prices, staff and sales). You give us permission to host, process
+            and back it up as needed to provide the Service. Our <a href="legal/privacy">Privacy Policy</a> explains how we handle personal information.
+            You can ask for an export of your theater's data before you leave.
+        </p>
+
+        <h2>9. Our software</h2>
+        <p>
+            The Service and its software belong to us and our licensors. Your right to use it is described in the <a href="legal/license">License</a>,
+            which is part of these Terms. Suggestions you send us may be used without obligation to you.
+        </p>
+
+        <h2>10. Availability and changes</h2>
+        <p>
+            We work to keep the Service available but don't guarantee it will be uninterrupted or error-free, and we may change or discontinue
+            features. We'll give reasonable notice of changes that materially reduce what a paid plan includes.
+        </p>
+
+        <h2>11. Cancellation and termination</h2>
+        <p>
+            An Owner may cancel a theater's subscription at any time; it ends at the end of the current billed month, and no further months are billed.
+            We may suspend or end access for a breach of these Terms, non-payment, or to protect the Service or others, with notice where practical.
+            Sections 2, 3, 8 and 12–15 survive termination.
+        </p>
+
+        <h2>12. Disclaimer</h2>
+        <p>
+            THE SERVICE IS PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING MERCHANTABILITY,
+            FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT, TO THE EXTENT THE LAW ALLOWS.
+        </p>
+
+        <h2>13. Limitation of liability</h2>
+        <p>
+            TO THE EXTENT THE LAW ALLOWS, WE WON'T BE LIABLE FOR INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL OR PUNITIVE DAMAGES, OR LOST PROFITS
+            OR REVENUE, AND OUR TOTAL LIABILITY FOR ANY CLAIM ABOUT THE SERVICE IS LIMITED TO THE FEES YOU PAID US IN THE 12 MONTHS BEFORE THE CLAIM
+            (OR $100 IF YOU PAID NOTHING).
+        </p>
+
+        <h2>14. Indemnity</h2>
+        <p>
+            Theater Owners will defend and indemnify us against third-party claims arising from their theater's events, ticket sales, policies or
+            content, or their breach of these Terms.
+        </p>
+
+        <h2>15. Governing law</h2>
+        <p>
+            These Terms are governed by the laws of the State of @C.State, without regard to conflict-of-law rules, and disputes will be heard in
+            the state or federal courts located there.
+        </p>
+
+        <h2>16. Changes to these Terms</h2>
+        <p>
+            We may update these Terms. We'll post the new version here with a new effective date and, for material changes, notify theater Owners
+            by email at least 30 days in advance. Continuing to use the Service after changes take effect means you accept them.
+        </p>
+
+        <h2>17. Contact</h2>
+        <p>@C.Name · @C.Address · <ContactLink /></p>
+    </div>
+</main>
+
+<MarketingFooter />
+
+@code {
+    private CompanyOptions C => CompanyOptions.Value;
+}

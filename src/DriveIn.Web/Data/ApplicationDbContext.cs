@@ -49,6 +49,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         builder.Entity<Theater>(t =>
         {
             t.HasIndex(x => x.Slug).IsUnique();
+            t.Property(x => x.Mode).HasConversion<string>().HasMaxLength(20);
             t.HasOne(x => x.Owner)
                 .WithMany(u => u.OwnedTheaters)
                 .HasForeignKey(x => x.OwnerId)
