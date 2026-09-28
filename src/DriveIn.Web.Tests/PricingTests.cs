@@ -250,6 +250,24 @@ public class PricingTests
     }
 
     [Fact]
+    public async Task Renaming_an_add_on_keeps_its_normalized_name_in_sync()
+    {
+        var (app, owner, theater, _, _, _) = await SetUpAsync();
+        await using var _ = app;
+        var me = Principals.For(owner);
+        var pricing = app.Get<PricingService>();
+        var addOn = await pricing.AddAddOnAsync(me, theater.Id, new AddOnInput("Seniors", null, AddOnKind.PercentDiscount, 10m, true));
+
+        await pricing.UpdateAddOnAsync(me, addOn.Id, new AddOnInput(" Senior citizens ", null, AddOnKind.PercentDiscount, 10m, true));
+
+        await using (var db = app.Db())
+            Assert.Equal("SENIOR CITIZENS", (await db.AddOns.SingleAsync()).NormalizedName);
+        await pricing.AddAddOnAsync(me, theater.Id, new AddOnInput("seniors", null, AddOnKind.Fee, 1m, true)); // old name is free again
+        await Assert.ThrowsAsync<AppValidationException>(() =>
+            pricing.AddAddOnAsync(me, theater.Id, new AddOnInput("SENIOR citizens", null, AddOnKind.Fee, 1m, true)));
+    }
+
+    [Fact]
     public async Task Deleting_a_theater_deletes_its_pricing()
     {
         await using var app = new TestApp();

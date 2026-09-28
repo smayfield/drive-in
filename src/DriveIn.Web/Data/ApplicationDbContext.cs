@@ -109,6 +109,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
         builder.Entity<AddOn>(a =>
         {
+            a.HasIndex(x => new { x.TheaterId, x.NormalizedName }).IsUnique();
+            a.Property(x => x.NormalizedName).IsRequired();
             a.Property(x => x.Amount).HasPrecision(8, 2);
             a.Property(x => x.Kind).HasConversion<string>().HasMaxLength(20);
             a.HasOne(x => x.Theater)

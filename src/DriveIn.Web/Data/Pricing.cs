@@ -65,7 +65,19 @@ public class AddOn
     public Theater? Theater { get; set; }
 
     [Required, MaxLength(60)]
-    public string Name { get; set; } = "";
+    public string Name
+    {
+        get;
+        set
+        {
+            field = value;
+            NormalizedName = PriceSchedule.Normalize(value);
+        }
+    } = "";
+
+    // Upper-cased Name; unique per theater (enforced by the DB).
+    [MaxLength(60)]
+    public string NormalizedName { get; private set; } = "";
 
     [MaxLength(200)]
     public string? Description { get; set; }

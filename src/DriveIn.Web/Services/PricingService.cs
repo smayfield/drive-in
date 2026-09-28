@@ -73,7 +73,7 @@ public sealed class PricingService(IDbContextFactory<ApplicationDbContext> dbFac
                 .ToList();
         }
         db.PriceSchedules.Add(schedule);
-        await SaveNamedAsync(db, trimmed);
+        await SaveNamedAsync(db, $"There's already a price schedule named \"{trimmed}\".");
         return schedule;
     }
 
@@ -107,7 +107,7 @@ public sealed class PricingService(IDbContextFactory<ApplicationDbContext> dbFac
             if (input.Id is null)
                 db.PriceOptions.Add(option);
         }
-        await SaveNamedAsync(db, trimmed);
+        await SaveNamedAsync(db, $"There's already a price schedule named \"{trimmed}\".");
     }
 
     public async Task SetDefaultScheduleAsync(ClaimsPrincipal user, int scheduleId)
@@ -155,7 +155,7 @@ public sealed class PricingService(IDbContextFactory<ApplicationDbContext> dbFac
         await ApplyAsync(db, input, addOn);
         addOn.SortOrder = (await db.AddOns.Where(a => a.TheaterId == theaterId).Select(a => (int?)a.SortOrder).MaxAsync() ?? -1) + 1;
         db.AddOns.Add(addOn);
-        await db.SaveChangesAsync();
+        await SaveNamedAsync(db, $"There's already an add-on named \"{addOn.Name}\".");
         return addOn;
     }
 
@@ -164,7 +164,7 @@ public sealed class PricingService(IDbContextFactory<ApplicationDbContext> dbFac
         await using var db = await dbFactory.CreateDbContextAsync();
         var addOn = await LoadAddOnAuthorizedAsync(db, user, addOnId);
         await ApplyAsync(db, input, addOn);
-        await db.SaveChangesAsync();
+        await SaveNamedAsync(db, $"There's already an add-on named \"{addOn.Name}\".");
     }
 
     public async Task DeleteAddOnAsync(ClaimsPrincipal user, int addOnId)
@@ -208,8 +208,8 @@ public sealed class PricingService(IDbContextFactory<ApplicationDbContext> dbFac
             : ValidateMoney(input.Amount, "Amounts");
         if (input.Kind != AddOnKind.PercentDiscount && amount == 0)
             throw new AppValidationException("Give the add-on an amount.");
-        var existing = await db.AddOns.Where(a => a.TheaterId == addOn.TheaterId && a.Id != addOn.Id).Select(a => a.Name).ToListAsync();
-        if (existing.Contains(name, StringComparer.OrdinalIgnoreCase))
+        var normalized = PriceSchedule.Normalize(name);
+        if (await db.AddOns.AnyAsync(a => a.TheaterId == addOn.TheaterId && a.Id != addOn.Id && a.NormalizedName == normalized))
             throw new AppValidationException($"There's already an add-on named \"{name}\".");
         addOn.Name = name;
         addOn.Description = CleanDescription(input.Description);
@@ -228,7 +228,7 @@ public sealed class PricingService(IDbContextFactory<ApplicationDbContext> dbFac
     }
 
     // The app-level name check gives the friendly error; the unique index catches concurrent duplicates.
-    private static async Task SaveNamedAsync(ApplicationDbContext db, string name)
+    private static async Task SaveNamedAsync(ApplicationDbContext db, string duplicateMessage)
     {
         try
         {
@@ -236,7 +236,7 @@ public sealed class PricingService(IDbContextFactory<ApplicationDbContext> dbFac
         }
         catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation })
         {
-            throw new AppValidationException($"There's already a price schedule named \"{name}\".");
+            throw new AppValidationException(duplicateMessage);
         }
     }
 
