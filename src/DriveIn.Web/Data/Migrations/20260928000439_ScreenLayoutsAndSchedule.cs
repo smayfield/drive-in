@@ -29,7 +29,9 @@ namespace DriveIn.Web.Data.Migrations
                 defaultValueSql: "'{}'");
 
             // Capacity is now the number of spots in the layout. Keep each screen's old car capacity as
-            // rows of 20 spots (wider rows for big lots) so owners can adjust it rather than start over.
+            // rows of 20 spots (wider rows for big lots) so owners can adjust it rather than start over. Up to
+            // 3,960 cars fits Screen.MaxRows x MaxSpotsPerRow; a bigger (unrealistic) screen keeps every spot
+            // but has to be trimmed before its layout can be saved again, rather than losing capacity here.
             migrationBuilder.Sql("""
                 UPDATE screens s SET row_spots = ARRAY(
                     SELECT LEAST(w.width, s.car_capacity - (g - 1) * w.width)
