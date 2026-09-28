@@ -1,0 +1,25 @@
+@* A showing's spots on its screen: available, on hold, sold, or held by the viewer. Available spots raise OnPick when CanPick. *@
+
+<div class="spot-legend mb-2" aria-hidden="true">
+    <span class="spot-available">Available</span>
+    <span class="spot-held">On hold</span>
+    <span class="spot-sold">Sold</span>
+    <span class="spot-mine">@MineLabel</span>
+</div>
+<LotMap Screens="[Screen]" SpotStatus="StatusOf" OnSpotClick="OnPick" />
+
+@code {
+    [Parameter, EditorRequired] public Screen Screen { get; set; } = default!;
+    [Parameter, EditorRequired] public SpotAvailability Availability { get; set; } = default!;
+    [Parameter] public bool CanPick { get; set; }
+    [Parameter] public EventCallback<LotSpot> OnPick { get; set; }
+    [Parameter] public string MineLabel { get; set; } = "Yours";
+
+    private LotSpotStatus? StatusOf(int row, int spot) => Availability[row, spot] switch
+    {
+        SpotState.Mine => new("spot-mine", MineLabel.ToLowerInvariant(), false),
+        SpotState.Held => new("spot-held", "on hold for another buyer", false),
+        SpotState.Sold => new("spot-sold", "sold", false),
+        _ => new("spot-available", "available", CanPick),
+    };
+}

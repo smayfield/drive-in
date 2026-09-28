@@ -65,7 +65,9 @@ else
             @if (lookup.IsBuyer)
             {
                 <img class="ticket-qr mb-2" src="@qr" alt="Ticket QR code for the gate" />
-                <p class="small text-muted mb-3">Show this code at the gate. Ticket @t.Code</p>
+                <p class="mb-0 small">Gate code</p>
+                <p class="gate-code mb-2">@t.ShortCode</p>
+                <p class="small text-muted mb-3">Show the QR code at the gate, or tell the attendant your gate code.</p>
             }
             @if (v.AdmittedLocal is DateTime admitted)
             {

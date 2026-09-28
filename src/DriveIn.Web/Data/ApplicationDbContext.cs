@@ -140,6 +140,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             t.HasIndex(x => x.Code).IsUnique();
             t.HasIndex(x => new { x.Status, x.HeldUntil });
             t.HasIndex(x => x.UserId);
+            t.HasIndex(x => x.ShortCode);
+            t.HasOne(x => x.SoldBy)
+                .WithMany()
+                .HasForeignKey(x => x.SoldById)
+                .OnDelete(DeleteBehavior.SetNull);
             t.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
             t.Property(x => x.Stamp).IsConcurrencyToken();
             t.Property(x => x.OptionPrice).HasPrecision(8, 2);
