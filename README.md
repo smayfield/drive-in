@@ -190,7 +190,8 @@ All stacks are in `us-east-1`. The domain is registered at GoDaddy with nameserv
 The domain used to serve a static site (S3 + CloudFront, `drive-in-site` stack). It was retired on
 2026-09-28 by deleting that stack, deploying the app stack with `ServeApex=true`, and re-running the
 Deploy workflow. The apex didn't resolve between the first two steps, and resolvers cache that
-"no such name" for up to 15 minutes (the zone's SOA TTL), so do such moves back to back.
+"no such name" for up to 15 minutes, so do such moves back to back. (Negative answers are cached for
+the lesser of the SOA record's TTL, 900 s on Route 53, and its MINIMUM field, 86400 s; RFC 2308.)
 
 ### Operations
 
