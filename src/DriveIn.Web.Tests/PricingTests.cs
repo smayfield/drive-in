@@ -108,6 +108,19 @@ public class PricingTests
     }
 
     [Fact]
+    public async Task An_option_cannot_be_listed_twice()
+    {
+        var (app, owner, theater, standard, _, _) = await SetUpAsync();
+        await using var _ = app;
+        var me = Principals.For(owner);
+        var pricing = app.Get<PricingService>();
+        var option = (await pricing.GetAsync(me, theater.Id)).Default!.Options[0];
+
+        await Assert.ThrowsAsync<AppValidationException>(() =>
+            pricing.UpdateScheduleAsync(me, standard.Id, "Standard", [new(option.Id, "A", null, 1m), new(option.Id, "B", null, 2m)]));
+    }
+
+    [Fact]
     public async Task New_schedules_can_copy_another_and_one_can_become_the_default()
     {
         var (app, owner, theater, standard, _, _) = await SetUpAsync();

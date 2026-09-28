@@ -92,6 +92,9 @@ public sealed class PricingService(IDbContextFactory<ApplicationDbContext> dbFac
             throw new AppValidationException($"\"{duplicate.Key}\" is listed more than once.");
         if (cleaned.Any(o => o.Id is int id && schedule.Options.All(x => x.Id != id)))
             throw new NotFoundException("Price option not found.");
+        var ids = cleaned.Where(o => o.Id is not null).Select(o => o.Id!.Value).ToList();
+        if (ids.Count != ids.Distinct().Count())
+            throw new AppValidationException("Each existing option can only be listed once.");
 
         schedule.Name = trimmed;
         var keep = cleaned.Where(o => o.Id is not null).Select(o => o.Id!.Value).ToHashSet();
