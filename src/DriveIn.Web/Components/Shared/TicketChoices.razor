@@ -50,11 +50,11 @@
 @code {
     [Parameter, EditorRequired] public PriceSchedule Prices { get; set; } = default!;
     [Parameter, EditorRequired] public List<AddOn> AddOns { get; set; } = [];
+    // Both two-way bound (@bind-OptionId, @bind-AddOnIds), so the parent re-renders its total and pay button.
     [Parameter] public int OptionId { get; set; }
     [Parameter] public EventCallback<int> OptionIdChanged { get; set; }
-    // Changed in place; OnChanged fires after each change.
-    [Parameter, EditorRequired] public HashSet<int> AddOnIds { get; set; } = [];
-    [Parameter] public EventCallback OnChanged { get; set; }
+    [Parameter, EditorRequired] public IReadOnlySet<int> AddOnIds { get; set; } = new HashSet<int>();
+    [Parameter] public EventCallback<IReadOnlySet<int>> AddOnIdsChanged { get; set; }
     [Parameter] public string IdPrefix { get; set; } = "ticket";
 
     public static TicketQuote? Quote(PriceSchedule prices, IEnumerable<AddOn> addOns, int optionId, IReadOnlySet<int> addOnIds) =>
@@ -62,16 +62,13 @@
             ? TicketQuote.For(option, addOns.Where(a => addOnIds.Contains(a.Id)))
             : null;
 
-    private async Task SetOptionAsync(int id)
-    {
-        await OptionIdChanged.InvokeAsync(id);
-        await OnChanged.InvokeAsync();
-    }
+    private Task SetOptionAsync(int id) => OptionIdChanged.InvokeAsync(id);
 
-    private async Task ToggleAsync(int id)
+    private Task ToggleAsync(int id)
     {
-        if (!AddOnIds.Remove(id))
-            AddOnIds.Add(id);
-        await OnChanged.InvokeAsync();
+        var ids = AddOnIds.ToHashSet();
+        if (!ids.Remove(id))
+            ids.Add(id);
+        return AddOnIdsChanged.InvokeAsync(ids);
     }
 }

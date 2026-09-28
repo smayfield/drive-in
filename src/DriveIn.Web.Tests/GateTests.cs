@@ -114,6 +114,20 @@ public class GateTests
     }
 
     [Fact]
+    public async Task Without_a_payment_processor_the_gate_says_so_in_gate_terms()
+    {
+        await using var s = await SetUpAsync();
+        s.App.Time.SetUtcNow(ShowDayAfternoon);
+        s.App.Payments.IsAvailable = false;
+        var attendant = await AttendantAsync(s, SellAtGate);
+
+        var sale = await s.Sales.GetGateShowingAsync(attendant, s.Showing.Id);
+        Assert.Equal("Card payments aren't set up yet, so tickets can't be sold at the gate.", sale.NotOnSaleReason);
+        var ex = await Assert.ThrowsAsync<AppValidationException>(() => s.Sales.HoldAtGateAsync(attendant, s.Showing.Id, 1, 1));
+        Assert.DoesNotContain("online", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task A_declined_card_at_the_gate_keeps_the_spot_held()
     {
         await using var s = await SetUpAsync();

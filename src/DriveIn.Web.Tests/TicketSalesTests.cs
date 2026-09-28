@@ -73,7 +73,7 @@ public class TicketSalesTests
         // $25 + $5 − $2 − 10% of $25.
         var charge = Assert.Single(s.App.Payments.Charges);
         Assert.Equal(25.50m, charge.Amount);
-        Assert.Equal("4242424242424242", charge.Card.Number);
+        Assert.Equal("4242424242424242", charge.Card!.Number);
         await using var db = s.App.Db();
         var ticket = await db.Tickets.Include(t => t.AddOns).SingleAsync();
         Assert.Equal(TicketStatus.Sold, ticket.Status);

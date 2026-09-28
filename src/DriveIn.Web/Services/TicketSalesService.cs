@@ -423,13 +423,14 @@ public sealed partial class TicketSalesService(
     private string? NotOnSaleReason(Showtime showtime, PriceSchedule prices, bool atGate = false)
     {
         if (!showtime.Screen!.Theater!.IsActive)
-            return "This theater isn't selling tickets online.";
+            return atGate ? "This theater is inactive, so it can't sell tickets." : "This theater isn't selling tickets online.";
         if (atGate && showtime.EndsAt <= time.GetUtcNow())
             return "This showing has ended.";
         if (!atGate && showtime.StartsAt <= time.GetUtcNow())
             return "This showing has started, so tickets are no longer sold online.";
         if (!payments.IsAvailable)
-            return "Online ticket sales aren't available yet.";
+            return atGate ? "Card payments aren't set up yet, so tickets can't be sold at the gate."
+                : "Online ticket sales aren't available yet.";
         if (prices.Options.Count == 0)
             return "Tickets for this showing aren't on sale yet.";
         return null;

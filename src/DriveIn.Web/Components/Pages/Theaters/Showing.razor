@@ -93,7 +93,7 @@ else
                         </div>
                         <p class="small text-muted">Finish before the timer runs out or the spot goes back on sale.</p>
 
-                        <TicketChoices Prices="sale.Prices" AddOns="sale.AddOns" @bind-OptionId="optionId" AddOnIds="addOnIds" />
+                        <TicketChoices Prices="sale.Prices" AddOns="sale.AddOns" @bind-OptionId="optionId" @bind-AddOnIds="addOnIds" />
 
                         @if (Quote is TicketQuote quote)
                         {
@@ -168,7 +168,7 @@ else
     private Timer? countdown;
 
     private int optionId;
-    private readonly HashSet<int> addOnIds = [];
+    private IReadOnlySet<int> addOnIds = new HashSet<int>();
     private string cardName = "";
     private string cardNumber = "";
     private int expMonth;

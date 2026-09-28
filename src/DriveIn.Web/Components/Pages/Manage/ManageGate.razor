@@ -117,7 +117,7 @@ else
                                             <h3 class="h5 mb-0">Spot @hold.SpotLabel</h3>
                                             <span class="badge text-bg-warning" role="timer" aria-live="off">held @Remaining</span>
                                         </div>
-                                        <TicketChoices Prices="sale.Prices" AddOns="sale.AddOns" @bind-OptionId="optionId" AddOnIds="addOnIds" IdPrefix="gate" />
+                                        <TicketChoices Prices="sale.Prices" AddOns="sale.AddOns" @bind-OptionId="optionId" @bind-AddOnIds="addOnIds" IdPrefix="gate" />
                                         <div class="d-flex flex-wrap gap-2">
                                             <button class="btn btn-success btn-lg" disabled="@(busy || Quote is null)" @onclick="SellAsync">
                                                 @(busy ? "Processing…" : Quote is { Total: > 0 } q ? $"Charge card {Money.Format(q.Total)}" : "Sell (no charge)")
@@ -174,7 +174,7 @@ else
     private ShowingForSale? sale;
     private SpotAvailability? availability;
     private int optionId;
-    private readonly HashSet<int> addOnIds = [];
+    private IReadOnlySet<int> addOnIds = new HashSet<int>();
     private TicketView? lastSale;
 
     private HoldView? Hold => availability?.MyHold;
@@ -272,7 +272,7 @@ else
         sale = await Sales.GetGateShowingAsync(User, showtimeId);
         availability = await Sales.GetAvailabilityAsync(User, showtimeId);
         optionId = sale.Prices.Options.FirstOrDefault()?.Id ?? 0;
-        addOnIds.Clear();
+        addOnIds = new HashSet<int>();
     });
 
     private Task HoldAsync(LotSpot spot) => Run(Section.Sell, async () =>
@@ -303,7 +303,7 @@ else
         try
         {
             lastSale = await Sales.SellAtGateAsync(User, hold.TicketId, optionId, addOnIds.ToList());
-            addOnIds.Clear();
+            addOnIds = new HashSet<int>();
             optionId = sale!.Prices.Options.FirstOrDefault()?.Id ?? 0;
         }
         finally
