@@ -37,7 +37,7 @@ public sealed class SesEmailSender(IAmazonSimpleEmailServiceV2 ses, Microsoft.Ex
         {
             // SES error messages can name the recipient (e.g. a sandbox rejection lists the unverified address), and
             // callers log what we throw, so pass on only the error code and drop the original exception.
-            throw new EmailSendException($"SES rejected the email: {ex.ErrorCode} (HTTP {(int)ex.StatusCode}).");
+            throw new EmailSendException($"SES couldn't send the email: {ex.ErrorCode} (HTTP {(int)ex.StatusCode}).");
         }
         // The recipient isn't logged: email addresses don't belong in production logs.
         logger.LogInformation("Sent email {Subject}", subject);
@@ -83,28 +83,61 @@ public sealed class LoggingEmailSender(ILogger<LoggingEmailSender> logger) : IAp
     }
 }
 
-// Adapts the Identity UI's email callbacks. Links arrive already HTML-encoded. A failed send is logged, not thrown:
-// by then the account (or reset request) exists and the pages offer a resend, so an SES rejection or outage
-// shouldn't turn registration into an error page.
-public sealed class IdentityEmailSender(IAppEmailSender sender, ILogger<IdentityEmailSender> logger) : IEmailSender<ApplicationUser>
+public sealed record AccountEmail(string Subject, string Html);
+
+// The account emails' content. Links arrive already HTML-encoded.
+public static class AccountEmails
 {
-    public Task SendConfirmationLinkAsync(ApplicationUser user, string email, string confirmationLink) =>
-        TrySendAsync(email, "Confirm your Drive-In Online account",
-            $"<p>Confirm your account by <a href=\"{confirmationLink}\">clicking here</a>.</p>");
+    public static AccountEmail ConfirmationLink(string link) => new("Confirm your Drive-In Online account",
+        $"<p>Confirm your account by <a href=\"{link}\">clicking here</a>.</p>");
 
-    public Task SendPasswordResetLinkAsync(ApplicationUser user, string email, string resetLink) =>
-        TrySendAsync(email, "Reset your Drive-In Online password",
-            $"<p>Reset your password by <a href=\"{resetLink}\">clicking here</a>. If you didn't ask for this, you can ignore this email.</p>");
+    public static AccountEmail PasswordResetLink(string link) => new("Reset your Drive-In Online password",
+        $"<p>Reset your password by <a href=\"{link}\">clicking here</a>. If you didn't ask for this, you can ignore this email.</p>");
 
-    public Task SendPasswordResetCodeAsync(ApplicationUser user, string email, string resetCode) =>
-        TrySendAsync(email, "Reset your Drive-In Online password",
-            $"<p>Reset your password using this code: {System.Net.WebUtility.HtmlEncode(resetCode)}</p>");
+    public static AccountEmail PasswordResetCode(string code) => new("Reset your Drive-In Online password",
+        $"<p>Reset your password using this code: {System.Net.WebUtility.HtmlEncode(code)}</p>");
+}
 
-    private async Task TrySendAsync(string to, string subject, string html)
+public static class EmailSenderExtensions
+{
+    // For actions whose caller must know whether the email went out (an admin sending a reset link): a failed send is
+    // logged and reported as a validation error, which pages show as an alert.
+    public static async Task SendOrReportAsync(this IAppEmailSender sender, ILogger logger, string to, AccountEmail email,
+        string failureMessage)
     {
         try
         {
-            await sender.SendAsync(to, subject, html);
+            await sender.SendAsync(to, email.Subject, email.Html);
+        }
+        catch (Exception ex)
+        {
+            // The recipient isn't logged: email addresses don't belong in production logs.
+            logger.LogError(ex, "Couldn't send email {Subject}", email.Subject);
+            throw new AppValidationException(failureMessage);
+        }
+    }
+}
+
+// Adapts the Identity UI's email callbacks, for the self-service account pages only (register, resend confirmation,
+// forgot password, change email). A failed send is logged, not thrown: by then the account (or reset request) exists
+// and the pages offer a resend, so an SES rejection or outage shouldn't turn registration into an error page. Services
+// that act for someone else use IAppEmailSender.SendOrReportAsync instead, so the actor hears about a failure.
+public sealed class IdentityEmailSender(IAppEmailSender sender, ILogger<IdentityEmailSender> logger) : IEmailSender<ApplicationUser>
+{
+    public Task SendConfirmationLinkAsync(ApplicationUser user, string email, string confirmationLink) =>
+        TrySendAsync(email, AccountEmails.ConfirmationLink(confirmationLink));
+
+    public Task SendPasswordResetLinkAsync(ApplicationUser user, string email, string resetLink) =>
+        TrySendAsync(email, AccountEmails.PasswordResetLink(resetLink));
+
+    public Task SendPasswordResetCodeAsync(ApplicationUser user, string email, string resetCode) =>
+        TrySendAsync(email, AccountEmails.PasswordResetCode(resetCode));
+
+    private async Task TrySendAsync(string to, AccountEmail email)
+    {
+        try
+        {
+            await sender.SendAsync(to, email.Subject, email.Html);
         }
         // Catches cancellation too, deliberately: no request token is passed in, so a cancellation here is an SDK
         // timeout, which is just another failed send. SesEmailSender strips recipients from SES errors before they
@@ -112,7 +145,7 @@ public sealed class IdentityEmailSender(IAppEmailSender sender, ILogger<Identity
         catch (Exception ex)
         {
             // The recipient isn't logged: email addresses don't belong in production logs.
-            logger.LogError(ex, "Couldn't send email {Subject}", subject);
+            logger.LogError(ex, "Couldn't send email {Subject}", email.Subject);
         }
     }
 }

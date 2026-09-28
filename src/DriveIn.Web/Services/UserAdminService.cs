@@ -11,7 +11,8 @@ public sealed record UserSummary(
     string? EmployeeTheaterName, List<string> OwnedTheaters, List<string> Logins, bool HasPassword, DateTimeOffset CreatedAt);
 
 // Site-admin user management. Each call runs in its own scope (see InvitationService).
-public sealed class UserAdminService(IServiceScopeFactory scopeFactory, IEmailSender<ApplicationUser> identityEmail, TimeProvider time)
+public sealed class UserAdminService(
+    IServiceScopeFactory scopeFactory, IAppEmailSender emailSender, TimeProvider time, ILogger<UserAdminService> logger)
 {
     public async Task<List<UserSummary>> ListAsync(ClaimsPrincipal actor, string? search)
     {
@@ -72,8 +73,9 @@ public sealed class UserAdminService(IServiceScopeFactory scopeFactory, IEmailSe
             Check(await users.AddToRoleAsync(user, Roles.Admin));
 
         var token = await users.GeneratePasswordResetTokenAsync(user);
-        await identityEmail.SendPasswordResetLinkAsync(user, address,
-            System.Net.WebUtility.HtmlEncode(AccountLinks.PasswordReset(baseUri, token)));
+        await emailSender.SendOrReportAsync(logger, address,
+            AccountEmails.PasswordResetLink(System.Net.WebUtility.HtmlEncode(AccountLinks.PasswordReset(baseUri, token))),
+            "The account was created, but the email to set a password couldn't be sent. Use Send password reset to try again.");
     }
 
     public async Task UpdateDisplayNameAsync(ClaimsPrincipal actor, string userId, string? displayName)
@@ -130,8 +132,9 @@ public sealed class UserAdminService(IServiceScopeFactory scopeFactory, IEmailSe
         var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
         var user = await LoadAsync(users, userId);
         var token = await users.GeneratePasswordResetTokenAsync(user);
-        await identityEmail.SendPasswordResetLinkAsync(user, user.Email!,
-            System.Net.WebUtility.HtmlEncode(AccountLinks.PasswordReset(baseUri, token)));
+        await emailSender.SendOrReportAsync(logger, user.Email!,
+            AccountEmails.PasswordResetLink(System.Net.WebUtility.HtmlEncode(AccountLinks.PasswordReset(baseUri, token))),
+            "The password reset email couldn't be sent. Try again in a few minutes.");
     }
 
     public async Task DeleteAsync(ClaimsPrincipal actor, string userId)

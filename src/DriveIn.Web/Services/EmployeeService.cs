@@ -18,8 +18,9 @@ public sealed class EmployeeService(
     IServiceScopeFactory scopeFactory,
     IAuthorizationService auth,
     TheaterAccess access,
-    IEmailSender<ApplicationUser> identityEmail,
-    TimeProvider time)
+    IAppEmailSender emailSender,
+    TimeProvider time,
+    ILogger<EmployeeService> logger)
 {
     public static readonly string[] ListingPermissions =
         [TheaterPermissions.ViewEmployees, TheaterPermissions.ManageEmployees, TheaterPermissions.ManageRoles];
@@ -52,8 +53,9 @@ public sealed class EmployeeService(
         await RequireAsync(db, actor, theaterId, TheaterPermissions.ManageEmployees);
         var user = await LoadEmployeeAsync(users, theaterId, userId);
         var token = await users.GeneratePasswordResetTokenAsync(user);
-        await identityEmail.SendPasswordResetLinkAsync(user, user.Email!,
-            System.Net.WebUtility.HtmlEncode(AccountLinks.PasswordReset(baseUri, token)));
+        await emailSender.SendOrReportAsync(logger, user.Email!,
+            AccountEmails.PasswordResetLink(System.Net.WebUtility.HtmlEncode(AccountLinks.PasswordReset(baseUri, token))),
+            "The password reset email couldn't be sent. Try again in a few minutes.");
     }
 
     public async Task DeleteAsync(ClaimsPrincipal actor, int theaterId, string userId)
