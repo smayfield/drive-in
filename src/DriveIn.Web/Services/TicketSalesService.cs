@@ -358,6 +358,9 @@ public sealed class TicketSalesService(
 
     // Deletes holds that ran out and tells open seat maps. Run periodically by HoldExpiryService; also safe to run
     // alongside buyers, since everything else treats an expired hold as available.
+    // Paying tickets are deliberately left alone, even stale ones: one left by a crash mid-charge may have been paid
+    // for, and resale would sell that spot twice. It blocks one spot at one showing; when a real processor is added,
+    // reconcile these by asking it whether the charge went through (see TicketStatus.Paying).
     public async Task<int> ReleaseExpiredHoldsAsync(CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
