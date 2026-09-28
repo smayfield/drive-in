@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace DriveIn.Web.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260928113259_GateSales")]
+    [Migration("20260928120553_GateSales")]
     partial class GateSales
     {
         /// <inheritdoc />
@@ -737,6 +737,10 @@ namespace DriveIn.Web.Data.Migrations
                     b.Property<DateTimeOffset?>("SoldAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("sold_at");
+
+                    b.Property<bool>("SoldAtGate")
+                        .HasColumnType("boolean")
+                        .HasColumnName("sold_at_gate");
 
                     b.Property<string>("SoldById")
                         .HasColumnType("text")

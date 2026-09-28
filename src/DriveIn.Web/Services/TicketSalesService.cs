@@ -314,6 +314,7 @@ public sealed partial class TicketSalesService(
         if (atGate)
         {
             ticket.UserId = null;
+            ticket.SoldAtGate = true;
             ticket.SoldById = userId;
             ticket.AdmittedAt = now;
         }

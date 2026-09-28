@@ -735,6 +735,10 @@ namespace DriveIn.Web.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("sold_at");
 
+                    b.Property<bool>("SoldAtGate")
+                        .HasColumnType("boolean")
+                        .HasColumnName("sold_at_gate");
+
                     b.Property<string>("SoldById")
                         .HasColumnType("text")
                         .HasColumnName("sold_by_id");

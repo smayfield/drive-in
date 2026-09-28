@@ -66,11 +66,13 @@ public class Ticket
     [MaxLength(ShortCodes.Length)]
     public string? ShortCode { get; set; }
 
-    // Set for tickets sold at the gate: the employee who sold it. They have no buyer account (UserId is null).
+    // Sold at the gate rather than online: no buyer account (UserId is null), no receipt, paid on the terminal.
+    // Stored rather than derived from SoldById, which is cleared if the employee's account is deleted.
+    public bool SoldAtGate { get; set; }
+
+    // Gate sales: the employee who sold it, while their account exists.
     public string? SoldById { get; set; }
     public ApplicationUser? SoldBy { get; set; }
-
-    public bool SoldAtGate => SoldById is not null;
 
     // Set when gate staff let the car in; a ticket admits once.
     public DateTimeOffset? AdmittedAt { get; set; }

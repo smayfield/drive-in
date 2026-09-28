@@ -17,6 +17,13 @@ namespace DriveIn.Web.Data.Migrations
                 maxLength: 4,
                 nullable: true);
 
+            migrationBuilder.AddColumn<bool>(
+                name: "sold_at_gate",
+                table: "tickets",
+                type: "boolean",
+                nullable: false,
+                defaultValue: false);
+
             migrationBuilder.AddColumn<string>(
                 name: "sold_by_id",
                 table: "tickets",
@@ -92,6 +99,10 @@ namespace DriveIn.Web.Data.Migrations
 
             migrationBuilder.DropColumn(
                 name: "short_code",
+                table: "tickets");
+
+            migrationBuilder.DropColumn(
+                name: "sold_at_gate",
                 table: "tickets");
 
             migrationBuilder.DropColumn(

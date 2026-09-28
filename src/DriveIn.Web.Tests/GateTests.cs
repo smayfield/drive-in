@@ -59,6 +59,25 @@ public class GateTests
     }
 
     [Fact]
+    public async Task A_gate_sale_stays_a_gate_sale_after_the_attendants_account_is_deleted()
+    {
+        await using var s = await SetUpAsync();
+        s.App.Time.SetUtcNow(ShowDayAfternoon);
+        var sold = await SellAtGateAsync(s, await AttendantAsync(s, SellAtGate));
+        await using (var db = s.App.Db())
+        {
+            // What the SetNull foreign key does when the employee is deleted.
+            (await db.Tickets.SingleAsync(t => t.Id == sold.Ticket.Id)).SoldById = null;
+            await db.SaveChangesAsync();
+        }
+
+        var found = Assert.Single(await s.Sales.FindAtGateAsync(s.OwnerPrincipal, s.Theater.Id, sold.Code));
+
+        Assert.True(found.View.Ticket.SoldAtGate);
+        Assert.Equal("Paid by card at the gate", TicketReceipt.PaidWith(found.View.Ticket));
+    }
+
+    [Fact]
     public async Task The_gate_and_online_buyers_compete_for_the_same_spots()
     {
         await using var s = await SetUpAsync();
