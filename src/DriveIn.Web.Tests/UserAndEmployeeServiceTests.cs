@@ -118,13 +118,13 @@ public class ScreenServiceTests
         var other = await app.CreateTheaterAsync("Other");
         var employeeUser = await app.CreateUserAsync("emp@example.com", employeeTheaterId: theater.Id);
         var employee = Principals.For(employeeUser);
-        await Assert.ThrowsAsync<AccessDeniedException>(() => app.Get<ScreenService>().AddAsync(employee, theater.Id, "Nope", 1));
+        await Assert.ThrowsAsync<AccessDeniedException>(() => app.Get<ScreenService>().AddAsync(employee, theater.Id, "Nope"));
         await app.GrantAsync(employeeUser, TheaterPermissions.ManageScreens);
         var service = app.Get<ScreenService>();
 
-        await service.AddAsync(employee, theater.Id, "One", 100);
-        await service.AddAsync(employee, theater.Id, "Two", 200);
-        var three = await service.AddAsync(employee, theater.Id, "Three", 300);
+        await service.AddAsync(employee, theater.Id, "One");
+        await service.AddAsync(employee, theater.Id, "Two");
+        var three = await service.AddAsync(employee, theater.Id, "Three");
         await service.MoveAsync(employee, three.Id, -1);
         await service.MoveAsync(employee, three.Id, -1);
         await service.MoveAsync(employee, three.Id, -1); // already first: no-op
@@ -132,7 +132,7 @@ public class ScreenServiceTests
         await using var db = app.Db();
         Assert.Equal(["Three", "One", "Two"],
             await db.Screens.Where(s => s.TheaterId == theater.Id).OrderBy(s => s.SortOrder).Select(s => s.Name).ToListAsync());
-        await Assert.ThrowsAsync<AccessDeniedException>(() => service.AddAsync(employee, other.Id, "Nope", 1));
+        await Assert.ThrowsAsync<AccessDeniedException>(() => service.AddAsync(employee, other.Id, "Nope"));
     }
 }
 

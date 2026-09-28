@@ -24,6 +24,7 @@ else
             {
                 <a class="btn btn-outline-secondary" href="theaters/@theater.Slug">View public page</a>
             }
+            <a class="btn btn-outline-primary" href="manage/@theater.Id/schedule">Schedule</a>
             @if (EmployeeService.ListingPermissions.Any(Can) || Can(TheaterPermissions.InviteEmployees))
             {
                 <a class="btn btn-outline-primary" href="manage/@theater.Id/employees">Employees</a>
@@ -56,28 +57,18 @@ else
         </section>
     }
 
-    @if (!Can(TheaterPermissions.ManageScreens))
-    {
-        <section>
-            <h2 class="h4">Screens</h2>
-            <table class="table table-sm">
-                <thead><tr><th>Name</th><th>Car capacity</th></tr></thead>
-                <tbody>
-                    @foreach (var screen in theater.Screens)
-                    {
-                        <tr><td>@screen.Name</td><td>@screen.CarCapacity</td></tr>
-                    }
-                </tbody>
-            </table>
-        </section>
-    }
-    else
-    {
     <section>
-        <h2 class="h4">Screens</h2>
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+            <h2 class="h4 mb-0">Screens</h2>
+            <a class="btn btn-sm btn-outline-primary" href="manage/@theater.Id/lot">Lot map</a>
+        </div>
         <table class="table align-middle">
             <thead>
-                <tr><th style="width: 6rem"></th><th>Name</th><th style="width: 10rem">Car capacity</th><th style="width: 14rem"></th></tr>
+                <tr>
+                    @if (CanManageScreens) { <th style="width: 6rem"></th> }
+                    <th>Name</th><th>Spot labels</th><th class="text-end">Rows</th><th class="text-end">Spots</th>
+                    @if (CanManageScreens) { <th style="width: 14rem"></th> }
+                </tr>
             </thead>
             <tbody>
                 @for (var i = 0; i < theater.Screens.Count; i++)
@@ -86,47 +77,54 @@ else
                     var first = i == 0;
                     var last = i == theater.Screens.Count - 1;
                     <tr @key="screen.Id">
-                        <td>
-                            <button class="btn btn-sm btn-link px-1" disabled="@first" title="Move up" @onclick="() => MoveAsync(screen, -1)">▲</button>
-                            <button class="btn btn-sm btn-link px-1" disabled="@last" title="Move down" @onclick="() => MoveAsync(screen, 1)">▼</button>
-                        </td>
-                        @if (editing?.Id == screen.Id)
+                        @if (CanManageScreens)
                         {
-                            <td><input class="form-control form-control-sm" @bind="editing.Name" maxlength="100" /></td>
-                            <td><input class="form-control form-control-sm" type="number" min="0" @bind="editing.CarCapacity" /></td>
-                            <td class="text-end">
-                                <button class="btn btn-sm btn-primary" @onclick="SaveScreenAsync">Save</button>
-                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => editing = null">Cancel</button>
+                            <td>
+                                <button class="btn btn-sm btn-link px-1" disabled="@first" title="Move up" @onclick="() => MoveAsync(screen, -1)">▲</button>
+                                <button class="btn btn-sm btn-link px-1" disabled="@last" title="Move down" @onclick="() => MoveAsync(screen, 1)">▼</button>
                             </td>
                         }
-                        else
+                        <td><a href="manage/@theater.Id/screens/@screen.Id">@screen.Name</a></td>
+                        <td>@SpotLabels.Example(screen.LabelScheme)</td>
+                        <td class="text-end">@screen.RowSpots.Count</td>
+                        <td class="text-end">@screen.SpotCount</td>
+                        @if (CanManageScreens)
                         {
-                            <td>@screen.Name</td>
-                            <td>@screen.CarCapacity</td>
                             <td class="text-end">
-                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => StartEdit(screen)">Edit</button>
-                                @if (confirmDeleteId == screen.Id)
+                                <a class="btn btn-sm btn-outline-secondary" href="manage/@theater.Id/screens/@screen.Id">Set up</a>
+                                @if (theater.Screens.Count > 1)
                                 {
-                                    <button class="btn btn-sm btn-danger" @onclick="() => DeleteScreenAsync(screen)">Confirm delete</button>
-                                }
-                                else
-                                {
-                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => confirmDeleteId = screen.Id">Delete</button>
+                                    @if (confirmDeleteId == screen.Id)
+                                    {
+                                        <button class="btn btn-sm btn-danger" @onclick="() => DeleteScreenAsync(screen)">Confirm delete</button>
+                                    }
+                                    else
+                                    {
+                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => confirmDeleteId = screen.Id">Delete</button>
+                                    }
                                 }
                             </td>
                         }
                     </tr>
                 }
-                <tr>
-                    <td></td>
-                    <td><input class="form-control form-control-sm" placeholder="New screen name" @bind="newScreen.Name" maxlength="100" /></td>
-                    <td><input class="form-control form-control-sm" type="number" min="0" @bind="newScreen.CarCapacity" /></td>
-                    <td class="text-end"><button class="btn btn-sm btn-success" @onclick="AddScreenAsync">Add screen</button></td>
-                </tr>
+                @if (CanManageScreens && theater.Screens.Count < Screen.MaxPerTheater)
+                {
+                    <tr>
+                        <td></td>
+                        <td colspan="4"><input class="form-control form-control-sm" placeholder="New screen name" @bind="newScreenName" maxlength="100" /></td>
+                        <td class="text-end"><button class="btn btn-sm btn-success" @onclick="AddScreenAsync">Add screen</button></td>
+                    </tr>
+                }
             </tbody>
         </table>
+        @if (CanManageScreens)
+        {
+            <p class="text-muted small">
+                A theater has 1 to @Screen.MaxPerTheater screens. The order sets where each screen sits on the lot map:
+                the first two face each other across the central building, and the next two face each other at 90 degrees.
+            </p>
+        }
     </section>
-    }
 }
 
 @code {
@@ -135,12 +133,12 @@ else
     private Theater? theater;
     private Theater profile = new();
     private IReadOnlySet<string> permissions = new HashSet<string>();
-    private Screen newScreen = new();
-    private Screen? editing;
+    private string newScreenName = "";
     private int? confirmDeleteId;
 
     // UI only; every action is re-checked by the service.
     private bool Can(string permission) => permissions.Contains(permission);
+    private bool CanManageScreens => Can(TheaterPermissions.ManageScreens);
 
     protected override async Task LoadAsync()
     {
@@ -152,7 +150,6 @@ else
     private async Task ReloadAsync()
     {
         theater = await Theaters.GetForManageAsync(User, Id);
-        editing = null;
         confirmDeleteId = null;
     }
 
@@ -164,35 +161,21 @@ else
 
     private Task AddScreenAsync() => RunAsync(async () =>
     {
-        if (string.IsNullOrWhiteSpace(newScreen.Name))
-            throw new AppValidationException("Give the screen a name.");
-        if (newScreen.CarCapacity < 0)
-            throw new AppValidationException("Car capacity can't be negative.");
-        await Screens.AddAsync(User, Id, newScreen.Name, newScreen.CarCapacity);
-        newScreen = new();
-        await ReloadAsync();
-    });
-
-    private void StartEdit(Screen screen)
-    {
-        confirmDeleteId = null;
-        editing = new Screen { Id = screen.Id, Name = screen.Name, CarCapacity = screen.CarCapacity };
-    }
-
-    private Task SaveScreenAsync() => RunAsync(async () =>
-    {
-        if (string.IsNullOrWhiteSpace(editing!.Name))
-            throw new AppValidationException("Give the screen a name.");
-        if (editing.CarCapacity < 0)
-            throw new AppValidationException("Car capacity can't be negative.");
-        await Screens.UpdateAsync(User, editing.Id, editing.Name, editing.CarCapacity);
-        await ReloadAsync();
+        var screen = await Screens.AddAsync(User, Id, newScreenName);
+        newScreenName = "";
+        Nav.NavigateTo($"manage/{Id}/screens/{screen.Id}");
     });
 
     private Task DeleteScreenAsync(Screen screen) => RunAsync(async () =>
     {
-        await Screens.DeleteAsync(User, screen.Id);
-        await ReloadAsync();
+        try
+        {
+            await Screens.DeleteAsync(User, screen.Id);
+        }
+        finally
+        {
+            await ReloadAsync();
+        }
     });
 
     private Task MoveAsync(Screen screen, int direction) => RunAsync(async () =>

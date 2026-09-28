@@ -34,7 +34,7 @@ Docker on one EC2 server. The setup mirrors LegoList.
 - **Employees** are separate accounts bound to one theater, created only by invitation from its
   owner or anyone with "Invite employees". What they can do is set by **roles**.
 - **Roles** are defined per theater by its owner (Manage → Roles). A role is a named set of actions
-  (edit profile, manage screens, view/invite/manage employees, manage roles). Employees can have several
+  (edit profile, manage screens, manage schedule, view/invite/manage employees, manage roles). Employees can have several
   roles and get the union of their actions; new employees have none, so they can't do anything until
   assigned a role. New theaters start with Manager (everything), Operations, Ticketing and Concessions,
   which owners can change or delete. Someone with "Manage roles" can only grant, change or remove
@@ -42,6 +42,20 @@ Docker on one EC2 server. The setup mirrors LegoList.
 
 Invitations are single-use links valid for 7 days (only a SHA-256 of the token is stored); the
 invitee sets a password or continues with Google using the invited address.
+
+## Screens, spots and the schedule
+
+- A theater has 1 to 4 **screens** (new theaters start with "Screen 1"). Each screen's page
+  (Manage → a screen) sets its name and its **spot layout**: a list of rows, nearest the screen first,
+  each with its own number of spots and centered on the screen. Spot labels follow one of three schemes
+  chosen per screen: row letter + spot number (`B7`), row number + spot letter (`2G`), or one number
+  (`207` = row 2, spot 7). Spots are numbered left to right as drivers face the screen.
+- The **lot map** (Manage → Lot map) draws every screen around the central concessions/restrooms/projection
+  building: screens 1 and 2 face each other, screens 3 and 4 face each other at 90 degrees. Screen order
+  on the theater page sets the positions.
+- The **schedule** (Manage → Schedule) holds the theater's films and their showtimes. Showtimes on a
+  screen can't overlap, are entered and shown in the theater's time zone (profile → Time zone, an IANA
+  name such as `America/Chicago`), and are stored in UTC.
 
 ## Local development
 

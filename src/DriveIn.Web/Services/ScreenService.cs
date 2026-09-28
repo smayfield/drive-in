@@ -6,36 +6,69 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DriveIn.Web.Services;
 
-public sealed class ScreenService(IDbContextFactory<ApplicationDbContext> dbFactory, IAuthorizationService auth)
+public sealed record ScreenLayoutInput(string Name, SpotLabelScheme LabelScheme, IReadOnlyList<int> RowSpots);
+
+// A theater's screens (1 to Screen.MaxPerTheater) and their spot layouts. Changes require ManageScreens.
+public sealed class ScreenService(IDbContextFactory<ApplicationDbContext> dbFactory, IAuthorizationService auth, TimeProvider time)
 {
-    public async Task<Screen> AddAsync(ClaimsPrincipal user, int theaterId, string name, int carCapacity)
+    // Any member of the theater may view its screens.
+    public async Task<Screen> GetAsync(ClaimsPrincipal user, int screenId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var screen = await db.Screens.AsNoTracking().Include(s => s.Theater).FirstOrDefaultAsync(s => s.Id == screenId)
+            ?? throw new NotFoundException("Screen not found.");
+        Guard.RequireMember(user, screen.Theater!);
+        return screen;
+    }
+
+    public async Task<Screen> AddAsync(ClaimsPrincipal user, int theaterId, string name)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var theater = await db.Theaters.FirstOrDefaultAsync(t => t.Id == theaterId)
             ?? throw new NotFoundException("Theater not found.");
         await auth.RequireAsync(user, theater, TheaterPermissions.ManageScreens);
+        var trimmed = ValidateName(name);
 
-        var nextOrder = await db.Screens.Where(s => s.TheaterId == theaterId)
-            .Select(s => (int?)s.SortOrder).MaxAsync() ?? -1;
-        var screen = new Screen { TheaterId = theaterId, Name = name.Trim(), CarCapacity = carCapacity, SortOrder = nextOrder + 1 };
+        var existing = await db.Screens.Where(s => s.TheaterId == theaterId).Select(s => s.SortOrder).ToListAsync();
+        if (existing.Count >= Screen.MaxPerTheater)
+            throw new AppValidationException($"A theater can have at most {Screen.MaxPerTheater} screens.");
+        var screen = new Screen { TheaterId = theaterId, Name = trimmed, SortOrder = existing.DefaultIfEmpty(-1).Max() + 1 };
         db.Screens.Add(screen);
         await db.SaveChangesAsync();
         return screen;
     }
 
-    public async Task UpdateAsync(ClaimsPrincipal user, int screenId, string name, int carCapacity)
+    public async Task UpdateAsync(ClaimsPrincipal user, int screenId, ScreenLayoutInput input)
     {
+        var name = ValidateName(input.Name);
+        if (!Enum.IsDefined(input.LabelScheme))
+            throw new AppValidationException("Choose how spots are labeled.");
+        if (input.RowSpots.Count > Screen.MaxRows)
+            throw new AppValidationException($"A screen can have at most {Screen.MaxRows} rows.");
+        if (input.RowSpots.Any(n => n is < 1 or > Screen.MaxSpotsPerRow))
+            throw new AppValidationException($"Each row needs 1 to {Screen.MaxSpotsPerRow} spots.");
+
         await using var db = await dbFactory.CreateDbContextAsync();
         var screen = await LoadAuthorizedAsync(db, user, screenId);
-        screen.Name = name.Trim();
-        screen.CarCapacity = carCapacity;
+        screen.Name = name;
+        screen.LabelScheme = input.LabelScheme;
+        screen.RowSpots = input.RowSpots.ToList();
         await db.SaveChangesAsync();
     }
 
+    // Past showtimes go with the screen; a screen with upcoming showtimes can't be deleted. They're removed
+    // explicitly rather than left to the FK cascade so every provider (including tests) sees the same result;
+    // volume is small (a few showtimes per screen per night) and deleting a screen is rare.
     public async Task DeleteAsync(ClaimsPrincipal user, int screenId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var screen = await LoadAuthorizedAsync(db, user, screenId);
+        if (!await db.Screens.AnyAsync(s => s.TheaterId == screen.TheaterId && s.Id != screenId))
+            throw new AppValidationException("A theater needs at least one screen.");
+        var showtimes = await db.Showtimes.Include(s => s.Film).Where(s => s.ScreenId == screenId).ToListAsync();
+        if (showtimes.Any(s => ScheduleService.EndsAt(s) > time.GetUtcNow()))
+            throw new AppValidationException($"{screen.Name} has upcoming showtimes. Remove them from the schedule first.");
+        db.Showtimes.RemoveRange(showtimes);
         db.Screens.Remove(screen);
         await db.SaveChangesAsync();
     }
@@ -63,5 +96,15 @@ public sealed class ScreenService(IDbContextFactory<ApplicationDbContext> dbFact
             ?? throw new NotFoundException("Screen not found.");
         await auth.RequireAsync(user, screen.Theater!, TheaterPermissions.ManageScreens);
         return screen;
+    }
+
+    private static string ValidateName(string? name)
+    {
+        var trimmed = (name ?? "").Trim();
+        if (trimmed.Length == 0)
+            throw new AppValidationException("Give the screen a name.");
+        if (trimmed.Length > 100)
+            throw new AppValidationException("Screen names can be at most 100 characters.");
+        return trimmed;
     }
 }

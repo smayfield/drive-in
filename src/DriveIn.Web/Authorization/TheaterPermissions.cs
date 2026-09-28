@@ -12,6 +12,7 @@ public static class TheaterPermissions
 {
     public const string EditProfile = "theater.edit";
     public const string ManageScreens = "screens.manage";
+    public const string ManageSchedule = "schedule.manage";
     public const string ViewEmployees = "employees.view";
     public const string InviteEmployees = "employees.invite";
     public const string ManageEmployees = "employees.manage";
@@ -20,7 +21,8 @@ public static class TheaterPermissions
     public static readonly IReadOnlyList<TheaterPermission> All =
     [
         new(EditProfile, "Theater", "Edit theater profile", "Change the theater's name, address, contact details and description."),
-        new(ManageScreens, "Theater", "Manage screens", "Add, rename, reorder and delete screens and set their car capacity."),
+        new(ManageScreens, "Theater", "Manage screens", "Add, rename, reorder and delete screens and lay out their parking spots."),
+        new(ManageSchedule, "Theater", "Manage schedule", "Add and edit films and schedule showtimes on the screens."),
         new(ViewEmployees, "Staff", "View employees", "See the employee list, each employee's roles, and pending invitations."),
         new(InviteEmployees, "Staff", "Invite employees", "Send, resend and revoke employee invitations."),
         new(ManageEmployees, "Staff", "Manage employees", "Send employees password resets and delete employee accounts."),
@@ -39,8 +41,8 @@ public static class DefaultTheaterRoles
     [
         ("Manager", "Runs the theater day to day, including staff and roles.",
             TheaterPermissions.All.Select(p => p.Key).ToArray()),
-        ("Operations", "Keeps the theater's details and screens up to date.",
-            [TheaterPermissions.EditProfile, TheaterPermissions.ManageScreens]),
+        ("Operations", "Keeps the theater's details, screens and schedule up to date.",
+            [TheaterPermissions.EditProfile, TheaterPermissions.ManageScreens, TheaterPermissions.ManageSchedule]),
         ("Ticketing", "Box office staff. Ticket-sales actions will be added here as ticketing features ship.",
             []),
         ("Concessions", "Snack bar staff. Concessions actions will be added here as concessions features ship.",

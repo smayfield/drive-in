@@ -8,6 +8,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 {
     public DbSet<Theater> Theaters => Set<Theater>();
     public DbSet<Screen> Screens => Set<Screen>();
+    public DbSet<Film> Films => Set<Film>();
+    public DbSet<Showtime> Showtimes => Set<Showtime>();
     public DbSet<Invitation> Invitations => Set<Invitation>();
     public DbSet<TheaterRole> TheaterRoles => Set<TheaterRole>();
     public DbSet<TheaterRolePermission> TheaterRolePermissions => Set<TheaterRolePermission>();
@@ -52,6 +54,28 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             s.HasOne(x => x.Theater)
                 .WithMany(t => t.Screens)
                 .HasForeignKey(x => x.TheaterId)
+                .OnDelete(DeleteBehavior.Cascade);
+            s.Property(x => x.LabelScheme).HasConversion<string>().HasMaxLength(20);
+        });
+
+        builder.Entity<Film>(f =>
+        {
+            f.HasOne(x => x.Theater)
+                .WithMany()
+                .HasForeignKey(x => x.TheaterId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<Showtime>(s =>
+        {
+            s.HasIndex(x => new { x.ScreenId, x.StartsAt });
+            s.HasOne(x => x.Screen)
+                .WithMany(x => x.Showtimes)
+                .HasForeignKey(x => x.ScreenId)
+                .OnDelete(DeleteBehavior.Cascade);
+            s.HasOne(x => x.Film)
+                .WithMany(x => x.Showtimes)
+                .HasForeignKey(x => x.FilmId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

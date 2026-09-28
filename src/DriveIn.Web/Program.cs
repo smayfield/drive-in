@@ -123,6 +123,7 @@ builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityEmailSender
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<TheaterService>();
 builder.Services.AddScoped<ScreenService>();
+builder.Services.AddScoped<ScheduleService>();
 builder.Services.AddScoped<InvitationService>();
 builder.Services.AddScoped<EmployeeService>();
 builder.Services.AddScoped<UserAdminService>();

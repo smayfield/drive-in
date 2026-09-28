@@ -8,7 +8,7 @@ namespace DriveIn.Web.Tests;
 public class TheaterServiceTests
 {
     [Fact]
-    public async Task Delete_removes_screens_invitations_and_employee_accounts_only()
+    public async Task Delete_removes_screens_schedule_invitations_and_employee_accounts_only()
     {
         await using var app = new TestApp();
         var admin = await app.CreateUserAsync("admin@example.com", admin: true);
@@ -22,6 +22,9 @@ public class TheaterServiceTests
             db.Screens.AddRange(new Screen { TheaterId = doomed.Id, Name = "A" }, new Screen { TheaterId = kept.Id, Name = "B" });
             db.Invitations.Add(new Invitation { TheaterId = doomed.Id, Email = "x@example.com", TokenHash = "h", ExpiresAt = DateTimeOffset.MaxValue });
             await db.SaveChangesAsync();
+            var screenA = await db.Screens.SingleAsync(s => s.Name == "A");
+            db.Showtimes.Add(new Showtime { Screen = screenA, Film = new Film { TheaterId = doomed.Id, Title = "Jaws", RuntimeMinutes = 124 }, StartsAt = DateTimeOffset.UtcNow.AddDays(1) });
+            await db.SaveChangesAsync();
         }
 
         await app.Get<TheaterService>().DeleteAsync(Principals.For(admin, admin: true), doomed.Id);
@@ -30,6 +33,8 @@ public class TheaterServiceTests
         Assert.Equal(["Kept"], await check.Theaters.Select(t => t.Name).ToListAsync());
         Assert.Equal(["B"], await check.Screens.Select(s => s.Name).ToListAsync());
         Assert.Empty(await check.Invitations.ToListAsync());
+        Assert.Empty(await check.Films.ToListAsync());
+        Assert.Empty(await check.Showtimes.ToListAsync());
         Assert.Equal(["admin@example.com", "emp2@example.com", "owner@example.com"],
             await check.Users.Select(u => u.Email!).OrderBy(e => e).ToListAsync());
     }

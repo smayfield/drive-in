@@ -103,6 +103,7 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
         CopyProfile(input, theater);
         db.Theaters.Add(theater);
         db.TheaterRoles.AddRange(DefaultTheaterRoles.CreateFor(theater, time.GetUtcNow()));
+        db.Screens.Add(new Screen { Theater = theater, Name = "Screen 1" });
         await db.SaveChangesAsync();
         return theater;
     }
@@ -121,7 +122,7 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
         await db.SaveChangesAsync();
     }
 
-    // Deletes the theater with its screens, invitations, roles, and employee accounts
+    // Deletes the theater with its screens, schedule, invitations, roles, and employee accounts
     // (employee accounts are only valid for this theater, so they go too).
     public async Task DeleteAsync(ClaimsPrincipal user, int id)
     {
@@ -138,6 +139,8 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
         db.TheaterRolePermissions.RemoveRange(db.TheaterRolePermissions.Where(p => roleIds.Contains(p.RoleId)));
         db.TheaterRoles.RemoveRange(db.TheaterRoles.Where(r => r.TheaterId == id));
         db.Users.RemoveRange(theater.Employees);
+        db.Showtimes.RemoveRange(db.Showtimes.Where(s => s.Screen!.TheaterId == id));
+        db.Films.RemoveRange(db.Films.Where(f => f.TheaterId == id));
         db.Screens.RemoveRange(theater.Screens);
         db.Theaters.Remove(theater);
         await db.SaveChangesAsync();
@@ -150,8 +153,12 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
             throw new AppValidationException($"The slug \"{slug}\" is already used by another theater.");
     }
 
+    // Showtimes are entered in the theater's time zone, so it has to be one we can resolve.
     private static void CopyProfile(Theater from, Theater to)
     {
+        var timeZone = string.IsNullOrWhiteSpace(from.TimeZone) ? null : from.TimeZone.Trim();
+        if (timeZone is not null && !TheaterTime.IsValidZone(timeZone))
+            throw new AppValidationException($"\"{timeZone}\" isn't a time zone. Use an IANA name such as America/Chicago.");
         to.Name = from.Name.Trim();
         to.AddressLine1 = from.AddressLine1;
         to.AddressLine2 = from.AddressLine2;
@@ -162,6 +169,6 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
         to.Phone = from.Phone;
         to.Website = from.Website;
         to.Description = from.Description;
-        to.TimeZone = from.TimeZone;
+        to.TimeZone = timeZone;
     }
 }

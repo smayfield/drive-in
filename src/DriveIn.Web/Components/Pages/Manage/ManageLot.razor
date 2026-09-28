@@ -1,0 +1,55 @@
+@page "/manage/{Id:int}/lot"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inherits AppComponentBase
+@inject TheaterService Theaters
+
+<PageTitle>Lot map · Manage · Drive-In Online</PageTitle>
+
+<p><a href="manage/@Id">&larr; Back to theater</a> · <a href="manage/@Id/schedule">Schedule</a></p>
+
+@if (theater is null)
+{
+    <Alerts Error="@Error" />
+    @if (Error is null) { <p>Loading…</p> }
+}
+else
+{
+    <h1>Lot map <small class="text-muted fs-5">@theater.Name</small></h1>
+    <Alerts Error="@Error" Success="@Success" />
+
+    <p class="text-muted">
+        @theater.Screens.Count screen@(theater.Screens.Count == 1 ? "" : "s") ·
+        @theater.Screens.Sum(s => s.SpotCount) spots.
+        Each screen's rows face it from the central building. Click a screen's name to set it up.
+    </p>
+
+    <LotMap Screens="theater.Screens" Theater="true" ScreenHref="@(s => $"manage/{Id}/screens/{s.Id}")" />
+
+    <table class="table table-sm mt-4" style="max-width: 40rem">
+        <thead><tr><th>Screen</th><th>Position</th><th class="text-end">Rows</th><th class="text-end">Spots</th></tr></thead>
+        <tbody>
+            @for (var i = 0; i < theater.Screens.Count; i++)
+            {
+                var s = theater.Screens[i];
+                <tr>
+                    <td><a href="manage/@Id/screens/@s.Id">@s.Name</a></td>
+                    <td>@Positions.ElementAtOrDefault(i)</td>
+                    <td class="text-end">@s.RowSpots.Count</td>
+                    <td class="text-end">@s.SpotCount</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    // Matches LotPlan.Angles.
+    private static readonly string[] Positions = ["North", "South", "East", "West"];
+
+    private Theater? theater;
+
+    protected override async Task LoadAsync() => theater = await Theaters.GetForManageAsync(User, Id);
+}
