@@ -67,18 +67,33 @@ public sealed class LoggingEmailSender(ILogger<LoggingEmailSender> logger) : IAp
     }
 }
 
-// Adapts the Identity UI's email callbacks. Links arrive already HTML-encoded.
-public sealed class IdentityEmailSender(IAppEmailSender sender) : IEmailSender<ApplicationUser>
+// Adapts the Identity UI's email callbacks. Links arrive already HTML-encoded. A failed send is logged, not thrown:
+// by then the account (or reset request) exists and the pages offer a resend, so an SES rejection or outage
+// shouldn't turn registration into an error page.
+public sealed class IdentityEmailSender(IAppEmailSender sender, ILogger<IdentityEmailSender> logger) : IEmailSender<ApplicationUser>
 {
     public Task SendConfirmationLinkAsync(ApplicationUser user, string email, string confirmationLink) =>
-        sender.SendAsync(email, "Confirm your Drive-In Online account",
+        TrySendAsync(email, "Confirm your Drive-In Online account",
             $"<p>Confirm your account by <a href=\"{confirmationLink}\">clicking here</a>.</p>");
 
     public Task SendPasswordResetLinkAsync(ApplicationUser user, string email, string resetLink) =>
-        sender.SendAsync(email, "Reset your Drive-In Online password",
+        TrySendAsync(email, "Reset your Drive-In Online password",
             $"<p>Reset your password by <a href=\"{resetLink}\">clicking here</a>. If you didn't ask for this, you can ignore this email.</p>");
 
     public Task SendPasswordResetCodeAsync(ApplicationUser user, string email, string resetCode) =>
-        sender.SendAsync(email, "Reset your Drive-In Online password",
+        TrySendAsync(email, "Reset your Drive-In Online password",
             $"<p>Reset your password using this code: {System.Net.WebUtility.HtmlEncode(resetCode)}</p>");
+
+    private async Task TrySendAsync(string to, string subject, string html)
+    {
+        try
+        {
+            await sender.SendAsync(to, subject, html);
+        }
+        catch (Exception ex)
+        {
+            // The recipient isn't logged: email addresses don't belong in production logs.
+            logger.LogError(ex, "Couldn't send email {Subject}", subject);
+        }
+    }
 }

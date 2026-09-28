@@ -19,9 +19,14 @@ public sealed class FakeEmailSender : IAppEmailSender
 
     public List<IReadOnlyList<InlineImage>?> Images { get; } = [];
 
+    // When set, SendAsync throws this instead of sending (e.g. SES rejecting an unverified recipient).
+    public Exception? FailWith { get; set; }
+
     public Task SendAsync(string to, string subject, string htmlBody, IReadOnlyList<InlineImage>? images = null,
         CancellationToken ct = default)
     {
+        if (FailWith is not null)
+            throw FailWith;
         Sent.Add((to, subject, htmlBody));
         Images.Add(images);
         return Task.CompletedTask;
