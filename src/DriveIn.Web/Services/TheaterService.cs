@@ -140,6 +140,7 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
         db.TheaterRolePermissions.RemoveRange(db.TheaterRolePermissions.Where(p => roleIds.Contains(p.RoleId)));
         db.TheaterRoles.RemoveRange(db.TheaterRoles.Where(r => r.TheaterId == id));
         db.Users.RemoveRange(theater.Employees);
+        db.ShowtimeFeatures.RemoveRange(db.ShowtimeFeatures.Where(f => f.Showtime!.Screen!.TheaterId == id));
         db.Showtimes.RemoveRange(db.Showtimes.Where(s => s.Screen!.TheaterId == id));
         db.Films.RemoveRange(db.Films.Where(f => f.TheaterId == id));
         db.AddOns.RemoveRange(db.AddOns.Where(a => a.TheaterId == id));

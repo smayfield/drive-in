@@ -210,7 +210,7 @@ public class ScheduleTests
         Assert.Equal(new DateTimeOffset(2026, 9, 6, 1, 30, 0, TimeSpan.Zero), showtime.StartsAt); // CDT is UTC-5
         var listed = Assert.Single(await schedule.ListUpcomingAsync(Principals.For(owner), theater.Id));
         Assert.Equal((new DateTime(2026, 9, 5, 20, 30, 0), new DateTime(2026, 9, 5, 22, 34, 0), "Jaws", "PG", "North"),
-            (listed.StartsLocal, listed.EndsLocal, listed.FilmTitle, listed.Rating, listed.ScreenName));
+            (listed.StartsLocal, listed.EndsLocal, listed.Title, listed.Features.Single().Rating, listed.ScreenName));
     }
 
     [Fact]

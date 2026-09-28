@@ -23,6 +23,10 @@ public class Theater
     [MaxLength(4000)] public string? Description { get; set; }
     [MaxLength(64)] public string? TimeZone { get; set; }
 
+    // Prefilled as the intermission between features when a double feature is scheduled.
+    [Range(0, Showtime.MaxIntermissionMinutes)]
+    public int DefaultIntermissionMinutes { get; set; } = 15;
+
     public bool IsActive { get; set; } = true;
 
     // Nullable only so an admin can create a theater before its owner accepts an invite.

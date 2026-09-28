@@ -65,9 +65,10 @@ public sealed class ScreenService(IDbContextFactory<ApplicationDbContext> dbFact
         var screen = await LoadAuthorizedAsync(db, user, screenId);
         if (!await db.Screens.AnyAsync(s => s.TheaterId == screen.TheaterId && s.Id != screenId))
             throw new AppValidationException("A theater needs at least one screen.");
-        var showtimes = await db.Showtimes.Include(s => s.Film).Where(s => s.ScreenId == screenId).ToListAsync();
-        if (showtimes.Any(s => ScheduleService.EndsAt(s) > time.GetUtcNow()))
+        var showtimes = await db.Showtimes.Include(s => s.Features).Where(s => s.ScreenId == screenId).ToListAsync();
+        if (showtimes.Any(s => s.EndsAt > time.GetUtcNow()))
             throw new AppValidationException($"{screen.Name} has upcoming showtimes. Remove them from the schedule first.");
+        db.ShowtimeFeatures.RemoveRange(showtimes.SelectMany(s => s.Features));
         db.Showtimes.RemoveRange(showtimes);
         db.Screens.Remove(screen);
         await db.SaveChangesAsync();
