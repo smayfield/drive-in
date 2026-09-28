@@ -29,7 +29,22 @@ public sealed class SesEmailSender(IAmazonSimpleEmailServiceV2 ses, Microsoft.Ex
     public async Task SendAsync(string to, string subject, string htmlBody, IReadOnlyList<InlineImage>? images = null,
         CancellationToken ct = default)
     {
-        await ses.SendEmailAsync(new SendEmailRequest
+        try
+        {
+            await SendCoreAsync(to, subject, htmlBody, images, ct);
+        }
+        catch (Amazon.Runtime.AmazonServiceException ex)
+        {
+            // SES error messages can name the recipient (e.g. a sandbox rejection lists the unverified address), and
+            // callers log what we throw, so pass on only the error code and drop the original exception.
+            throw new EmailSendException($"SES rejected the email: {ex.ErrorCode} (HTTP {(int)ex.StatusCode}).");
+        }
+        // The recipient isn't logged: email addresses don't belong in production logs.
+        logger.LogInformation("Sent email {Subject}", subject);
+    }
+
+    private Task SendCoreAsync(string to, string subject, string htmlBody, IReadOnlyList<InlineImage>? images, CancellationToken ct) =>
+        ses.SendEmailAsync(new SendEmailRequest
         {
             FromEmailAddress = options.Value.From,
             Destination = new Destination { ToAddresses = [to] },
@@ -50,10 +65,10 @@ public sealed class SesEmailSender(IAmazonSimpleEmailServiceV2 ses, Microsoft.Ex
                 },
             },
         }, ct);
-        // The recipient isn't logged: email addresses don't belong in production logs.
-        logger.LogInformation("Sent email {Subject}", subject);
-    }
 }
+
+// A failed send, with a message safe to log (no recipient address).
+public sealed class EmailSendException(string message) : Exception(message);
 
 // Development: writes the email (and any links in it) to the log so flows can be tested without SES. Logging the
 // recipient and body is the point (it's how a developer gets confirmation, invite and ticket links locally), so the
@@ -91,6 +106,9 @@ public sealed class IdentityEmailSender(IAppEmailSender sender, ILogger<Identity
         {
             await sender.SendAsync(to, subject, html);
         }
+        // Catches cancellation too, deliberately: no request token is passed in, so a cancellation here is an SDK
+        // timeout, which is just another failed send. SesEmailSender strips recipients from SES errors before they
+        // get here.
         catch (Exception ex)
         {
             // The recipient isn't logged: email addresses don't belong in production logs.
