@@ -23,7 +23,7 @@ public static class TheaterPermissions
     [
         new(EditProfile, "Theater", "Edit theater profile", "Change the theater's name, address, contact details and description."),
         new(ManageScreens, "Theater", "Manage screens", "Add, rename, reorder and delete screens and lay out their parking spots."),
-        new(ManageSchedule, "Theater", "Manage schedule", "Add and edit films, schedule showtimes on the screens, and choose each showtime's price schedule."),
+        new(ManageSchedule, "Theater", "Manage schedule", "Add and edit films, schedule showings (including double features) on the screens, set the default intermission, and choose each showing's price schedule."),
         new(ManagePricing, "Theater", "Manage pricing", "Set up price schedules and ticket prices, and the add-ons (fees and discounts) offered with tickets."),
         new(ViewEmployees, "Staff", "View employees", "See the employee list, each employee's roles, and pending invitations."),
         new(InviteEmployees, "Staff", "Invite employees", "Send, resend and revoke employee invitations."),

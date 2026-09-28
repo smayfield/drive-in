@@ -8,18 +8,29 @@ namespace DriveIn.Web.Services;
 
 public sealed record FilmInput(string Title, string? Rating, int RuntimeMinutes);
 
+// A showing: one or more films (in order) on a screen. IntermissionMinutes null uses the theater's default;
+// PriceScheduleId null uses the theater's default prices.
+public sealed record ShowtimeInput(
+    int ScreenId, IReadOnlyList<int> FilmIds, DateOnly Date, TimeOnly StartTime,
+    int? IntermissionMinutes = null, int? PriceScheduleId = null);
+
+public sealed record FeatureView(int FilmId, string Title, string? Rating, int RuntimeMinutes, DateTime StartsLocal, DateTime EndsLocal);
+
 // Local times are in the theater's time zone. PriceScheduleId/Name are the showtime's own schedule; null means no
 // override (it follows whatever the theater's default is), so a pinned schedule shows even if it's also the default.
 public sealed record ShowtimeView(
-    int Id, int ScreenId, string ScreenName, int FilmId, string FilmTitle, string? Rating,
-    DateTime StartsLocal, DateTime EndsLocal, int? PriceScheduleId, string? PriceScheduleName);
+    int Id, int ScreenId, string ScreenName, List<FeatureView> Features, int IntermissionMinutes,
+    DateTime StartsLocal, DateTime EndsLocal, int? PriceScheduleId, string? PriceScheduleName)
+{
+    public string Title => string.Join(" + ", Features.Select(f => f.Title));
+    public bool IsMultiFeature => Features.Count > 1;
+}
 
-// A theater's films and the showtimes scheduled on its screens. Any member may view the schedule;
-// changing it requires ManageSchedule.
+// A theater's films and the showings scheduled on its screens. A showing is one or more films back to back
+// (a double feature) with an intermission between them; showings on a screen never overlap. Any member may
+// view the schedule; changing it requires ManageSchedule.
 public sealed class ScheduleService(IDbContextFactory<ApplicationDbContext> dbFactory, IAuthorizationService auth, TimeProvider time)
 {
-    public static DateTimeOffset EndsAt(Showtime showtime) => showtime.StartsAt.AddMinutes(showtime.Film!.RuntimeMinutes);
-
     // --- Films ---
 
     public async Task<List<Film>> ListFilmsAsync(ClaimsPrincipal user, int theaterId)
@@ -40,101 +51,192 @@ public sealed class ScheduleService(IDbContextFactory<ApplicationDbContext> dbFa
         return film;
     }
 
-    // A longer runtime must not make any upcoming showtime run into the next one on its screen.
+    // Moves the end of every showing that includes the film. A longer runtime must not make an upcoming
+    // showing run into the next one on its screen.
     public async Task UpdateFilmAsync(ClaimsPrincipal user, int filmId, FilmInput input)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var film = await LoadFilmAuthorizedAsync(db, user, filmId);
         Apply(input, film);
         var now = time.GetUtcNow();
-        var upcoming = await db.Showtimes.Include(s => s.Screen)
-            .Where(s => s.FilmId == filmId && s.StartsAt > now.AddMinutes(-Film.MaxRuntimeMinutes))
+        var showtimes = await WithFeatures(db.Showtimes).Include(s => s.Screen)
+            .Where(s => s.Features.Any(f => f.FilmId == filmId))
             .ToListAsync();
-        foreach (var showtime in upcoming.Where(s => EndsAt(s) > now))
-            await EnsureFreeAsync(db, film.Theater!, showtime.ScreenId, showtime.Screen!.Name, showtime.StartsAt, EndsAt(showtime), showtime.Id);
+        foreach (var showtime in showtimes)
+        {
+            var wasUpcoming = showtime.EndsAt > now;
+            showtime.EndsAt = Showtime.ComputeEndsAt(showtime.StartsAt, Runtimes(showtime), showtime.IntermissionMinutes);
+            if (wasUpcoming)
+                await EnsureFreeAsync(db, film.Theater!, showtime.ScreenId, showtime.Screen!.Name, showtime.StartsAt, showtime.EndsAt, showtime.Id);
+        }
         await db.SaveChangesAsync();
     }
 
-    // Past showtimes go with the film; a film with upcoming showtimes can't be deleted. Removed explicitly for
-    // the same reason as in ScreenService.DeleteAsync.
+    // Past showings that include the film go with it; a film in an upcoming showing can't be deleted. Removed
+    // explicitly for the same reason as in ScreenService.DeleteAsync.
     public async Task DeleteFilmAsync(ClaimsPrincipal user, int filmId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var film = await LoadFilmAuthorizedAsync(db, user, filmId);
-        var showtimes = await db.Showtimes.Where(s => s.FilmId == filmId).ToListAsync();
-        if (showtimes.Any(s => EndsAt(s) > time.GetUtcNow()))
-            throw new AppValidationException($"\"{film.Title}\" has upcoming showtimes. Remove them from the schedule first.");
+        var showtimes = await db.Showtimes.Include(s => s.Features).Where(s => s.Features.Any(f => f.FilmId == filmId)).ToListAsync();
+        if (showtimes.Any(s => s.EndsAt > time.GetUtcNow()))
+            throw new AppValidationException($"\"{film.Title}\" is in upcoming showings. Remove them from the schedule first.");
+        db.ShowtimeFeatures.RemoveRange(showtimes.SelectMany(s => s.Features));
         db.Showtimes.RemoveRange(showtimes);
         db.Films.Remove(film);
         await db.SaveChangesAsync();
     }
 
+    // --- Intermission ---
+
+    // The intermission prefilled for new showings. Existing showings keep theirs.
+    public async Task SetDefaultIntermissionAsync(ClaimsPrincipal user, int theaterId, int minutes)
+    {
+        ValidateIntermission(minutes);
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var theater = await db.Theaters.FirstOrDefaultAsync(t => t.Id == theaterId) ?? throw new NotFoundException("Theater not found.");
+        await auth.RequireAsync(user, theater, TheaterPermissions.ManageSchedule);
+        theater.DefaultIntermissionMinutes = minutes;
+        await db.SaveChangesAsync();
+    }
+
     // --- Showtimes ---
 
-    // Showtimes that haven't ended yet, soonest first; optionally for one screen.
+    // Showings that haven't ended yet, soonest first; optionally for one screen.
     public async Task<List<ShowtimeView>> ListUpcomingAsync(ClaimsPrincipal user, int theaterId, int? screenId = null)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var theater = await FindTheaterAsync(db, theaterId);
         Guard.RequireMember(user, theater);
         var now = time.GetUtcNow();
-        var query = db.Showtimes.AsNoTracking().Include(s => s.Film).Include(s => s.Screen).Include(s => s.PriceSchedule)
-            .Where(s => s.Screen!.TheaterId == theaterId && s.StartsAt > now.AddMinutes(-Film.MaxRuntimeMinutes));
+        var query = WithFeatures(db.Showtimes.AsNoTracking()).Include(s => s.Screen).Include(s => s.PriceSchedule)
+            .Where(s => s.Screen!.TheaterId == theaterId && s.EndsAt > now);
         if (screenId is int id)
             query = query.Where(s => s.ScreenId == id);
         var showtimes = await query.ToListAsync();
-        return showtimes.Where(s => EndsAt(s) > now)
+        return showtimes
             .OrderBy(s => s.StartsAt).ThenBy(s => s.Screen!.SortOrder)
-            .Select(s => new ShowtimeView(s.Id, s.ScreenId, s.Screen!.Name, s.FilmId, s.Film!.Title, s.Film.Rating,
-                TheaterTime.ToLocal(theater, s.StartsAt), TheaterTime.ToLocal(theater, EndsAt(s)),
-                s.PriceScheduleId, s.PriceSchedule?.Name))
+            .Select(s => ToView(theater, s))
             .ToList();
     }
 
-    // priceScheduleId null uses the theater's default prices.
-    public async Task<Showtime> AddShowtimeAsync(ClaimsPrincipal user, int screenId, int filmId, DateOnly date, TimeOnly startTime,
-        int? priceScheduleId = null)
+    // A single film; see the ShowtimeInput overload for double features.
+    public Task<Showtime> AddShowtimeAsync(ClaimsPrincipal user, int screenId, int filmId, DateOnly date, TimeOnly startTime,
+        int? priceScheduleId = null) =>
+        AddShowtimeAsync(user, new ShowtimeInput(screenId, [filmId], date, startTime, PriceScheduleId: priceScheduleId));
+
+    public async Task<Showtime> AddShowtimeAsync(ClaimsPrincipal user, ShowtimeInput input)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        var screen = await db.Screens.Include(s => s.Theater).FirstOrDefaultAsync(s => s.Id == screenId)
-            ?? throw new NotFoundException("Screen not found.");
-        await auth.RequireAsync(user, screen.Theater!, TheaterPermissions.ManageSchedule);
-        var film = await db.Films.FirstOrDefaultAsync(f => f.Id == filmId && f.TheaterId == screen.TheaterId)
-            ?? throw new NotFoundException("Film not found.");
-
-        var startsAt = TheaterTime.ToUtc(screen.Theater!, date, startTime);
-        if (startsAt <= time.GetUtcNow())
-            throw new AppValidationException("Showtimes must be in the future.");
-        var endsAt = startsAt.AddMinutes(film.RuntimeMinutes);
-        await EnsureFreeAsync(db, screen.Theater!, screenId, screen.Name, startsAt, endsAt, exceptId: null);
-        await EnsureScheduleAsync(db, screen.TheaterId, priceScheduleId);
-
-        var showtime = new Showtime { ScreenId = screenId, FilmId = filmId, StartsAt = startsAt, PriceScheduleId = priceScheduleId };
+        var showtime = new Showtime();
+        await ApplyAsync(db, user, input, showtime);
         db.Showtimes.Add(showtime);
         await db.SaveChangesAsync();
         return showtime;
     }
 
+    // Changes an upcoming showing: its screen, time, films, intermission and pricing.
+    public async Task UpdateShowtimeAsync(ClaimsPrincipal user, int showtimeId, ShowtimeInput input)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var showtime = await LoadShowtimeAuthorizedAsync(db, user, showtimeId);
+        if (showtime.StartsAt <= time.GetUtcNow())
+            throw new AppValidationException("This showing has already started, so it can't be changed.");
+        await ApplyAsync(db, user, input, showtime);
+        await db.SaveChangesAsync();
+    }
+
     public async Task DeleteShowtimeAsync(ClaimsPrincipal user, int showtimeId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        var showtime = await db.Showtimes.Include(s => s.Screen!.Theater).FirstOrDefaultAsync(s => s.Id == showtimeId)
-            ?? throw new NotFoundException("Showtime not found.");
-        await auth.RequireAsync(user, showtime.Screen!.Theater!, TheaterPermissions.ManageSchedule);
+        var showtime = await LoadShowtimeAuthorizedAsync(db, user, showtimeId);
+        db.ShowtimeFeatures.RemoveRange(showtime.Features);
         db.Showtimes.Remove(showtime);
         await db.SaveChangesAsync();
     }
 
-    // Overrides the showtime's prices with another of the theater's price schedules; null goes back to the default.
+    // Overrides the showing's prices with another of the theater's price schedules; null goes back to the default.
     public async Task SetShowtimePricingAsync(ClaimsPrincipal user, int showtimeId, int? priceScheduleId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        var showtime = await db.Showtimes.Include(s => s.Screen!.Theater).FirstOrDefaultAsync(s => s.Id == showtimeId)
-            ?? throw new NotFoundException("Showtime not found.");
-        await auth.RequireAsync(user, showtime.Screen!.Theater!, TheaterPermissions.ManageSchedule);
-        await EnsureScheduleAsync(db, showtime.Screen.TheaterId, priceScheduleId);
+        var showtime = await LoadShowtimeAuthorizedAsync(db, user, showtimeId);
+        await EnsureScheduleAsync(db, showtime.Screen!.TheaterId, priceScheduleId);
         showtime.PriceScheduleId = priceScheduleId;
         await db.SaveChangesAsync();
+    }
+
+    // --- Helpers ---
+
+    private static IQueryable<Showtime> WithFeatures(IQueryable<Showtime> query) =>
+        query.Include(s => s.Features.OrderBy(f => f.Position)).ThenInclude(f => f.Film);
+
+    private static List<int> Runtimes(Showtime showtime) =>
+        showtime.Features.OrderBy(f => f.Position).Select(f => f.Film!.RuntimeMinutes).ToList();
+
+    private static ShowtimeView ToView(Theater theater, Showtime s)
+    {
+        var features = s.Features.OrderBy(f => f.Position).ToList();
+        var starts = Showtime.FeatureStarts(s.StartsAt, Runtimes(s), s.IntermissionMinutes).ToList();
+        return new ShowtimeView(s.Id, s.ScreenId, s.Screen!.Name,
+            features.Select((f, i) => new FeatureView(f.FilmId, f.Film!.Title, f.Film.Rating, f.Film.RuntimeMinutes,
+                TheaterTime.ToLocal(theater, starts[i]), TheaterTime.ToLocal(theater, starts[i].AddMinutes(f.Film.RuntimeMinutes)))).ToList(),
+            s.IntermissionMinutes,
+            TheaterTime.ToLocal(theater, s.StartsAt), TheaterTime.ToLocal(theater, s.EndsAt),
+            s.PriceScheduleId, s.PriceSchedule?.Name);
+    }
+
+    // Validates the input and applies it to a new or tracked showtime (with its Features loaded).
+    private async Task ApplyAsync(ApplicationDbContext db, ClaimsPrincipal user, ShowtimeInput input, Showtime showtime)
+    {
+        var screen = await db.Screens.Include(s => s.Theater).FirstOrDefaultAsync(s => s.Id == input.ScreenId)
+            ?? throw new NotFoundException("Screen not found.");
+        await auth.RequireAsync(user, screen.Theater!, TheaterPermissions.ManageSchedule);
+        if (showtime.Id != 0 && showtime.Screen!.TheaterId != screen.TheaterId)
+            throw new NotFoundException("Screen not found.");
+
+        if (input.FilmIds.Count == 0)
+            throw new AppValidationException("Choose a film.");
+        if (input.FilmIds.Count > Showtime.MaxFeatures)
+            throw new AppValidationException($"A showing can have at most {Showtime.MaxFeatures} films.");
+        var ids = input.FilmIds.Distinct().ToList();
+        var films = await db.Films.Where(f => ids.Contains(f.Id) && f.TheaterId == screen.TheaterId).ToDictionaryAsync(f => f.Id);
+        if (films.Count != ids.Count)
+            throw new NotFoundException("Film not found.");
+        var intermission = input.IntermissionMinutes ?? screen.Theater!.DefaultIntermissionMinutes;
+        ValidateIntermission(intermission);
+
+        var startsAt = TheaterTime.ToUtc(screen.Theater!, input.Date, input.StartTime);
+        if (startsAt <= time.GetUtcNow())
+            throw new AppValidationException("Showings must be in the future.");
+        var endsAt = Showtime.ComputeEndsAt(startsAt, input.FilmIds.Select(id => films[id].RuntimeMinutes).ToList(), intermission);
+        await EnsureFreeAsync(db, screen.Theater!, screen.Id, screen.Name, startsAt, endsAt, showtime.Id == 0 ? null : showtime.Id);
+        await EnsureScheduleAsync(db, screen.TheaterId, input.PriceScheduleId);
+
+        showtime.ScreenId = screen.Id;
+        showtime.StartsAt = startsAt;
+        showtime.EndsAt = endsAt;
+        showtime.IntermissionMinutes = intermission;
+        showtime.PriceScheduleId = input.PriceScheduleId;
+        // Update features in place by position: removing and re-adding the same (showtime, position) key would conflict.
+        var byPosition = showtime.Features.ToDictionary(f => f.Position);
+        for (var i = 0; i < input.FilmIds.Count; i++)
+        {
+            if (byPosition.TryGetValue(i + 1, out var feature))
+                feature.FilmId = input.FilmIds[i];
+            else
+                showtime.Features.Add(new ShowtimeFeature { Position = i + 1, FilmId = input.FilmIds[i] });
+        }
+        foreach (var extra in showtime.Features.Where(f => f.Position > input.FilmIds.Count).ToList())
+        {
+            showtime.Features.Remove(extra);
+            db.ShowtimeFeatures.Remove(extra);
+        }
+    }
+
+    private static void ValidateIntermission(int minutes)
+    {
+        if (minutes is < 0 or > Showtime.MaxIntermissionMinutes)
+            throw new AppValidationException($"Intermissions can be 0 to {Showtime.MaxIntermissionMinutes} minutes.");
     }
 
     private static async Task EnsureScheduleAsync(ApplicationDbContext db, int theaterId, int? priceScheduleId)
@@ -143,23 +245,31 @@ public sealed class ScheduleService(IDbContextFactory<ApplicationDbContext> dbFa
             throw new NotFoundException("Price schedule not found.");
     }
 
+    // The whole showing, from its first film's start to its last film's end (intermissions included), must be free.
     private static async Task EnsureFreeAsync(ApplicationDbContext db, Theater theater, int screenId, string screenName,
         DateTimeOffset startsAt, DateTimeOffset endsAt, int? exceptId)
     {
-        // Anything that could overlap starts less than the longest runtime before this one.
-        var candidates = await db.Showtimes.Include(s => s.Film)
-            .Where(s => s.ScreenId == screenId && s.Id != exceptId
-                && s.StartsAt < endsAt && s.StartsAt > startsAt.AddMinutes(-Film.MaxRuntimeMinutes))
-            .ToListAsync();
-        var clash = candidates.OrderBy(s => s.StartsAt).FirstOrDefault(s => EndsAt(s) > startsAt);
+        var clash = await WithFeatures(db.Showtimes.AsNoTracking())
+            .Where(s => s.ScreenId == screenId && s.Id != exceptId && s.StartsAt < endsAt && s.EndsAt > startsAt)
+            .OrderBy(s => s.StartsAt)
+            .FirstOrDefaultAsync();
         if (clash is not null)
             throw new AppValidationException(
-                $"That overlaps \"{clash.Film!.Title}\" on {screenName}, which runs until {TheaterTime.ToLocal(theater, EndsAt(clash)):ddd, MMM d 'at' h:mm tt}.");
+                $"That overlaps \"{string.Join(" + ", clash.Features.OrderBy(f => f.Position).Select(f => f.Film!.Title))}\" on {screenName}, " +
+                $"which runs {TheaterTime.ToLocal(theater, clash.StartsAt):ddd, MMM d h:mm tt}–{TheaterTime.ToLocal(theater, clash.EndsAt):h:mm tt}.");
     }
 
     private static async Task<Theater> FindTheaterAsync(ApplicationDbContext db, int theaterId) =>
         await db.Theaters.AsNoTracking().FirstOrDefaultAsync(t => t.Id == theaterId)
             ?? throw new NotFoundException("Theater not found.");
+
+    private async Task<Showtime> LoadShowtimeAuthorizedAsync(ApplicationDbContext db, ClaimsPrincipal user, int showtimeId)
+    {
+        var showtime = await db.Showtimes.Include(s => s.Features).Include(s => s.Screen!.Theater)
+            .FirstOrDefaultAsync(s => s.Id == showtimeId) ?? throw new NotFoundException("Showtime not found.");
+        await auth.RequireAsync(user, showtime.Screen!.Theater!, TheaterPermissions.ManageSchedule);
+        return showtime;
+    }
 
     private async Task<Film> LoadFilmAuthorizedAsync(ApplicationDbContext db, ClaimsPrincipal user, int filmId)
     {

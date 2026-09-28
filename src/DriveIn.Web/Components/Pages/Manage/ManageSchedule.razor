@@ -38,17 +38,26 @@ else
     {
         <section class="card mb-4">
             <div class="card-body">
-                <h2 class="h5">Add a showtime</h2>
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                    <h2 class="h5 mb-0">@(draft.EditingId is null ? "Add a showing" : "Change showing")</h2>
+                    <div class="d-flex align-items-center gap-2 small">
+                        <label for="default-intermission" class="text-nowrap">Default intermission</label>
+                        <input id="default-intermission" class="form-control form-control-sm" style="width: 5rem" type="number"
+                               min="0" max="@Showtime.MaxIntermissionMinutes" @bind="defaultIntermission" />
+                        <span>min</span>
+                        <button class="btn btn-sm btn-outline-secondary" @onclick="SaveDefaultIntermissionAsync">Save</button>
+                    </div>
+                </div>
                 @if (films.Count == 0)
                 {
                     <p class="text-muted mb-0">Add a film below first.</p>
                 }
                 else
                 {
-                    <div class="row g-2 align-items-end">
+                    <div class="row g-2 mb-3">
                         <div class="col-md-3">
                             <label class="form-label" for="st-screen">Screen</label>
-                            <select id="st-screen" class="form-select" @bind="newShowtime.ScreenId">
+                            <select id="st-screen" class="form-select" @bind="draft.ScreenId">
                                 @foreach (var s in theater.Screens)
                                 {
                                     <option value="@s.Id">@s.Name</option>
@@ -56,43 +65,89 @@ else
                             </select>
                         </div>
                         <div class="col-md-3">
-                            <label class="form-label" for="st-film">Film</label>
-                            <select id="st-film" class="form-select" @bind="newShowtime.FilmId">
-                                @foreach (var f in films)
-                                {
-                                    <option value="@f.Id">@f.Title</option>
-                                }
-                            </select>
-                        </div>
-                        <div class="col-md-2">
                             <label class="form-label" for="st-date">Date</label>
-                            <input id="st-date" class="form-control" type="date" @bind="newShowtime.Date" />
+                            <input id="st-date" class="form-control" type="date" @bind="draft.Date" />
                         </div>
-                        <div class="col-md-2">
+                        <div class="col-md-3">
                             <label class="form-label" for="st-time">Starts</label>
-                            <input id="st-time" class="form-control" type="time" @bind="newShowtime.Time" />
+                            <input id="st-time" class="form-control" type="time" @bind="draft.Time" />
                         </div>
-                        <div class="col-md-2">
+                        <div class="col-md-3">
                             <label class="form-label" for="st-pricing">Pricing</label>
-                            <select id="st-pricing" class="form-select" @bind="newShowtime.PriceScheduleId">
+                            <select id="st-pricing" class="form-select" @bind="draft.PriceScheduleId">
                                 <option value="0">@DefaultLabel</option>
-                                @foreach (var p in OtherSchedules)
+                                @foreach (var p in OtherSchedules.Concat(PinnedDefault(draft.PriceScheduleId)))
                                 {
                                     <option value="@p.Id">@p.Name</option>
                                 }
                             </select>
                         </div>
-                        <div class="col-12">
-                            <button class="btn btn-primary" @onclick="AddShowtimeAsync">Schedule</button>
+                    </div>
+
+                    <div class="mb-2" style="max-width: 36rem">
+                        @for (var i = 0; i < draft.Features.Count; i++)
+                        {
+                            var feature = draft.Features[i];
+                            var number = i + 1;
+                            <div class="input-group mb-2" @key="feature">
+                                <label class="input-group-text" style="width: 7rem" for="st-film-@number">
+                                    @(draft.Features.Count == 1 ? "Film" : $"Feature {number}")
+                                </label>
+                                <select id="st-film-@number" class="form-select" @bind="feature.FilmId">
+                                    @foreach (var f in films)
+                                    {
+                                        <option value="@f.Id">@f.Title (@f.RuntimeMinutes min)</option>
+                                    }
+                                </select>
+                                @if (draft.Features.Count > 1)
+                                {
+                                    <button class="btn btn-outline-danger" title="Remove feature @number" aria-label="Remove feature @number"
+                                            @onclick="() => draft.Features.Remove(feature)">✕</button>
+                                }
+                            </div>
+                        }
+                        @if (draft.Features.Count < Showtime.MaxFeatures)
+                        {
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="AddFeature">
+                                @(draft.Features.Count == 1 ? "Make it a double feature" : "Add another feature")
+                            </button>
+                        }
+                    </div>
+
+                    @if (draft.Features.Count > 1)
+                    {
+                        <div class="input-group input-group-sm mb-3" style="max-width: 20rem">
+                            <label class="input-group-text" for="st-intermission">Intermission</label>
+                            <input id="st-intermission" class="form-control" type="number" min="0" max="@Showtime.MaxIntermissionMinutes"
+                                   @bind="draft.Intermission" @bind:event="oninput" />
+                            <span class="input-group-text">min between films</span>
                         </div>
+                    }
+
+                    <p class="small text-muted mb-3">@Preview()</p>
+
+                    <div class="d-flex gap-2">
+                        @if (draft.EditingId is null)
+                        {
+                            <button class="btn btn-primary" @onclick="SaveShowtimeAsync">Schedule</button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-primary" @onclick="SaveShowtimeAsync">Save changes</button>
+                            <button class="btn btn-outline-secondary" @onclick="ResetDraft">Cancel</button>
+                        }
                     </div>
                 }
             </div>
         </section>
     }
+    else
+    {
+        <p class="text-muted">Default intermission between double-feature films: @theater.DefaultIntermissionMinutes minutes.</p>
+    }
 
     <section class="mb-5">
-        <h2 class="h4">Upcoming showtimes</h2>
+        <h2 class="h4">Upcoming showings</h2>
         @if (showtimes.Count == 0)
         {
             <p class="text-muted">Nothing scheduled.</p>
@@ -104,17 +159,36 @@ else
                 <tbody>
                     @foreach (var s in day)
                     {
-                        <tr @key="s.Id">
+                        <tr @key="s.Id" class="@(draft.EditingId == s.Id ? "table-warning" : null)">
                             <td style="width: 12rem">@s.StartsLocal.ToString("h:mm tt")–@s.EndsLocal.ToString("h:mm tt")</td>
-                            <td style="width: 12rem">@s.ScreenName</td>
-                            <td>@s.FilmTitle @if (s.Rating is not null) { <span class="badge text-bg-secondary ms-1">@s.Rating</span> }</td>
+                            <td style="width: 10rem">@s.ScreenName</td>
+                            <td>
+                                @if (s.IsMultiFeature)
+                                {
+                                    <span class="badge text-bg-warning me-1">@(s.Features.Count == 2 ? "Double feature" : $"{s.Features.Count} features")</span>
+                                    @foreach (var f in s.Features)
+                                    {
+                                        <div class="small">
+                                            <span class="text-muted">@f.StartsLocal.ToString("h:mm tt")</span> @f.Title
+                                            @if (f.Rating is not null) { <span class="badge text-bg-secondary ms-1">@f.Rating</span> }
+                                        </div>
+                                    }
+                                    <div class="small text-muted">@s.IntermissionMinutes min intermission</div>
+                                }
+                                else
+                                {
+                                    var f = s.Features[0];
+                                    @f.Title
+                                    @if (f.Rating is not null) { <span class="badge text-bg-secondary ms-1">@f.Rating</span> }
+                                }
+                            </td>
                             <td style="width: 13rem">
                                 @if (canManage)
                                 {
-                                    <select class="form-select form-select-sm" value="@(s.PriceScheduleId ?? 0)" aria-label="Pricing for this showtime"
+                                    <select class="form-select form-select-sm" value="@(s.PriceScheduleId ?? 0)" aria-label="Pricing for this showing"
                                             @onchange="e => SetPricingAsync(s.Id, e.Value)">
                                         <option value="0">@DefaultLabel</option>
-                                        @foreach (var p in OtherSchedules.Concat(Scheduled(s)))
+                                        @foreach (var p in OtherSchedules.Concat(PinnedDefault(s.PriceScheduleId ?? 0)))
                                         {
                                             <option value="@p.Id">@p.Name</option>
                                         }
@@ -127,7 +201,11 @@ else
                             </td>
                             @if (canManage)
                             {
-                                <td class="text-end">
+                                <td class="text-end" style="width: 13rem">
+                                    @if (s.StartsLocal > NowLocal)
+                                    {
+                                        <button class="btn btn-sm btn-outline-secondary" @onclick="() => StartEdit(s)">Edit</button>
+                                    }
                                     @if (confirmShowtimeId == s.Id)
                                     {
                                         <button class="btn btn-sm btn-danger" @onclick="() => DeleteShowtimeAsync(s.Id)">Confirm remove</button>
@@ -206,12 +284,20 @@ else
 @code {
     [Parameter] public int Id { get; set; }
 
+    private sealed class FeatureDraft
+    {
+        public int FilmId { get; set; }
+    }
+
+    // The add/change form. EditingId is set while changing an existing showing.
     private sealed class ShowtimeDraft
     {
+        public int? EditingId { get; set; }
         public int ScreenId { get; set; }
-        public int FilmId { get; set; }
+        public List<FeatureDraft> Features { get; set; } = [];
         public DateOnly Date { get; set; }
         public TimeOnly Time { get; set; } = new(20, 30);
+        public int Intermission { get; set; }
         public int PriceScheduleId { get; set; } // 0 = the default
     }
 
@@ -220,7 +306,8 @@ else
     private List<Film> films = [];
     private List<ShowtimeView> showtimes = [];
     private List<PriceSchedule> priceSchedules = [];
-    private ShowtimeDraft newShowtime = new();
+    private ShowtimeDraft draft = new();
+    private int defaultIntermission;
     private Film newFilm = NewFilm();
     private Film? editingFilm;
     private int? confirmFilmId;
@@ -228,16 +315,15 @@ else
 
     private static Film NewFilm() => new() { RuntimeMinutes = 120 };
 
+    private DateTime NowLocal => TheaterTime.ToLocal(theater!, Time.GetUtcNow());
+
     protected override async Task LoadAsync()
     {
         theater = await Theaters.GetForManageAsync(User, Id);
         canManage = (await Access.GetPermissionsAsync(User, theater)).Contains(TheaterPermissions.ManageSchedule);
-        newShowtime = new ShowtimeDraft
-        {
-            ScreenId = theater.Screens.FirstOrDefault()?.Id ?? 0,
-            Date = DateOnly.FromDateTime(TheaterTime.ToLocal(theater, Time.GetUtcNow())),
-        };
+        defaultIntermission = theater.DefaultIntermissionMinutes;
         await ReloadAsync();
+        ResetDraft();
     }
 
     private async Task ReloadAsync()
@@ -245,25 +331,95 @@ else
         films = await Schedule.ListFilmsAsync(User, Id);
         showtimes = await Schedule.ListUpcomingAsync(User, Id);
         priceSchedules = (await Pricing.GetAsync(User, Id)).Schedules;
-        if (!OtherSchedules.Any(p => p.Id == newShowtime.PriceScheduleId))
-            newShowtime.PriceScheduleId = 0;
-        if (!films.Any(f => f.Id == newShowtime.FilmId))
-            newShowtime.FilmId = films.FirstOrDefault()?.Id ?? 0;
+        if (draft.PriceScheduleId != 0 && priceSchedules.All(p => p.Id != draft.PriceScheduleId))
+            draft.PriceScheduleId = 0;
+        foreach (var feature in draft.Features.Where(f => films.All(x => x.Id != f.FilmId)))
+            feature.FilmId = films.FirstOrDefault()?.Id ?? 0;
         editingFilm = null;
         confirmFilmId = null;
         confirmShowtimeId = null;
     }
 
-    private Task AddShowtimeAsync() => RunAsync(async () =>
+    // Back to a blank "add" form, keeping the screen and date so several showings can be entered quickly.
+    private void ResetDraft()
     {
-        await Schedule.AddShowtimeAsync(User, newShowtime.ScreenId, newShowtime.FilmId, newShowtime.Date, newShowtime.Time,
-            newShowtime.PriceScheduleId == 0 ? null : newShowtime.PriceScheduleId);
+        draft = new ShowtimeDraft
+        {
+            ScreenId = draft.EditingId is null && draft.ScreenId != 0 ? draft.ScreenId : theater!.Screens.FirstOrDefault()?.Id ?? 0,
+            Date = draft.EditingId is null && draft.Date != default ? draft.Date : DateOnly.FromDateTime(NowLocal),
+            Features = [new FeatureDraft { FilmId = films.FirstOrDefault()?.Id ?? 0 }],
+            Intermission = theater!.DefaultIntermissionMinutes,
+        };
+    }
+
+    private void StartEdit(ShowtimeView s)
+    {
+        confirmShowtimeId = null;
+        draft = new ShowtimeDraft
+        {
+            EditingId = s.Id,
+            ScreenId = s.ScreenId,
+            Date = DateOnly.FromDateTime(s.StartsLocal),
+            Time = TimeOnly.FromDateTime(s.StartsLocal),
+            Features = s.Features.Select(f => new FeatureDraft { FilmId = f.FilmId }).ToList(),
+            Intermission = s.IntermissionMinutes,
+            PriceScheduleId = s.PriceScheduleId ?? 0,
+        };
+    }
+
+    private void AddFeature() =>
+        draft.Features.Add(new FeatureDraft { FilmId = films.FirstOrDefault(f => draft.Features.All(x => x.FilmId != f.Id))?.Id ?? films[0].Id });
+
+    // e.g. "8:30 PM Jaws → 10:34 PM · 15 min intermission · 10:49 PM Alien → 12:46 AM".
+    private string Preview()
+    {
+        var runtimes = draft.Features.Select(f => films.FirstOrDefault(x => x.Id == f.FilmId)).ToList();
+        if (runtimes.Any(f => f is null))
+            return "";
+        var at = draft.Date.ToDateTime(draft.Time);
+        var parts = new List<string>();
+        foreach (var film in runtimes)
+        {
+            if (parts.Count > 0)
+            {
+                parts.Add($"{draft.Intermission} min intermission");
+                at = at.AddMinutes(draft.Intermission);
+            }
+            var end = at.AddMinutes(film!.RuntimeMinutes);
+            parts.Add($"{at:h:mm tt} {film.Title} → {end:h:mm tt}");
+            at = end;
+        }
+        return string.Join(" · ", parts);
+    }
+
+    private ShowtimeInput DraftInput() => new(draft.ScreenId, draft.Features.Select(f => f.FilmId).ToList(), draft.Date, draft.Time,
+        draft.Intermission, draft.PriceScheduleId == 0 ? null : draft.PriceScheduleId);
+
+    private Task SaveShowtimeAsync() => RunAsync(async () =>
+    {
+        var editing = draft.EditingId is not null;
+        if (draft.EditingId is int id)
+            await Schedule.UpdateShowtimeAsync(User, id, DraftInput());
+        else
+            await Schedule.AddShowtimeAsync(User, DraftInput());
         await ReloadAsync();
-    }, "Showtime scheduled.");
+        ResetDraft();
+        Success = editing ? "Showing updated." : "Showing scheduled.";
+    });
+
+    private Task SaveDefaultIntermissionAsync() => RunAsync(async () =>
+    {
+        await Schedule.SetDefaultIntermissionAsync(User, Id, defaultIntermission);
+        theater!.DefaultIntermissionMinutes = defaultIntermission;
+        if (draft.EditingId is null)
+            draft.Intermission = defaultIntermission;
+    }, "Default intermission saved. It applies to showings you add from now on.");
 
     private Task DeleteShowtimeAsync(int showtimeId) => RunAsync(async () =>
     {
         await Schedule.DeleteShowtimeAsync(User, showtimeId);
+        if (draft.EditingId == showtimeId)
+            ResetDraft();
         await ReloadAsync();
     });
 
@@ -272,7 +428,8 @@ else
         var film = await Schedule.AddFilmAsync(User, Id, new FilmInput(newFilm.Title, newFilm.Rating, newFilm.RuntimeMinutes));
         newFilm = NewFilm();
         await ReloadAsync();
-        newShowtime.FilmId = film.Id;
+        if (draft.EditingId is null && draft.Features.Count == 1)
+            draft.Features[0].FilmId = film.Id;
     });
 
     private void StartEditFilm(Film film)
@@ -303,9 +460,9 @@ else
 
     private IEnumerable<PriceSchedule> OtherSchedules => priceSchedules.Where(p => !p.IsDefault);
 
-    // A showtime pinned to the current default schedule by id still needs its option in the list.
-    private IEnumerable<PriceSchedule> Scheduled(ShowtimeView s) =>
-        priceSchedules.Where(p => p.IsDefault && p.Id == s.PriceScheduleId);
+    // A showing pinned to the current default schedule by id still needs its option in the list.
+    private IEnumerable<PriceSchedule> PinnedDefault(int priceScheduleId) =>
+        priceSchedules.Where(p => p.IsDefault && p.Id == priceScheduleId);
 
     private Task SetPricingAsync(int showtimeId, object? value) => RunAsync(async () =>
     {

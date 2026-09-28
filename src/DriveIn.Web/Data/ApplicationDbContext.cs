@@ -10,6 +10,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<Screen> Screens => Set<Screen>();
     public DbSet<Film> Films => Set<Film>();
     public DbSet<Showtime> Showtimes => Set<Showtime>();
+    public DbSet<ShowtimeFeature> ShowtimeFeatures => Set<ShowtimeFeature>();
     public DbSet<PriceSchedule> PriceSchedules => Set<PriceSchedule>();
     public DbSet<PriceOption> PriceOptions => Set<PriceOption>();
     public DbSet<AddOn> AddOns => Set<AddOn>();
@@ -76,14 +77,25 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .WithMany(x => x.Showtimes)
                 .HasForeignKey(x => x.ScreenId)
                 .OnDelete(DeleteBehavior.Cascade);
-            s.HasOne(x => x.Film)
-                .WithMany(x => x.Showtimes)
-                .HasForeignKey(x => x.FilmId)
-                .OnDelete(DeleteBehavior.Cascade);
             s.HasOne(x => x.PriceSchedule)
                 .WithMany()
                 .HasForeignKey(x => x.PriceScheduleId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<ShowtimeFeature>(f =>
+        {
+            f.HasKey(x => new { x.ShowtimeId, x.Position });
+            f.HasOne(x => x.Showtime)
+                .WithMany(s => s.Features)
+                .HasForeignKey(x => x.ShowtimeId)
+                .OnDelete(DeleteBehavior.Cascade);
+            // ScheduleService deletes a film's (past) showtimes before the film; Restrict keeps the DB from
+            // quietly turning a double feature into a single one.
+            f.HasOne(x => x.Film)
+                .WithMany(x => x.Features)
+                .HasForeignKey(x => x.FilmId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         builder.Entity<PriceSchedule>(p =>

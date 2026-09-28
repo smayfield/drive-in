@@ -127,7 +127,7 @@ else
                     <ul class="list-unstyled">
                         @foreach (var s in showtimes)
                         {
-                            <li>@s.StartsLocal.ToString("ddd, MMM d · h:mm tt") — <strong>@s.FilmTitle</strong> @if (s.Rating is not null) { <span class="badge text-bg-secondary">@s.Rating</span> }</li>
+                            <li>@s.StartsLocal.ToString("ddd, MMM d · h:mm tt") — <strong>@s.Title</strong>@if (s.IsMultiFeature) { <span class="text-muted small"> (@s.Features.Count films, @s.IntermissionMinutes min intermission)</span> }</li>
                         }
                     </ul>
                 }

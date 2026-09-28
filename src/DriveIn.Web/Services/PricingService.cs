@@ -138,8 +138,8 @@ public sealed class PricingService(IDbContextFactory<ApplicationDbContext> dbFac
         if (schedule.IsDefault)
             throw new AppValidationException("Make another schedule the default before deleting this one.");
         var now = time.GetUtcNow();
-        var showtimes = await db.Showtimes.Include(s => s.Film).Where(s => s.PriceScheduleId == scheduleId).ToListAsync();
-        if (showtimes.Any(s => ScheduleService.EndsAt(s) > now))
+        var showtimes = await db.Showtimes.Where(s => s.PriceScheduleId == scheduleId).ToListAsync();
+        if (showtimes.Any(s => s.EndsAt > now))
             throw new AppValidationException($"Upcoming showtimes use \"{schedule.Name}\". Change their pricing first.");
         foreach (var s in showtimes)
             s.PriceScheduleId = null;

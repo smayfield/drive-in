@@ -53,9 +53,13 @@ invitee sets a password or continues with Google using the invited address.
 - The **lot map** (Manage → Lot map) draws every screen around the central concessions/restrooms/projection
   building: screens 1 and 2 face each other, screens 3 and 4 face each other at 90 degrees. Screen order
   on the theater page sets the positions.
-- The **schedule** (Manage → Schedule) holds the theater's films and their showtimes. Showtimes on a
-  screen can't overlap, are entered and shown in the theater's time zone (profile → Time zone, an IANA
-  name such as `America/Chicago`), and are stored in UTC.
+- The **schedule** (Manage → Schedule) holds the theater's films and their showings. A showing is one
+  ticket on one screen: a single film, or up to 4 back to back (a **double feature**) with an intermission
+  between them. The theater sets a default intermission, which is prefilled for new showings and can be
+  changed per showing; changing the default doesn't move showings already scheduled. Showings on a screen
+  can't overlap at any point from the first film's start to the last film's end (intermissions included).
+  Times are entered and shown in the theater's time zone (profile → Time zone, an IANA name such as
+  `America/Chicago`) and stored in UTC.
 
 ## Pricing
 

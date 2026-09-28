@@ -23,7 +23,11 @@ public class TheaterServiceTests
             db.Invitations.Add(new Invitation { TheaterId = doomed.Id, Email = "x@example.com", TokenHash = "h", ExpiresAt = DateTimeOffset.MaxValue });
             await db.SaveChangesAsync();
             var screenA = await db.Screens.SingleAsync(s => s.Name == "A");
-            db.Showtimes.Add(new Showtime { Screen = screenA, Film = new Film { TheaterId = doomed.Id, Title = "Jaws", RuntimeMinutes = 124 }, StartsAt = DateTimeOffset.UtcNow.AddDays(1) });
+            db.Showtimes.Add(new Showtime
+            {
+                Screen = screenA, StartsAt = DateTimeOffset.UtcNow.AddDays(1), EndsAt = DateTimeOffset.UtcNow.AddDays(1).AddMinutes(124),
+                Features = [new ShowtimeFeature { Position = 1, Film = new Film { TheaterId = doomed.Id, Title = "Jaws", RuntimeMinutes = 124 } }],
+            });
             await db.SaveChangesAsync();
         }
 
@@ -35,6 +39,7 @@ public class TheaterServiceTests
         Assert.Empty(await check.Invitations.ToListAsync());
         Assert.Empty(await check.Films.ToListAsync());
         Assert.Empty(await check.Showtimes.ToListAsync());
+        Assert.Empty(await check.ShowtimeFeatures.ToListAsync());
         Assert.Equal(["admin@example.com", "emp2@example.com", "owner@example.com"],
             await check.Users.Select(u => u.Email!).OrderBy(e => e).ToListAsync());
     }
