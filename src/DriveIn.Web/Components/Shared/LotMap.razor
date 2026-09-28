@@ -1,0 +1,75 @@
+@* SVG map of spot layouts: one screen's field, or (Theater) all of a theater's screens around its central building. *@
+@using static LotPlan
+
+<svg class="lot-map" viewBox="@plan.ViewBox.ViewBox" role="img" aria-label="@AriaLabel"
+     style="aspect-ratio: @N(plan.ViewBox.Width) / @N(plan.ViewBox.Height)">
+    @if (plan.Building is LotRect b)
+    {
+        <g class="lot-building">
+            <rect x="@N(b.X)" y="@N(b.Y)" width="@N(b.Width)" height="@N(b.Height)" rx="10" />
+            <text x="0" y="-14">Concessions</text>
+            <text x="0" y="4">Restrooms</text>
+            <text x="0" y="22">Projection</text>
+        </g>
+    }
+    @foreach (var placed in plan.Fields)
+    {
+        var field = placed.Field;
+        var href = ScreenHref?.Invoke(field.Screen);
+        <g class="lot-field" transform="@placed.Transform" @key="field.Screen.Id">
+            <rect class="lot-ground" x="@N(-field.HalfWidth)" y="0" width="@N(field.HalfWidth * 2)" height="@N(field.Depth)" rx="8" />
+            @* The screen's name runs along the screen; only the south screen's is turned to stay upright. *@
+            <a href="@href">
+                <text class="lot-screen-name @(href is null ? null : "lot-link")" x="0" y="@N(NameY)"
+                      transform="@(placed.Angle == 180 ? placed.Upright(0, NameY) : null)">@field.Screen.Name</text>
+            </a>
+            <rect class="lot-screen" x="@N(-field.ScreenWidth / 2)" y="@N(NameHeight)" width="@N(field.ScreenWidth)" height="@N(ScreenThickness)" rx="2" />
+            @if (field.Rows.Count == 0)
+            {
+                <g>
+                    <text class="lot-empty" x="0" y="@N(EmptyY)" transform="@placed.Upright(0, EmptyY)">No spots laid out yet</text>
+                </g>
+            }
+            @foreach (var row in field.Rows)
+            {
+                var labelY = row.Y + SpotDepth / 2;
+                var labelX = row.HalfWidth + RowLabelGap + RowLabelWidth / 2;
+                <g class="lot-row">
+                    <text class="lot-row-label" x="@N(-labelX)" y="@N(labelY)" transform="@placed.Upright(-labelX, labelY)">@row.Label</text>
+                    <text class="lot-row-label" x="@N(labelX)" y="@N(labelY)" transform="@placed.Upright(labelX, labelY)">@row.Label</text>
+                    @foreach (var spot in row.Spots)
+                    {
+                        var cx = spot.X + SpotWidth / 2;
+                        <g>
+                            <title>Spot @spot.Label</title>
+                            <rect class="lot-spot" x="@N(spot.X)" y="@N(spot.Y)" width="@N(SpotWidth)" height="@N(SpotDepth)" rx="4" />
+                            <text class="lot-spot-label" x="@N(cx)" y="@N(labelY)" transform="@placed.Upright(cx, labelY)">@spot.Label</text>
+                        </g>
+                    }
+                </g>
+            }
+        </g>
+    }
+</svg>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<Screen> Screens { get; set; } = [];
+
+    // Show every screen around the central building instead of just the first screen.
+    [Parameter] public bool Theater { get; set; }
+
+    // Links each screen's name, e.g. to its settings page.
+    [Parameter] public Func<Screen, string?>? ScreenHref { get; set; }
+
+    private const double NameY = NameHeight / 2 + 1;
+    private const double EmptyY = NameHeight + ScreenThickness + ScreenToFirstRow / 2 + 2;
+
+    private LotPlan plan = default!;
+
+    private string AriaLabel => Theater
+        ? $"Lot map: {Screens.Count} screen{(Screens.Count == 1 ? "" : "s")}, {Screens.Sum(s => s.SpotCount)} spots"
+        : $"Spot layout for {Screens.FirstOrDefault()?.Name}: {Screens.FirstOrDefault()?.SpotCount ?? 0} spots";
+
+    protected override void OnParametersSet() =>
+        plan = Theater || Screens.Count == 0 ? ForTheater(Screens) : ForScreen(Screens[0]);
+}

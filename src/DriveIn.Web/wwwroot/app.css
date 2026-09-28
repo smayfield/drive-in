@@ -99,3 +99,30 @@ h1:focus {
     right: 0.75rem;
     top: 0.5rem;
 }
+
+/* ---------- Lot maps (LotMap.razor): a drive-in at night ---------- */
+
+.lot-map {
+    display: block;
+    width: 100%;
+    max-height: 80vh;
+    background: #0a0d1f;
+    border-radius: 0.5rem;
+}
+
+.lot-map text {
+    text-anchor: middle;
+    dominant-baseline: central;
+    font-family: system-ui, sans-serif;
+}
+
+.lot-ground { fill: #1d2240; }
+.lot-screen { fill: #f8f9fa; }
+.lot-screen-name { fill: #ffd66b; font-size: 13px; font-weight: 600; }
+.lot-link { text-decoration: underline; cursor: pointer; }
+.lot-row-label { fill: #9aa3c7; font-size: 11px; font-weight: 600; }
+.lot-spot { fill: #353c66; stroke: #5d6699; stroke-width: 1; }
+.lot-spot-label { fill: #e9ecef; font-size: 8.5px; }
+.lot-empty { fill: #9aa3c7; font-size: 12px; font-style: italic; }
+.lot-building rect { fill: #ffd66b; }
+.lot-building text { fill: #0a0d1f; font-size: 13px; font-weight: 600; }

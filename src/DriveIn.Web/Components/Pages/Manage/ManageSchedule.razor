@@ -1,0 +1,266 @@
+@page "/manage/{Id:int}/schedule"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inherits AppComponentBase
+@inject TheaterService Theaters
+@inject ScheduleService Schedule
+@inject TheaterAccess Access
+@inject TimeProvider Time
+
+<PageTitle>Schedule · Manage · Drive-In Online</PageTitle>
+
+<p><a href="manage/@Id">&larr; Back to theater</a> · <a href="manage/@Id/lot">Lot map</a></p>
+
+@if (theater is null)
+{
+    <Alerts Error="@Error" />
+    @if (Error is null) { <p>Loading…</p> }
+}
+else
+{
+    <h1>Schedule <small class="text-muted fs-5">@theater.Name</small></h1>
+    @if (TheaterTime.IsValidZone(theater.TimeZone))
+    {
+        <p class="text-muted">Times are in the theater's time zone, @theater.TimeZone.</p>
+    }
+    else
+    {
+        <div class="alert alert-warning">
+            This theater has no time zone set, so times are in UTC. Set one in the theater's profile before scheduling.
+        </div>
+    }
+
+    <Alerts Error="@Error" Success="@Success" />
+
+    @if (canManage)
+    {
+        <section class="card mb-4">
+            <div class="card-body">
+                <h2 class="h5">Add a showtime</h2>
+                @if (films.Count == 0)
+                {
+                    <p class="text-muted mb-0">Add a film below first.</p>
+                }
+                else
+                {
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label" for="st-screen">Screen</label>
+                            <select id="st-screen" class="form-select" @bind="newShowtime.ScreenId">
+                                @foreach (var s in theater.Screens)
+                                {
+                                    <option value="@s.Id">@s.Name</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="st-film">Film</label>
+                            <select id="st-film" class="form-select" @bind="newShowtime.FilmId">
+                                @foreach (var f in films)
+                                {
+                                    <option value="@f.Id">@f.Title</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label" for="st-date">Date</label>
+                            <input id="st-date" class="form-control" type="date" @bind="newShowtime.Date" />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label" for="st-time">Starts</label>
+                            <input id="st-time" class="form-control" type="time" @bind="newShowtime.Time" />
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-primary w-100" @onclick="AddShowtimeAsync">Schedule</button>
+                        </div>
+                    </div>
+                }
+            </div>
+        </section>
+    }
+
+    <section class="mb-5">
+        <h2 class="h4">Upcoming showtimes</h2>
+        @if (showtimes.Count == 0)
+        {
+            <p class="text-muted">Nothing scheduled.</p>
+        }
+        @foreach (var day in showtimes.GroupBy(s => DateOnly.FromDateTime(s.StartsLocal)))
+        {
+            <h3 class="h6 mt-3">@day.Key.ToString("dddd, MMMM d, yyyy")</h3>
+            <table class="table table-sm align-middle">
+                <tbody>
+                    @foreach (var s in day)
+                    {
+                        <tr @key="s.Id">
+                            <td style="width: 12rem">@s.StartsLocal.ToString("h:mm tt")–@s.EndsLocal.ToString("h:mm tt")</td>
+                            <td style="width: 12rem">@s.ScreenName</td>
+                            <td>@s.FilmTitle @if (s.Rating is not null) { <span class="badge text-bg-secondary ms-1">@s.Rating</span> }</td>
+                            @if (canManage)
+                            {
+                                <td class="text-end">
+                                    @if (confirmShowtimeId == s.Id)
+                                    {
+                                        <button class="btn btn-sm btn-danger" @onclick="() => DeleteShowtimeAsync(s.Id)">Confirm remove</button>
+                                    }
+                                    else
+                                    {
+                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => confirmShowtimeId = s.Id">Remove</button>
+                                    }
+                                </td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </section>
+
+    <section>
+        <h2 class="h4">Films</h2>
+        <table class="table align-middle">
+            <thead><tr><th>Title</th><th style="width: 8rem">Rating</th><th style="width: 10rem">Runtime (min)</th>@if (canManage) { <th style="width: 14rem"></th> }</tr></thead>
+            <tbody>
+                @foreach (var f in films)
+                {
+                    <tr @key="f.Id">
+                        @if (editingFilm?.Id == f.Id)
+                        {
+                            <td><input class="form-control form-control-sm" @bind="editingFilm.Title" maxlength="200" aria-label="Title" /></td>
+                            <td><input class="form-control form-control-sm" @bind="editingFilm.Rating" maxlength="10" aria-label="Rating" /></td>
+                            <td><input class="form-control form-control-sm" type="number" min="1" max="@Film.MaxRuntimeMinutes" @bind="editingFilm.RuntimeMinutes" aria-label="Runtime in minutes" /></td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-primary" @onclick="SaveFilmAsync">Save</button>
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => editingFilm = null">Cancel</button>
+                            </td>
+                        }
+                        else
+                        {
+                            <td>@f.Title</td>
+                            <td>@f.Rating</td>
+                            <td>@f.RuntimeMinutes</td>
+                            @if (canManage)
+                            {
+                                <td class="text-end">
+                                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => StartEditFilm(f)">Edit</button>
+                                    @if (confirmFilmId == f.Id)
+                                    {
+                                        <button class="btn btn-sm btn-danger" @onclick="() => DeleteFilmAsync(f.Id)">Confirm delete</button>
+                                    }
+                                    else
+                                    {
+                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => { confirmFilmId = f.Id; editingFilm = null; }">Delete</button>
+                                    }
+                                </td>
+                            }
+                        }
+                    </tr>
+                }
+                @if (canManage)
+                {
+                    <tr>
+                        <td><input class="form-control form-control-sm" placeholder="New film title" @bind="newFilm.Title" maxlength="200" aria-label="New film title" /></td>
+                        <td><input class="form-control form-control-sm" placeholder="PG-13" @bind="newFilm.Rating" maxlength="10" aria-label="New film rating" /></td>
+                        <td><input class="form-control form-control-sm" type="number" min="1" max="@Film.MaxRuntimeMinutes" @bind="newFilm.RuntimeMinutes" aria-label="New film runtime in minutes" /></td>
+                        <td class="text-end"><button class="btn btn-sm btn-success" @onclick="AddFilmAsync">Add film</button></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+        @if (films.Count == 0 && !canManage)
+        {
+            <p class="text-muted">No films yet.</p>
+        }
+    </section>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private sealed class ShowtimeDraft
+    {
+        public int ScreenId { get; set; }
+        public int FilmId { get; set; }
+        public DateOnly Date { get; set; }
+        public TimeOnly Time { get; set; } = new(20, 30);
+    }
+
+    private Theater? theater;
+    private bool canManage;
+    private List<Film> films = [];
+    private List<ShowtimeView> showtimes = [];
+    private ShowtimeDraft newShowtime = new();
+    private Film newFilm = NewFilm();
+    private Film? editingFilm;
+    private int? confirmFilmId;
+    private int? confirmShowtimeId;
+
+    private static Film NewFilm() => new() { RuntimeMinutes = 120 };
+
+    protected override async Task LoadAsync()
+    {
+        theater = await Theaters.GetForManageAsync(User, Id);
+        canManage = (await Access.GetPermissionsAsync(User, theater)).Contains(TheaterPermissions.ManageSchedule);
+        newShowtime = new ShowtimeDraft
+        {
+            ScreenId = theater.Screens.FirstOrDefault()?.Id ?? 0,
+            Date = DateOnly.FromDateTime(TheaterTime.ToLocal(theater, Time.GetUtcNow())),
+        };
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        films = await Schedule.ListFilmsAsync(User, Id);
+        showtimes = await Schedule.ListUpcomingAsync(User, Id);
+        if (!films.Any(f => f.Id == newShowtime.FilmId))
+            newShowtime.FilmId = films.FirstOrDefault()?.Id ?? 0;
+        editingFilm = null;
+        confirmFilmId = null;
+        confirmShowtimeId = null;
+    }
+
+    private Task AddShowtimeAsync() => RunAsync(async () =>
+    {
+        await Schedule.AddShowtimeAsync(User, newShowtime.ScreenId, newShowtime.FilmId, newShowtime.Date, newShowtime.Time);
+        await ReloadAsync();
+    }, "Showtime scheduled.");
+
+    private Task DeleteShowtimeAsync(int showtimeId) => RunAsync(async () =>
+    {
+        await Schedule.DeleteShowtimeAsync(User, showtimeId);
+        await ReloadAsync();
+    });
+
+    private Task AddFilmAsync() => RunAsync(async () =>
+    {
+        var film = await Schedule.AddFilmAsync(User, Id, new FilmInput(newFilm.Title, newFilm.Rating, newFilm.RuntimeMinutes));
+        newFilm = NewFilm();
+        await ReloadAsync();
+        newShowtime.FilmId = film.Id;
+    });
+
+    private void StartEditFilm(Film film)
+    {
+        confirmFilmId = null;
+        editingFilm = new Film { Id = film.Id, Title = film.Title, Rating = film.Rating, RuntimeMinutes = film.RuntimeMinutes };
+    }
+
+    private Task SaveFilmAsync() => RunAsync(async () =>
+    {
+        await Schedule.UpdateFilmAsync(User, editingFilm!.Id, new FilmInput(editingFilm.Title, editingFilm.Rating, editingFilm.RuntimeMinutes));
+        await ReloadAsync();
+    });
+
+    private Task DeleteFilmAsync(int filmId) => RunAsync(async () =>
+    {
+        try
+        {
+            await Schedule.DeleteFilmAsync(User, filmId);
+        }
+        finally
+        {
+            await ReloadAsync();
+        }
+    });
+}

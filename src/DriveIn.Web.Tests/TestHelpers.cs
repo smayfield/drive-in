@@ -70,6 +70,7 @@ public sealed class TestApp : IAsyncDisposable
         services.AddSingleton<TimeProvider>(Time);
         services.AddScoped<TheaterService>();
         services.AddScoped<ScreenService>();
+        services.AddScoped<ScheduleService>();
         services.AddScoped<InvitationService>();
         services.AddScoped<EmployeeService>();
         services.AddScoped<UserAdminService>();

@@ -1,0 +1,210 @@
+@page "/manage/{Id:int}/screens/{ScreenId:int}"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inherits AppComponentBase
+@inject ScreenService Screens
+@inject ScheduleService Schedule
+@inject TheaterAccess Access
+
+<PageTitle>@(screen?.Name ?? "Screen") · Manage · Drive-In Online</PageTitle>
+
+<p><a href="manage/@Id">&larr; Back to theater</a> · <a href="manage/@Id/lot">Lot map</a> · <a href="manage/@Id/schedule">Schedule</a></p>
+
+@if (screen is null)
+{
+    <Alerts Error="@Error" />
+    @if (Error is null) { <p>Loading…</p> }
+}
+else
+{
+    <h1>@screen.Name <small class="text-muted fs-5">@screen.Theater!.Name</small></h1>
+    <Alerts Error="@Error" Success="@Success" />
+
+    <div class="row g-4">
+        @if (canManage)
+        {
+            <div class="col-lg-5">
+                <section class="card">
+                    <div class="card-body">
+                        <h2 class="h5">Screen</h2>
+                        <div class="mb-3">
+                            <label class="form-label" for="screen-name">Name</label>
+                            <input id="screen-name" class="form-control" @bind="draft.Name" @bind:event="oninput" maxlength="100" />
+                        </div>
+
+                        <fieldset class="mb-3">
+                            <legend class="form-label fs-6">Spot labels</legend>
+                            @foreach (var scheme in Enum.GetValues<SpotLabelScheme>())
+                            {
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="scheme" id="scheme-@scheme"
+                                           checked="@(draft.Scheme == scheme)" @onchange="() => draft.Scheme = scheme" />
+                                    <label class="form-check-label" for="scheme-@scheme">
+                                        @SpotLabels.Describe(scheme) <span class="text-muted small">— @SpotLabels.Example(scheme)</span>
+                                    </label>
+                                </div>
+                            }
+                            <div class="form-text">
+                                Row 1 is nearest the screen. Spots are numbered left to right as drivers face the screen.
+                            </div>
+                        </fieldset>
+
+                        <h3 class="h6">Rows</h3>
+                        <div class="input-group input-group-sm mb-3">
+                            <input class="form-control" type="number" min="1" max="@Screen.MaxRows" @bind="fillRows" aria-label="Number of rows" />
+                            <span class="input-group-text">rows of</span>
+                            <input class="form-control" type="number" min="1" max="@Screen.MaxSpotsPerRow" @bind="fillSpots" aria-label="Spots per row" />
+                            <span class="input-group-text">spots</span>
+                            <button class="btn btn-outline-secondary" @onclick="Fill">Fill</button>
+                        </div>
+
+                        @if (draft.Rows.Count == 0)
+                        {
+                            <p class="text-muted small">No rows yet. Fill in a grid above or add rows one at a time.</p>
+                        }
+                        else
+                        {
+                            <table class="table table-sm align-middle">
+                                <thead><tr><th>Row</th><th style="width: 7rem">Spots</th><th>Labels</th><th></th></tr></thead>
+                                <tbody>
+                                    @for (var i = 0; i < draft.Rows.Count; i++)
+                                    {
+                                        var row = draft.Rows[i];
+                                        var number = i + 1;
+                                        <tr @key="row">
+                                            <td>@SpotLabels.Row(draft.Scheme, number)</td>
+                                            <td>
+                                                <input class="form-control form-control-sm" type="number" min="1" max="@Screen.MaxSpotsPerRow"
+                                                       @bind="row.Spots" @bind:event="oninput" aria-label="Spots in row @number" />
+                                            </td>
+                                            <td class="small text-muted">
+                                                @if (row.Spots is >= 1 and <= Screen.MaxSpotsPerRow)
+                                                {
+                                                    @($"{SpotLabels.Spot(draft.Scheme, number, 1)}–{SpotLabels.Spot(draft.Scheme, number, row.Spots)}")
+                                                }
+                                            </td>
+                                            <td class="text-end">
+                                                <button class="btn btn-sm btn-link text-danger px-1" title="Remove row" @onclick="() => draft.Rows.Remove(row)">✕</button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                        <button class="btn btn-sm btn-outline-secondary mb-3" disabled="@(draft.Rows.Count >= Screen.MaxRows)" @onclick="AddRow">Add row</button>
+
+                        <div class="d-flex gap-2 align-items-center">
+                            <button class="btn btn-primary" @onclick="SaveAsync">Save</button>
+                            <button class="btn btn-outline-secondary" disabled="@(!Dirty)" @onclick="Revert">Revert</button>
+                            @if (Dirty) { <span class="text-muted small">Unsaved changes</span> }
+                        </div>
+                    </div>
+                </section>
+            </div>
+        }
+
+        <div class="@(canManage ? "col-lg-7" : "col-12")">
+            <section>
+                <h2 class="h5">
+                    @(canManage ? "Preview" : "Layout")
+                    <small class="text-muted">@preview.RowSpots.Count rows · @preview.SpotCount spots</small>
+                </h2>
+                @if (!canManage)
+                {
+                    <p class="text-muted small">Spot labels: @SpotLabels.Describe(screen.LabelScheme) (@SpotLabels.Example(screen.LabelScheme)).</p>
+                }
+                <LotMap Screens="[preview]" />
+            </section>
+
+            <section class="mt-4">
+                <h2 class="h5">Upcoming showtimes</h2>
+                @if (showtimes.Count == 0)
+                {
+                    <p class="text-muted">Nothing scheduled. <a href="manage/@Id/schedule">Open the schedule</a></p>
+                }
+                else
+                {
+                    <ul class="list-unstyled">
+                        @foreach (var s in showtimes)
+                        {
+                            <li>@s.StartsLocal.ToString("ddd, MMM d · h:mm tt") — <strong>@s.FilmTitle</strong> @if (s.Rating is not null) { <span class="badge text-bg-secondary">@s.Rating</span> }</li>
+                        }
+                    </ul>
+                }
+            </section>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+    [Parameter] public int ScreenId { get; set; }
+
+    private sealed class RowDraft
+    {
+        public int Spots { get; set; }
+    }
+
+    private sealed class Draft
+    {
+        public string Name { get; set; } = "";
+        public SpotLabelScheme Scheme { get; set; }
+        public List<RowDraft> Rows { get; set; } = [];
+
+        public static Draft From(Screen s) => new()
+        {
+            Name = s.Name,
+            Scheme = s.LabelScheme,
+            Rows = s.RowSpots.Select(n => new RowDraft { Spots = n }).ToList(),
+        };
+
+        public List<int> RowSpots => Rows.Select(r => r.Spots).ToList();
+    }
+
+    private Screen? screen;
+    private Draft draft = new();
+    private bool canManage;
+    private List<ShowtimeView> showtimes = [];
+    private int fillRows = 10;
+    private int fillSpots = 20;
+
+    // The draft as a screen for the preview; rows that aren't valid yet are left out.
+    private Screen preview => new()
+    {
+        Id = ScreenId,
+        Name = string.IsNullOrWhiteSpace(draft.Name) ? "Screen" : draft.Name,
+        LabelScheme = draft.Scheme,
+        RowSpots = draft.Rows.Select(r => r.Spots).Where(n => n is >= 1 and <= Screen.MaxSpotsPerRow).ToList(),
+    };
+
+    private bool Dirty => screen is not null
+        && (draft.Name != screen.Name || draft.Scheme != screen.LabelScheme || !draft.RowSpots.SequenceEqual(screen.RowSpots));
+
+    protected override async Task LoadAsync()
+    {
+        screen = await Screens.GetAsync(User, ScreenId);
+        if (screen.TheaterId != Id)
+            throw new NotFoundException("Screen not found.");
+        canManage = (await Access.GetPermissionsAsync(User, screen.Theater!)).Contains(TheaterPermissions.ManageScreens);
+        draft = Draft.From(screen);
+        showtimes = await Schedule.ListUpcomingAsync(User, Id, ScreenId);
+    }
+
+    private void Fill()
+    {
+        var rows = Math.Clamp(fillRows, 1, Screen.MaxRows);
+        var spots = Math.Clamp(fillSpots, 1, Screen.MaxSpotsPerRow);
+        draft.Rows = Enumerable.Range(0, rows).Select(_ => new RowDraft { Spots = spots }).ToList();
+    }
+
+    private void AddRow() => draft.Rows.Add(new RowDraft { Spots = draft.Rows.LastOrDefault()?.Spots ?? fillSpots });
+
+    private void Revert() => draft = Draft.From(screen!);
+
+    private Task SaveAsync() => RunAsync(async () =>
+    {
+        await Screens.UpdateAsync(User, ScreenId, new ScreenLayoutInput(draft.Name, draft.Scheme, draft.RowSpots));
+        screen = await Screens.GetAsync(User, ScreenId);
+        draft = Draft.From(screen);
+    }, "Screen saved.");
+}

@@ -24,7 +24,7 @@ else
                     <div class="card-body">
                         <h2 class="h5 card-title"><a href="theaters/@t.Slug">@t.Name</a></h2>
                         <p class="card-text text-muted mb-1">@Location(t)</p>
-                        <p class="card-text small">@t.Screens.Count screen@(t.Screens.Count == 1 ? "" : "s") · @t.Screens.Sum(s => s.CarCapacity) cars</p>
+                        <p class="card-text small">@t.Screens.Count screen@(t.Screens.Count == 1 ? "" : "s") · @t.Screens.Sum(s => s.SpotCount) spots</p>
                     </div>
                 </div>
             </div>
