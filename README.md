@@ -34,7 +34,7 @@ Docker on one EC2 server. The setup mirrors LegoList.
 - **Employees** are separate accounts bound to one theater, created only by invitation from its
   owner or anyone with "Invite employees". What they can do is set by **roles**.
 - **Roles** are defined per theater by its owner (Manage → Roles). A role is a named set of actions
-  (edit profile, manage screens, manage schedule, view/invite/manage employees, manage roles). Employees can have several
+  (edit profile, manage screens, manage schedule, manage pricing, view/invite/manage employees, manage roles). Employees can have several
   roles and get the union of their actions; new employees have none, so they can't do anything until
   assigned a role. New theaters start with Manager (everything), Operations, Ticketing and Concessions,
   which owners can change or delete. Someone with "Manage roles" can only grant, change or remove
@@ -56,6 +56,17 @@ invitee sets a password or continues with Google using the invited address.
 - The **schedule** (Manage → Schedule) holds the theater's films and their showtimes. Showtimes on a
   screen can't overlap, are entered and shown in the theater's time zone (profile → Time zone, an IANA
   name such as `America/Chicago`), and are stored in UTC.
+
+## Pricing
+
+- **Price schedules** (Manage → Pricing) are per-theater named lists of ticket options, e.g. "1 occupant $10",
+  "2 occupants $15", "Car load $25". Each theater has one default schedule ("Standard" for new theaters).
+- A showtime uses the default schedule unless it's set to another one on the schedule page (e.g. "3D" or a
+  special event). New schedules can start as a copy of an existing one. A schedule used by upcoming
+  showtimes can't be deleted; past showtimes that used it fall back to the default.
+- **Add-ons** are per-theater fees (e.g. outside food) and discounts, either a dollar amount or a percent
+  (e.g. veterans, seniors). Inactive add-ons are kept but not offered.
+- "Manage pricing" controls schedules and add-ons; choosing a showtime's schedule is part of "Manage schedule".
 
 ## Local development
 

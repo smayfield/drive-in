@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using DriveIn.Web.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace DriveIn.Web.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260928004716_TicketPricing")]
+    partial class TicketPricing
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -58,12 +61,6 @@ namespace DriveIn.Web.Data.Migrations
                         .HasColumnType("character varying(60)")
                         .HasColumnName("name");
 
-                    b.Property<string>("NormalizedName")
-                        .IsRequired()
-                        .HasMaxLength(60)
-                        .HasColumnType("character varying(60)")
-                        .HasColumnName("normalized_name");
-
                     b.Property<int>("SortOrder")
                         .HasColumnType("integer")
                         .HasColumnName("sort_order");
@@ -75,9 +72,8 @@ namespace DriveIn.Web.Data.Migrations
                     b.HasKey("Id")
                         .HasName("pk_add_ons");
 
-                    b.HasIndex("TheaterId", "NormalizedName")
-                        .IsUnique()
-                        .HasDatabaseName("ix_add_ons_theater_id_normalized_name");
+                    b.HasIndex("TheaterId")
+                        .HasDatabaseName("ix_add_ons_theater_id");
 
                     b.ToTable("add_ons", (string)null);
                 });

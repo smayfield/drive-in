@@ -4,12 +4,13 @@
 @inherits AppComponentBase
 @inject TheaterService Theaters
 @inject ScheduleService Schedule
+@inject PricingService Pricing
 @inject TheaterAccess Access
 @inject TimeProvider Time
 
 <PageTitle>Schedule · Manage · Drive-In Online</PageTitle>
 
-<p><a href="manage/@Id">&larr; Back to theater</a> · <a href="manage/@Id/lot">Lot map</a></p>
+<p><a href="manage/@Id">&larr; Back to theater</a> · <a href="manage/@Id/lot">Lot map</a> · <a href="manage/@Id/pricing">Pricing</a></p>
 
 @if (theater is null)
 {
@@ -72,7 +73,17 @@ else
                             <input id="st-time" class="form-control" type="time" @bind="newShowtime.Time" />
                         </div>
                         <div class="col-md-2">
-                            <button class="btn btn-primary w-100" @onclick="AddShowtimeAsync">Schedule</button>
+                            <label class="form-label" for="st-pricing">Pricing</label>
+                            <select id="st-pricing" class="form-select" @bind="newShowtime.PriceScheduleId">
+                                <option value="0">@DefaultLabel</option>
+                                @foreach (var p in OtherSchedules)
+                                {
+                                    <option value="@p.Id">@p.Name</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <button class="btn btn-primary" @onclick="AddShowtimeAsync">Schedule</button>
                         </div>
                     </div>
                 }
@@ -97,6 +108,23 @@ else
                             <td style="width: 12rem">@s.StartsLocal.ToString("h:mm tt")–@s.EndsLocal.ToString("h:mm tt")</td>
                             <td style="width: 12rem">@s.ScreenName</td>
                             <td>@s.FilmTitle @if (s.Rating is not null) { <span class="badge text-bg-secondary ms-1">@s.Rating</span> }</td>
+                            <td style="width: 13rem">
+                                @if (canManage)
+                                {
+                                    <select class="form-select form-select-sm" value="@(s.PriceScheduleId ?? 0)" aria-label="Pricing for this showtime"
+                                            @onchange="e => SetPricingAsync(s.Id, e.Value)">
+                                        <option value="0">@DefaultLabel</option>
+                                        @foreach (var p in OtherSchedules.Concat(Scheduled(s)))
+                                        {
+                                            <option value="@p.Id">@p.Name</option>
+                                        }
+                                    </select>
+                                }
+                                else if (s.PriceScheduleName is not null)
+                                {
+                                    <span class="badge text-bg-info">@s.PriceScheduleName pricing</span>
+                                }
+                            </td>
                             @if (canManage)
                             {
                                 <td class="text-end">
@@ -184,12 +212,14 @@ else
         public int FilmId { get; set; }
         public DateOnly Date { get; set; }
         public TimeOnly Time { get; set; } = new(20, 30);
+        public int PriceScheduleId { get; set; } // 0 = the default
     }
 
     private Theater? theater;
     private bool canManage;
     private List<Film> films = [];
     private List<ShowtimeView> showtimes = [];
+    private List<PriceSchedule> priceSchedules = [];
     private ShowtimeDraft newShowtime = new();
     private Film newFilm = NewFilm();
     private Film? editingFilm;
@@ -214,6 +244,9 @@ else
     {
         films = await Schedule.ListFilmsAsync(User, Id);
         showtimes = await Schedule.ListUpcomingAsync(User, Id);
+        priceSchedules = (await Pricing.GetAsync(User, Id)).Schedules;
+        if (!OtherSchedules.Any(p => p.Id == newShowtime.PriceScheduleId))
+            newShowtime.PriceScheduleId = 0;
         if (!films.Any(f => f.Id == newShowtime.FilmId))
             newShowtime.FilmId = films.FirstOrDefault()?.Id ?? 0;
         editingFilm = null;
@@ -223,7 +256,8 @@ else
 
     private Task AddShowtimeAsync() => RunAsync(async () =>
     {
-        await Schedule.AddShowtimeAsync(User, newShowtime.ScreenId, newShowtime.FilmId, newShowtime.Date, newShowtime.Time);
+        await Schedule.AddShowtimeAsync(User, newShowtime.ScreenId, newShowtime.FilmId, newShowtime.Date, newShowtime.Time,
+            newShowtime.PriceScheduleId == 0 ? null : newShowtime.PriceScheduleId);
         await ReloadAsync();
     }, "Showtime scheduled.");
 
@@ -264,4 +298,25 @@ else
             await ReloadAsync();
         }
     });
+
+    private string DefaultLabel => $"Default ({priceSchedules.FirstOrDefault(p => p.IsDefault)?.Name ?? "none"})";
+
+    private IEnumerable<PriceSchedule> OtherSchedules => priceSchedules.Where(p => !p.IsDefault);
+
+    // A showtime pinned to the current default schedule by id still needs its option in the list.
+    private IEnumerable<PriceSchedule> Scheduled(ShowtimeView s) =>
+        priceSchedules.Where(p => p.IsDefault && p.Id == s.PriceScheduleId);
+
+    private Task SetPricingAsync(int showtimeId, object? value) => RunAsync(async () =>
+    {
+        var id = int.TryParse(value?.ToString(), out var parsed) && parsed != 0 ? parsed : (int?)null;
+        try
+        {
+            await Schedule.SetShowtimePricingAsync(User, showtimeId, id);
+        }
+        finally
+        {
+            await ReloadAsync();
+        }
+    }, "Pricing updated.");
 }

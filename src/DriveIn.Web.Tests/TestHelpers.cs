@@ -71,6 +71,7 @@ public sealed class TestApp : IAsyncDisposable
         services.AddScoped<TheaterService>();
         services.AddScoped<ScreenService>();
         services.AddScoped<ScheduleService>();
+        services.AddScoped<PricingService>();
         services.AddScoped<InvitationService>();
         services.AddScoped<EmployeeService>();
         services.AddScoped<UserAdminService>();

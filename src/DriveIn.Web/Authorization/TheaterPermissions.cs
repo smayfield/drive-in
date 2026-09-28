@@ -13,6 +13,7 @@ public static class TheaterPermissions
     public const string EditProfile = "theater.edit";
     public const string ManageScreens = "screens.manage";
     public const string ManageSchedule = "schedule.manage";
+    public const string ManagePricing = "pricing.manage";
     public const string ViewEmployees = "employees.view";
     public const string InviteEmployees = "employees.invite";
     public const string ManageEmployees = "employees.manage";
@@ -22,7 +23,8 @@ public static class TheaterPermissions
     [
         new(EditProfile, "Theater", "Edit theater profile", "Change the theater's name, address, contact details and description."),
         new(ManageScreens, "Theater", "Manage screens", "Add, rename, reorder and delete screens and lay out their parking spots."),
-        new(ManageSchedule, "Theater", "Manage schedule", "Add and edit films and schedule showtimes on the screens."),
+        new(ManageSchedule, "Theater", "Manage schedule", "Add and edit films, schedule showtimes on the screens, and choose each showtime's price schedule."),
+        new(ManagePricing, "Theater", "Manage pricing", "Set up price schedules and ticket prices, and the add-ons (fees and discounts) offered with tickets."),
         new(ViewEmployees, "Staff", "View employees", "See the employee list, each employee's roles, and pending invitations."),
         new(InviteEmployees, "Staff", "Invite employees", "Send, resend and revoke employee invitations."),
         new(ManageEmployees, "Staff", "Manage employees", "Send employees password resets and delete employee accounts."),

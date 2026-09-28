@@ -104,6 +104,7 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
         db.Theaters.Add(theater);
         db.TheaterRoles.AddRange(DefaultTheaterRoles.CreateFor(theater, time.GetUtcNow()));
         db.Screens.Add(new Screen { Theater = theater, Name = "Screen 1" });
+        db.PriceSchedules.Add(new PriceSchedule { Theater = theater, Name = PricingService.DefaultScheduleName, IsDefault = true });
         await db.SaveChangesAsync();
         return theater;
     }
@@ -122,7 +123,7 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
         await db.SaveChangesAsync();
     }
 
-    // Deletes the theater with its screens, schedule, invitations, roles, and employee accounts
+    // Deletes the theater with its screens, schedule, pricing, invitations, roles, and employee accounts
     // (employee accounts are only valid for this theater, so they go too).
     public async Task DeleteAsync(ClaimsPrincipal user, int id)
     {
@@ -141,6 +142,9 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
         db.Users.RemoveRange(theater.Employees);
         db.Showtimes.RemoveRange(db.Showtimes.Where(s => s.Screen!.TheaterId == id));
         db.Films.RemoveRange(db.Films.Where(f => f.TheaterId == id));
+        db.AddOns.RemoveRange(db.AddOns.Where(a => a.TheaterId == id));
+        db.PriceOptions.RemoveRange(db.PriceOptions.Where(o => o.Schedule!.TheaterId == id));
+        db.PriceSchedules.RemoveRange(db.PriceSchedules.Where(s => s.TheaterId == id));
         db.Screens.RemoveRange(theater.Screens);
         db.Theaters.Remove(theater);
         await db.SaveChangesAsync();
