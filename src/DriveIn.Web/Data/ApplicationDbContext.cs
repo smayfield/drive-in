@@ -10,6 +10,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<Screen> Screens => Set<Screen>();
     public DbSet<Film> Films => Set<Film>();
     public DbSet<Showtime> Showtimes => Set<Showtime>();
+    public DbSet<PriceSchedule> PriceSchedules => Set<PriceSchedule>();
+    public DbSet<PriceOption> PriceOptions => Set<PriceOption>();
+    public DbSet<AddOn> AddOns => Set<AddOn>();
     public DbSet<Invitation> Invitations => Set<Invitation>();
     public DbSet<TheaterRole> TheaterRoles => Set<TheaterRole>();
     public DbSet<TheaterRolePermission> TheaterRolePermissions => Set<TheaterRolePermission>();
@@ -76,6 +79,41 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             s.HasOne(x => x.Film)
                 .WithMany(x => x.Showtimes)
                 .HasForeignKey(x => x.FilmId)
+                .OnDelete(DeleteBehavior.Cascade);
+            s.HasOne(x => x.PriceSchedule)
+                .WithMany()
+                .HasForeignKey(x => x.PriceScheduleId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<PriceSchedule>(p =>
+        {
+            p.HasIndex(x => new { x.TheaterId, x.NormalizedName }).IsUnique();
+            // One default per theater.
+            p.HasIndex(x => x.TheaterId).IsUnique().HasFilter("is_default").HasDatabaseName("ix_price_schedules_one_default_per_theater");
+            p.Property(x => x.NormalizedName).IsRequired();
+            p.HasOne(x => x.Theater)
+                .WithMany()
+                .HasForeignKey(x => x.TheaterId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<PriceOption>(o =>
+        {
+            o.Property(x => x.Price).HasPrecision(8, 2);
+            o.HasOne(x => x.Schedule)
+                .WithMany(s => s.Options)
+                .HasForeignKey(x => x.ScheduleId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<AddOn>(a =>
+        {
+            a.Property(x => x.Amount).HasPrecision(8, 2);
+            a.Property(x => x.Kind).HasConversion<string>().HasMaxLength(20);
+            a.HasOne(x => x.Theater)
+                .WithMany()
+                .HasForeignKey(x => x.TheaterId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

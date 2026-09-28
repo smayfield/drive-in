@@ -25,6 +25,7 @@ else
                 <a class="btn btn-outline-secondary" href="theaters/@theater.Slug">View public page</a>
             }
             <a class="btn btn-outline-primary" href="manage/@theater.Id/schedule">Schedule</a>
+            <a class="btn btn-outline-primary" href="manage/@theater.Id/pricing">Pricing</a>
             @if (EmployeeService.ListingPermissions.Any(Can) || Can(TheaterPermissions.InviteEmployees))
             {
                 <a class="btn btn-outline-primary" href="manage/@theater.Id/employees">Employees</a>

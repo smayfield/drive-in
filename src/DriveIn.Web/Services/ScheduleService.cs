@@ -8,10 +8,10 @@ namespace DriveIn.Web.Services;
 
 public sealed record FilmInput(string Title, string? Rating, int RuntimeMinutes);
 
-// Local times are in the theater's time zone.
+// Local times are in the theater's time zone. PriceScheduleId/Name are null when the showtime uses the default prices.
 public sealed record ShowtimeView(
     int Id, int ScreenId, string ScreenName, int FilmId, string FilmTitle, string? Rating,
-    DateTime StartsLocal, DateTime EndsLocal);
+    DateTime StartsLocal, DateTime EndsLocal, int? PriceScheduleId, string? PriceScheduleName);
 
 // A theater's films and the showtimes scheduled on its screens. Any member may view the schedule;
 // changing it requires ManageSchedule.
@@ -77,7 +77,7 @@ public sealed class ScheduleService(IDbContextFactory<ApplicationDbContext> dbFa
         var theater = await FindTheaterAsync(db, theaterId);
         Guard.RequireMember(user, theater);
         var now = time.GetUtcNow();
-        var query = db.Showtimes.AsNoTracking().Include(s => s.Film).Include(s => s.Screen)
+        var query = db.Showtimes.AsNoTracking().Include(s => s.Film).Include(s => s.Screen).Include(s => s.PriceSchedule)
             .Where(s => s.Screen!.TheaterId == theaterId && s.StartsAt > now.AddMinutes(-Film.MaxRuntimeMinutes));
         if (screenId is int id)
             query = query.Where(s => s.ScreenId == id);
@@ -85,11 +85,14 @@ public sealed class ScheduleService(IDbContextFactory<ApplicationDbContext> dbFa
         return showtimes.Where(s => EndsAt(s) > now)
             .OrderBy(s => s.StartsAt).ThenBy(s => s.Screen!.SortOrder)
             .Select(s => new ShowtimeView(s.Id, s.ScreenId, s.Screen!.Name, s.FilmId, s.Film!.Title, s.Film.Rating,
-                TheaterTime.ToLocal(theater, s.StartsAt), TheaterTime.ToLocal(theater, EndsAt(s))))
+                TheaterTime.ToLocal(theater, s.StartsAt), TheaterTime.ToLocal(theater, EndsAt(s)),
+                s.PriceScheduleId, s.PriceSchedule?.Name))
             .ToList();
     }
 
-    public async Task<Showtime> AddShowtimeAsync(ClaimsPrincipal user, int screenId, int filmId, DateOnly date, TimeOnly startTime)
+    // priceScheduleId null uses the theater's default prices.
+    public async Task<Showtime> AddShowtimeAsync(ClaimsPrincipal user, int screenId, int filmId, DateOnly date, TimeOnly startTime,
+        int? priceScheduleId = null)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var screen = await db.Screens.Include(s => s.Theater).FirstOrDefaultAsync(s => s.Id == screenId)
@@ -103,8 +106,9 @@ public sealed class ScheduleService(IDbContextFactory<ApplicationDbContext> dbFa
             throw new AppValidationException("Showtimes must be in the future.");
         var endsAt = startsAt.AddMinutes(film.RuntimeMinutes);
         await EnsureFreeAsync(db, screen.Theater!, screenId, screen.Name, startsAt, endsAt, exceptId: null);
+        await EnsureScheduleAsync(db, screen.TheaterId, priceScheduleId);
 
-        var showtime = new Showtime { ScreenId = screenId, FilmId = filmId, StartsAt = startsAt };
+        var showtime = new Showtime { ScreenId = screenId, FilmId = filmId, StartsAt = startsAt, PriceScheduleId = priceScheduleId };
         db.Showtimes.Add(showtime);
         await db.SaveChangesAsync();
         return showtime;
@@ -118,6 +122,24 @@ public sealed class ScheduleService(IDbContextFactory<ApplicationDbContext> dbFa
         await auth.RequireAsync(user, showtime.Screen!.Theater!, TheaterPermissions.ManageSchedule);
         db.Showtimes.Remove(showtime);
         await db.SaveChangesAsync();
+    }
+
+    // Overrides the showtime's prices with another of the theater's price schedules; null goes back to the default.
+    public async Task SetShowtimePricingAsync(ClaimsPrincipal user, int showtimeId, int? priceScheduleId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var showtime = await db.Showtimes.Include(s => s.Screen!.Theater).FirstOrDefaultAsync(s => s.Id == showtimeId)
+            ?? throw new NotFoundException("Showtime not found.");
+        await auth.RequireAsync(user, showtime.Screen!.Theater!, TheaterPermissions.ManageSchedule);
+        await EnsureScheduleAsync(db, showtime.Screen.TheaterId, priceScheduleId);
+        showtime.PriceScheduleId = priceScheduleId;
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task EnsureScheduleAsync(ApplicationDbContext db, int theaterId, int? priceScheduleId)
+    {
+        if (priceScheduleId is int id && !await db.PriceSchedules.AnyAsync(p => p.Id == id && p.TheaterId == theaterId))
+            throw new NotFoundException("Price schedule not found.");
     }
 
     private static async Task EnsureFreeAsync(ApplicationDbContext db, Theater theater, int screenId, string screenName,

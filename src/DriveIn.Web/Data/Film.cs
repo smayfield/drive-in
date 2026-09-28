@@ -36,6 +36,10 @@ public class Showtime
     public int FilmId { get; set; }
     public Film? Film { get; set; }
 
+    // The theater's default schedule when null.
+    public int? PriceScheduleId { get; set; }
+    public PriceSchedule? PriceSchedule { get; set; }
+
     // UTC. Entered and shown in the theater's time zone.
     public DateTimeOffset StartsAt { get; set; }
 }
