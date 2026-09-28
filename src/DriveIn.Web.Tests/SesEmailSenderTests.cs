@@ -21,6 +21,7 @@ public class SesEmailSenderTests
             {
                 ErrorCode = "MessageRejected",
                 StatusCode = HttpStatusCode.BadRequest,
+                RequestId = "req-123",
             };
     }
 
@@ -34,6 +35,7 @@ public class SesEmailSenderTests
         var ex = await Assert.ThrowsAsync<EmailSendException>(() => sender.SendAsync("new@example.com", "Hi", "<p>Hi</p>"));
 
         Assert.Contains("MessageRejected", ex.Message);
+        Assert.Contains("req-123", ex.Message);
         Assert.DoesNotContain("new@example.com", ex.ToString());
         Assert.Null(ex.InnerException);
     }

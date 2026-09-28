@@ -36,8 +36,9 @@ public sealed class SesEmailSender(IAmazonSimpleEmailServiceV2 ses, Microsoft.Ex
         catch (Amazon.Runtime.AmazonServiceException ex)
         {
             // SES error messages can name the recipient (e.g. a sandbox rejection lists the unverified address), and
-            // callers log what we throw, so pass on only the error code and drop the original exception.
-            throw new EmailSendException($"SES couldn't send the email: {ex.ErrorCode} (HTTP {(int)ex.StatusCode}).");
+            // callers log what we throw, so pass on only the error code and AWS request ID and drop the original exception.
+            throw new EmailSendException(
+                $"SES couldn't send the email: {ex.ErrorCode} (HTTP {(int)ex.StatusCode}, AWS request {ex.RequestId}).");
         }
         // The recipient isn't logged: email addresses don't belong in production logs.
         logger.LogInformation("Sent email {Subject}", subject);
