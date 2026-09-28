@@ -3,7 +3,7 @@
 
 <PageTitle>Drive-In Online · Software for drive-in theaters</PageTitle>
 <HeadContent>
-    <meta name="description" content="Turn-key software for drive-in theaters: online ticket sales, lot capacity, concessions, and more." />
+    <meta name="description" content="Turn-key software for drive-in theaters: sell tickets by the spot online and at the gate, schedule showtimes, and manage staff. Free demo; billed only in season." />
 </HeadContent>
 
 <header class="hero">
@@ -11,13 +11,14 @@
     <div class="beam" aria-hidden="true"></div>
 
     <div class="topbar">
+        <a class="cta" href="features">Features</a>
+        <a class="cta" href="pricing">Pricing</a>
         <AuthorizeView>
             <Authorized>
                 <a class="cta" href="theaters">Open the app</a>
             </Authorized>
             <NotAuthorized>
                 <a class="cta" href="Account/Login">Sign in</a>
-                <a class="cta" href="Account/Register">Create account</a>
             </NotAuthorized>
         </AuthorizeView>
     </div>
@@ -30,7 +31,10 @@
         </div>
 
         <p class="lede reveal">Sell tickets by the carload, fill the lot, and keep the concession stand humming. Everything your drive-in needs, all in one place.</p>
-        <span class="pill reveal">Coming soon</span>
+        <div class="cta-row reveal">
+            <a class="cta cta-bulb" href="get-started">Start your free demo</a>
+            <a class="cta" href="pricing">See pricing</a>
+        </div>
     </div>
 
     <svg class="cars" viewBox="0 0 1200 120" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
@@ -56,36 +60,55 @@
         <article class="card reveal">
             <span class="icon" aria-hidden="true">🎟️</span>
             <h3>Online ticket sales</h3>
-            <p>Sell tickets by the car or by the person, with mobile passes scanned right at the gate.</p>
+            <p>Guests pick their exact spot on a live map of your lot and pay by card. A spot is held while they check out, so it's never sold twice.</p>
         </article>
         <article class="card reveal">
-            <span class="icon" aria-hidden="true">🚗</span>
-            <h3>Lot &amp; capacity</h3>
-            <p>Know how many cars are coming, cap sales per screen, and keep the lines moving.</p>
-        </article>
-        <article class="card reveal">
-            <span class="icon" aria-hidden="true">🍿</span>
-            <h3>Concessions</h3>
-            <p>Let guests order snacks from their car and pick up without missing the show.</p>
+            <span class="icon" aria-hidden="true">🚦</span>
+            <h3>The gate</h3>
+            <p>Scan the QR code or type a 4-character gate code to check cars in, and sell tickets to drive-ups from the same screen.</p>
         </article>
         <article class="card reveal">
             <span class="icon" aria-hidden="true">🎬</span>
             <h3>Showtimes &amp; screens</h3>
-            <p>Schedule double features across every screen and publish them everywhere at once.</p>
+            <p>Lay out each screen's rows of spots, and schedule single films or double features with intermissions.</p>
         </article>
         <article class="card reveal">
-            <span class="icon" aria-hidden="true">📣</span>
-            <h3>Marketing</h3>
-            <p>Announce new features, weather updates, and special events to your regulars.</p>
+            <span class="icon" aria-hidden="true">💵</span>
+            <h3>Your prices</h3>
+            <p>Price by the car or by the carload, with add-ons like outside-food fees and senior or veteran discounts.</p>
         </article>
         <article class="card reveal">
-            <span class="icon" aria-hidden="true">📊</span>
-            <h3>Reporting</h3>
-            <p>See ticket, concession, and attendance numbers for every night at a glance.</p>
+            <span class="icon" aria-hidden="true">👥</span>
+            <h3>Staff &amp; roles</h3>
+            <p>Invite your crew and choose exactly what each role can do, from the box office to the schedule.</p>
+        </article>
+        <article class="card reveal">
+            <span class="icon" aria-hidden="true">🍿</span>
+            <h3>Concessions <span class="soon">Coming soon</span></h3>
+            <p>Let guests order snacks from their car and pick up without missing the show.</p>
         </article>
     </div>
+
+    <h2 class="reveal" style="margin-top: 56px">How it works</h2>
+    <p class="section-lede reveal">Try everything free. Pay only for the months your gates are open.</p>
+    <div class="grid">
+        <article class="card reveal">
+            <span class="icon" aria-hidden="true">1</span>
+            <h3>Sign up free</h3>
+            <p>Create an account and your theater in a couple of minutes. No card needed.</p>
+        </article>
+        <article class="card reveal">
+            <span class="icon" aria-hidden="true">2</span>
+            <h3>Set it up in demo mode</h3>
+            <p>Add your screens, films, showtimes and prices, invite staff, and run test sales end to end. It's private until you go live.</p>
+        </article>
+        <article class="card reveal">
+            <span class="icon" aria-hidden="true">3</span>
+            <h3>Go live for the season</h3>
+            <p>Flip the switch when you're ready. You're billed per screen, only for months your season is open, with no per-ticket fees.</p>
+        </article>
+    </div>
+    <p class="reveal" style="margin-top: 28px"><a class="cta cta-outline" href="get-started">Start your free demo</a></p>
 </main>
 
-<footer class="wrap">
-    <p>&copy; <span id="year">@DateTime.UtcNow.Year</span> Drive-In Online</p>
-</footer>
+<MarketingFooter />

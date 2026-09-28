@@ -57,6 +57,10 @@ else
 
     <section class="card ticket-card mx-auto" style="max-width: 32rem">
         <div class="card-body text-center">
+            @if (t.IsTest)
+            {
+                <p class="badge text-bg-warning">Test ticket (demo theater): no money was charged</p>
+            }
             <h1 class="h4 mb-0">@v.Theater.Name</h1>
             <p class="small text-muted">@TicketReceipt.Address(v.Theater)</p>
             <h2 class="h5 mb-1">@s.Title</h2>

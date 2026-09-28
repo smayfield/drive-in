@@ -35,7 +35,23 @@ public class Theater
     public bool IsInSeason(DateOnly date) =>
         (SeasonOpensOn is not DateOnly opens || date >= opens) && (SeasonClosesOn is not DateOnly closes || date <= closes);
 
+    // Admin switch: an inactive theater is hidden and sells nothing, whatever its mode.
     public bool IsActive { get; set; } = true;
+
+    // Theaters that owners sign up themselves start in Demo: a private sandbox where the owner and staff can set
+    // everything up and try test sales, until an admin approves their request to go live (and billing starts).
+    public TheaterMode Mode { get; set; } = TheaterMode.Live;
+    public DateTimeOffset? GoLiveRequestedAt { get; set; }
+    public DateTimeOffset? LiveSince { get; set; }
+
+    // When the owner accepted the Terms of Service to sign the theater up, and which version.
+    public DateTimeOffset? TermsAcceptedAt { get; set; }
+    [MaxLength(40)] public string? TermsVersion { get; set; }
+
+    public bool IsDemo => Mode == TheaterMode.Demo;
+
+    // Listed, and selling real tickets, to everyone. Demo theaters are only visible to their members.
+    public bool IsPublic => IsActive && Mode == TheaterMode.Live;
 
     // Nullable only so an admin can create a theater before its owner accepts an invite.
     public string? OwnerId { get; set; }
@@ -67,4 +83,11 @@ public static class Seasons
         (null, DateOnly closes) => $"through {closes:MMM d, yyyy}",
         _ => "year-round",
     };
+}
+
+// Stored by name, so members can be added but not renamed.
+public enum TheaterMode
+{
+    Demo,
+    Live,
 }

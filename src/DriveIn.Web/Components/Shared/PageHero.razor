@@ -1,0 +1,23 @@
+@* The night-sky header strip at the top of an inner marketing page. *@
+
+<header class="page-hero">
+    <div class="wrap">
+        @if (Eyebrow is not null)
+        {
+            <p class="eyebrow">@Eyebrow</p>
+        }
+        <h1>@Title</h1>
+        @if (Lede is not null)
+        {
+            <p class="page-lede">@Lede</p>
+        }
+        @ChildContent
+    </div>
+</header>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public string? Eyebrow { get; set; }
+    [Parameter] public string? Lede { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

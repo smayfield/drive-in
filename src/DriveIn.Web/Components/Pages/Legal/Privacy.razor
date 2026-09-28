@@ -1,0 +1,92 @@
+@page "/legal/privacy"
+@layout MarketingLayout
+@using Microsoft.Extensions.Options
+@inject IOptions<CompanyOptions> CompanyOptions
+
+<PageTitle>Privacy Policy · Drive-In Online</PageTitle>
+
+<MarketingNav />
+<PageHero Eyebrow="Legal" Title="Privacy Policy" Lede="@($"Effective {C.EffectiveDate}")" />
+
+<main class="wrap page">
+    <div class="prose">
+        <LegalDraftBanner />
+
+        <p>
+            This policy explains what personal information Drive-In Online (provided by @C.Name, "we") collects, how we use it, and your choices.
+            For tickets, the theater you buy from also receives your information and handles it under its own policies.
+        </p>
+
+        <h2>What we collect</h2>
+        <ul>
+            <li><strong>Account information:</strong> your email address, display name, and a salted hash of your password (never the password itself).
+                If you sign in with Google, we receive your email address and whether Google has verified it.</li>
+            <li><strong>Theater information:</strong> what owners and staff enter: the theater's profile, screens, schedule, prices, and staff
+                names, email addresses and roles.</li>
+            <li><strong>Ticket purchases:</strong> the showing, spot, ticket options and add-ons, amount, time of purchase, the email address the
+                receipt goes to, and gate check-in times. For card payments we keep only the card brand and last four digits; the full card
+                number goes to the payment processor and isn't stored by us.</li>
+            <li><strong>Technical information:</strong> server logs with IP addresses, browser type and the pages requested, kept to operate and
+                secure the Service.</li>
+        </ul>
+
+        <h2>Cookies</h2>
+        <p>
+            We use only cookies needed for the Service to work: to keep you signed in and to protect forms against forgery. We don't use
+            advertising or analytics cookies. Our pages load fonts from Google Fonts, which receives your IP address when you visit.
+        </p>
+
+        <h2>How we use it</h2>
+        <ul>
+            <li>to provide the Service: sign-in, running theaters, selling and checking tickets, and sending receipts, invitations and account emails;</li>
+            <li>to bill theaters for their subscriptions;</li>
+            <li>to keep the Service secure, prevent fraud and abuse, and fix problems;</li>
+            <li>to meet legal obligations.</li>
+        </ul>
+        <p>We don't sell personal information, and we don't use it for advertising.</p>
+
+        <h2>Who we share it with</h2>
+        <ul>
+            <li><strong>Theaters:</strong> when you buy a ticket, the theater sees your purchase and receipt email. Staff see what their roles allow.</li>
+            <li><strong>Service providers</strong> who process data for us: Amazon Web Services (hosting, database, backups and email delivery),
+                Google (if you choose Google sign-in), and our payment processor (card payments).</li>
+            <li><strong>When the law requires it,</strong> or to protect the rights and safety of users, theaters or the public.</li>
+            <li><strong>In a business transfer,</strong> such as a merger or sale, subject to this policy.</li>
+        </ul>
+
+        <h2>How long we keep it</h2>
+        <p>
+            Account information is kept while your account exists. Ticket sales are kept as the theater's business records. Database backups are
+            kept for 30 days. Server logs are kept only as long as needed to operate and secure the Service.
+        </p>
+
+        <h2>Your choices</h2>
+        <ul>
+            <li>Update your email address and password under your account settings.</li>
+            <li>Download your personal data, or delete your account, under Account → Personal data. Tickets you bought stay with the theater as
+                sales records but are no longer linked to your account.</li>
+            <li>Depending on where you live, you may have other rights, such as to access or correct your information; contact us to use them.</li>
+        </ul>
+
+        <h2>Security</h2>
+        <p>
+            Connections are encrypted, passwords are hashed, and access to data is limited to what's needed to run the Service. No system is
+            perfectly secure; if a breach affects your information, we'll notify you as the law requires.
+        </p>
+
+        <h2>Children</h2>
+        <p>The Service isn't directed to children under 13, and we don't knowingly collect their personal information.</p>
+
+        <h2>Changes</h2>
+        <p>We'll post any changes here with a new effective date, and email account holders about material changes.</p>
+
+        <h2>Contact</h2>
+        <p>@C.Name · @C.Address · <ContactLink /></p>
+    </div>
+</main>
+
+<MarketingFooter />
+
+@code {
+    private CompanyOptions C => CompanyOptions.Value;
+}

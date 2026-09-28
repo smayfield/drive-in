@@ -3,6 +3,7 @@
 @rendermode InteractiveServer
 @inherits AppComponentBase
 @inject TheaterService Theaters
+@inject OnboardingService Onboarding
 
 <PageTitle>Theaters · Admin · Drive-In Online</PageTitle>
 
@@ -12,6 +13,42 @@
 </div>
 
 <Alerts Error="@Error" Success="@Success" />
+
+@if (requests.Count > 0)
+{
+    <section class="card border-warning mb-4">
+        <div class="card-body">
+            <h2 class="h5">Go-live requests</h2>
+            <p class="small text-muted">Activating lists the theater publicly, starts real sales and billing, and deletes its demo test tickets.</p>
+            @foreach (var r in requests)
+            {
+                <div class="border-top pt-2 mt-2" @key="r.Id">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <div>
+                            <a href="admin/theaters/@r.Id"><strong>@r.Name</strong></a>
+                            <span class="text-muted small">
+                                · @(r.Owner?.Email ?? "no owner") · asked @TheaterTime.ToLocal(r, r.GoLiveRequestedAt!.Value).ToString("MMM d, h:mm tt")
+                                · @r.Screens.Count screen@(r.Screens.Count == 1 ? "" : "s")
+                            </span>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <a class="btn btn-sm btn-outline-secondary" href="manage/@r.Id">Review setup</a>
+                            <button class="btn btn-sm btn-success" @onclick="() => ActivateAsync(r)">Activate</button>
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => decliningId = decliningId == r.Id ? null : r.Id">Decline…</button>
+                        </div>
+                    </div>
+                    @if (decliningId == r.Id)
+                    {
+                        <div class="input-group input-group-sm mt-2">
+                            <input class="form-control" placeholder="Note to the owner (optional)" @bind="declineNote" maxlength="1000" aria-label="Note to the owner" />
+                            <button class="btn btn-danger" @onclick="() => DeclineAsync(r)">Decline and email owner</button>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </section>
+}
 
 @if (theaters is not null)
 {
@@ -26,6 +63,8 @@
                     <td>
                         <a href="admin/theaters/@t.Id">@t.Name</a>
                         @if (!t.IsActive) { <span class="badge text-bg-secondary ms-1">Inactive</span> }
+                        @if (t.Mode == TheaterMode.Demo) { <span class="badge text-bg-info ms-1">Demo</span> }
+                        @if (t.GoLiveRequestedAt is not null) { <span class="badge text-bg-warning ms-1">Wants to go live</span> }
                     </td>
                     <td><code>@t.Slug</code></td>
                     <td>@string.Join(", ", new[] { t.City, t.State }.Where(s => !string.IsNullOrWhiteSpace(s)))</td>
@@ -58,11 +97,30 @@
     private List<TheaterSummary>? theaters;
     private int? confirmDeleteId;
 
+    private List<Theater> requests = [];
+    private int? decliningId;
+    private string declineNote = "";
+
     protected override async Task LoadAsync()
     {
         theaters = await Theaters.AdminListAsync(User);
+        requests = await Onboarding.ListGoLiveRequestsAsync(User);
         confirmDeleteId = null;
+        decliningId = null;
+        declineNote = "";
     }
+
+    private Task ActivateAsync(Theater theater) => RunAsync(async () =>
+    {
+        await Onboarding.ActivateAsync(User, theater.Id, BaseUri);
+        await LoadAsync();
+    }, $"{theater.Name} is live. The owner has been emailed.");
+
+    private Task DeclineAsync(Theater theater) => RunAsync(async () =>
+    {
+        await Onboarding.DeclineGoLiveAsync(User, theater.Id, declineNote);
+        await LoadAsync();
+    }, $"Declined {theater.Name}'s request. The owner has been emailed.");
 
     private static string DeleteLabel(TheaterSummary t) => t.EmployeeCount == 0
         ? "Confirm delete"

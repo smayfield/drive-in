@@ -19,6 +19,10 @@
                     <Authorized>
                         <li class="nav-item"><NavLink class="nav-link" href="theaters">Theaters</NavLink></li>
                         <li class="nav-item"><NavLink class="nav-link" href="tickets">My tickets</NavLink></li>
+                        @if (!manages && context.User.GetEmployeeTheaterId() is null)
+                        {
+                            <li class="nav-item"><NavLink class="nav-link" href="get-started">Sign up a theater</NavLink></li>
+                        }
                         @if (manages)
                         {
                             <li class="nav-item"><NavLink class="nav-link" href="manage">Manage</NavLink></li>

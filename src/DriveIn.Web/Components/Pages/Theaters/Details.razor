@@ -109,7 +109,7 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
-        theater = await Theaters.GetBySlugAsync(Slug);
+        theater = await Theaters.GetBySlugAsync((await AuthState).User, Slug);
         showings = theater is null ? [] : (await Sales.ListOnSaleAsync((await AuthState).User, Slug)).Showings;
     }
 }

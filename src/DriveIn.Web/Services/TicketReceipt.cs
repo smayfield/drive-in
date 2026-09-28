@@ -46,6 +46,8 @@ public sealed record TicketReceipt(string Subject, string Html, IReadOnlyList<In
         static string E(string? text) => WebUtility.HtmlEncode(text ?? "");
 
         var html = new StringBuilder();
+        if (t.IsTest)
+            html.Append("""<p style="background: #fff3cd; padding: 8px 12px; border-radius: 6px; font-family: Helvetica, Arial, sans-serif">Test ticket from a theater in demo mode: no money was charged and it won't admit a car once the theater goes live.</p>""");
         html.Append($"""
             <div style="font-family: Helvetica, Arial, sans-serif; max-width: 560px; color: #1a1a1a">
             <h1 style="font-size: 22px; margin: 0 0 4px">{E(view.Theater.Name)}</h1>
@@ -77,7 +79,7 @@ public sealed record TicketReceipt(string Subject, string Html, IReadOnlyList<In
             """);
 
         return new TicketReceipt(
-            $"Your ticket: {s.Title} at {view.Theater.Name}, {s.StartsLocal:ddd MMM d}, spot {t.SpotLabel}",
+            $"{(t.IsTest ? "[TEST] " : "")}Your ticket: {s.Title} at {view.Theater.Name}, {s.StartsLocal:ddd MMM d}, spot {t.SpotLabel}",
             html.ToString(),
             [new InlineImage(QrContentId, "ticket.png", "image/png", QrCodes.Png(link))]);
     }

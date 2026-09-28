@@ -1,0 +1,21 @@
+@* Site navigation for the public marketing pages (the home page puts these links over its hero instead). *@
+
+<nav class="site-nav" aria-label="Site">
+    <div class="wrap site-nav-inner">
+        <a class="site-brand" href="/">Drive-In Online</a>
+        <div class="site-links">
+            <a href="features">Features</a>
+            <a href="pricing">Pricing</a>
+            <a href="faq">FAQ</a>
+            <AuthorizeView>
+                <Authorized>
+                    <a href="theaters">Open the app</a>
+                </Authorized>
+                <NotAuthorized>
+                    <a href="Account/Login">Sign in</a>
+                </NotAuthorized>
+            </AuthorizeView>
+            <a class="cta cta-bulb" href="get-started">Start free demo</a>
+        </div>
+    </div>
+</nav>

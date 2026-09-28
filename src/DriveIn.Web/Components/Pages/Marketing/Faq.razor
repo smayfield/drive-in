@@ -1,0 +1,96 @@
+@page "/faq"
+@layout MarketingLayout
+@using Microsoft.Extensions.Options
+@inject IOptions<PlanOptions> Plans
+@inject IOptions<CompanyOptions> Company
+
+<PageTitle>FAQ · Drive-In Online</PageTitle>
+<HeadContent>
+    <meta name="description" content="Answers about Drive-In Online: the free demo, seasonal billing, ticket sales, the gate, refunds, weather and your data." />
+</HeadContent>
+
+<MarketingNav />
+<PageHero Eyebrow="FAQ" Title="Questions & answers" />
+
+<main class="wrap page">
+    <div class="prose faq">
+        <h2>Getting started</h2>
+        <details>
+            <summary>What does the free demo include?</summary>
+            <p>Everything. You can set up screens and spots, films and showtimes, prices and add-ons, and staff, and run test sales and
+               gate check-ins end to end. Test sales use test payments, so no money changes hands. Your theater stays private (only
+               you and your staff can see it) until you go live. There's no time limit and no card needed.</p>
+        </details>
+        <details>
+            <summary>How do I go live?</summary>
+            <p>When your theater is set up, ask to go live from your theater's manage page. We review it,
+               then your theater is listed publicly and starts selling real tickets. Test tickets from the demo are cleared out.</p>
+        </details>
+        <details>
+            <summary>What do I need to sell tickets online?</summary>
+            <p>Your screens with their spots laid out, ticket prices, and showtimes. Ticket money goes to your theater; card processing
+               is handled by our payment processor.</p>
+        </details>
+
+        <h2>Pricing and billing</h2>
+        <details>
+            <summary>How much does it cost?</summary>
+            <p>The Standard plan is @Plans.Value.PriceDisplay per screen, per month, billed only for the months your season is open.
+               There are no per-ticket fees from us. See <a href="pricing">Pricing</a> for examples.</p>
+        </details>
+        <details>
+            <summary>What counts as "in season"?</summary>
+            <p>Each calendar month your season touches, from the month you open through the month you close. If you don't set a season,
+               you're billed every month.</p>
+        </details>
+        <details>
+            <summary>Do you take a cut of ticket sales?</summary>
+            <p>No. The card processor charges its usual fees on each sale, but we don't add a per-ticket fee.</p>
+        </details>
+        <details>
+            <summary>Can I cancel?</summary>
+            <p>Yes. See the <a href="legal/terms">Terms of Service</a> for how cancellation and billing work.</p>
+        </details>
+
+        <h2>Tickets and the gate</h2>
+        <details>
+            <summary>How do guests get in?</summary>
+            <p>Every ticket comes with a QR code and a 4-character gate code, emailed on the receipt and shown under My tickets. Your gate
+               staff scan the code or type the gate code, see the spot and screen, and check the car in.</p>
+        </details>
+        <details>
+            <summary>Can I sell tickets at the gate too?</summary>
+            <p>Yes. Staff with the gate permission pick the showing and a spot, take the card on the terminal, and the car is checked in.
+               Gate sales and online sales share the same lot, so a spot is never sold twice.</p>
+        </details>
+        <details>
+            <summary>Can a ticket be used another night?</summary>
+            <p>No. A ticket is good for its showing only; the gate flags tickets for another date or ones already used.</p>
+        </details>
+        <details>
+            <summary>What about refunds and bad weather?</summary>
+            <p>Sales are final, including for weather, and that's stated at checkout and on every receipt. Refunds aren't supported yet.</p>
+        </details>
+
+        <h2>Your data</h2>
+        <details>
+            <summary>Who owns my theater's data?</summary>
+            <p>You do. See the <a href="legal/privacy">Privacy Policy</a> for what we collect and how it's used.</p>
+        </details>
+        <details>
+            <summary>Do you store card numbers?</summary>
+            <p>No. Only the card brand and last four digits are kept on a ticket.</p>
+        </details>
+
+        <h2>Still have questions?</h2>
+        <p>
+            @if (!string.IsNullOrWhiteSpace(Company.Value.ContactEmail))
+            {
+                <text>Email us at <a href="mailto:@Company.Value.ContactEmail">@Company.Value.ContactEmail</a>, or </text>
+            }
+            <a href="get-started">start a free demo</a> and look around.
+        </p>
+    </div>
+</main>
+
+<MarketingFooter />

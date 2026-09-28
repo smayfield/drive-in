@@ -37,6 +37,10 @@ public class Ticket
     // Changed on every update so concurrent changes (paying vs. the hold expiring) can't both win.
     public Guid Stamp { get; set; } = Guid.NewGuid();
 
+    // Sold by a theater in demo mode: a trial run through the dummy payment processor, not a real sale. Test
+    // tickets are deleted when the theater goes live.
+    public bool IsTest { get; set; }
+
     // --- Set when sold ---
 
     public DateTimeOffset? SoldAt { get; set; }

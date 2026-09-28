@@ -83,6 +83,9 @@ public sealed class TestApp : IAsyncDisposable
         services.AddScoped<UserAdminService>();
         services.AddScoped<RoleService>();
         services.AddSingleton<IPaymentProcessor>(Payments);
+        services.AddSingleton<DummyPaymentProcessor>();
+        services.Configure<PlanOptions>(o => o.PricePerScreenPerMonth = 49m);
+        services.AddScoped<OnboardingService>();
         services.AddSingleton(Events);
         services.AddScoped<TicketSalesService>();
         Services = services.BuildServiceProvider();

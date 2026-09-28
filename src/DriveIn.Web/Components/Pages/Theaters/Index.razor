@@ -40,7 +40,9 @@ else
 @code {
     private List<Theater>? theaters;
 
-    protected override async Task OnInitializedAsync() => theaters = await Theaters.ListActiveAsync();
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync() => theaters = await Theaters.ListActiveAsync((await AuthState).User);
 
     internal static string Location(Theater t) =>
         string.Join(", ", new[] { t.City, t.State }.Where(s => !string.IsNullOrWhiteSpace(s)));

@@ -21,6 +21,9 @@ See README.md for the full picture. Conventions worth knowing before changing co
   their roles' permissions (none by default). `TheaterAccess` resolves this from the DB on every check.
   **Anti-escalation:** a non-owner can only create/edit/delete/assign/remove roles, or delete employees,
   whose permissions are a subset of their own (`Guard.RequireWithinAuthority`).
+- **Theater modes:** self-signed-up theaters start in `Demo` (private: only members see or buy, via
+  `TheaterService.CanBrowse`; sales go through `DummyPaymentProcessor` and tickets are `IsTest`). Admin activation
+  makes them `Live`. Anything new that's shown or sold publicly must respect `CanBrowse` / `IsPublic`.
 - Owner and Employee are relationships (`Theater.OwnerId`, `ApplicationUser.EmployeeTheaterId`), not
   Identity roles. `Admin` is the only Identity role. The employee-theater claim is added by
   `AppClaimsPrincipalFactory`.

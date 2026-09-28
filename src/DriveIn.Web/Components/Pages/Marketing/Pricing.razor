@@ -1,0 +1,94 @@
+@page "/pricing"
+@layout MarketingLayout
+@using Microsoft.Extensions.Options
+@inject IOptions<PlanOptions> Plans
+
+<PageTitle>Pricing · Drive-In Online</PageTitle>
+<HeadContent>
+    <meta name="description" content="Simple pricing for drive-in theaters: a free demo, then a per-screen monthly plan billed only during your operating season. No per-ticket fees." />
+</HeadContent>
+
+<MarketingNav />
+<PageHero Eyebrow="Pricing" Title="Pay only when your gates are open"
+          Lede="A flat monthly price per screen, billed only for the months of your season. No per-ticket fees, and no charge in the off-season." />
+
+<main class="wrap page">
+    <div class="plans">
+        <section class="plan">
+            <h2>Demo</h2>
+            <p class="price">Free</p>
+            <p class="per">for as long as you need to set up</p>
+            <ul>
+                <li>Everything in Standard, privately</li>
+                <li>Set up screens, films, showtimes and prices</li>
+                <li>Invite your staff and assign roles</li>
+                <li>Run test sales and gate check-ins end to end (test payments, no money charged)</li>
+                <li>Not listed publicly until you go live</li>
+                <li>No credit card needed</li>
+            </ul>
+            <a class="cta cta-bulb" href="get-started">Start your free demo</a>
+        </section>
+
+        <section class="plan featured">
+            <h2>Standard</h2>
+            <p class="price">@Plans.Value.PriceDisplay</p>
+            <p class="per">per screen, per month in season</p>
+            <ul>
+                <li>Your theater listed and selling to the public</li>
+                <li>Online sales with a live spot map, QR and gate-code tickets</li>
+                <li>Gate check-in and gate sales</li>
+                <li>Unlimited showings, tickets and staff</li>
+                <li><strong>No per-ticket fees</strong> from us</li>
+                <li>Billed only for months your season is open</li>
+            </ul>
+            <a class="cta cta-outline" href="get-started">Start with a free demo</a>
+        </section>
+    </div>
+
+    <div class="prose">
+        <h2>How seasonal billing works</h2>
+        <p>
+            Set your operating season (opening and closing dates) in your theater's profile. Once your theater is live, you're
+            billed the monthly price for each screen, for each calendar month your season is open, including the months it opens
+            and closes in. Outside your season there's nothing to pay. A theater without a season, open year-round, is billed every month.
+        </p>
+
+        <h3>Example</h3>
+        <table class="estimate">
+            <thead><tr><th>Theater</th><th>Season</th><th class="num">Months billed</th><th class="num">Season total</th></tr></thead>
+            <tbody>
+                @foreach (var (screens, opens, closes) in Examples)
+                {
+                    var quote = PlanQuote.For(screens, Plans.Value.PricePerScreenPerMonth, opens, closes);
+                    <tr>
+                        <td>@screens screen@(screens == 1 ? "" : "s")</td>
+                        <td>@opens.ToString("MMM d") – @closes.ToString("MMM d")</td>
+                        <td class="num">@quote.BilledMonths</td>
+                        <td class="num">@(quote.SeasonTotal is decimal total ? Money.Format(total) : "$__")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        <h3>What isn't included</h3>
+        <p>
+            Card processing fees are charged by the payment processor on each sale and aren't set by us. Ticket prices and your
+            refund policy are yours; the ticket money is your theater's.
+        </p>
+
+        <h3>More than four screens, or several theaters?</h3>
+        <p>Get in touch and we'll work out a plan that fits.</p>
+
+        <p style="margin-top: 32px"><a class="cta cta-bulb" href="get-started">Start your free demo</a> <a class="cta cta-outline" href="faq">Read the FAQ</a></p>
+    </div>
+</main>
+
+<MarketingFooter />
+
+@code {
+    private static readonly (int Screens, DateOnly Opens, DateOnly Closes)[] Examples =
+    [
+        (1, new DateOnly(2027, 5, 1), new DateOnly(2027, 9, 30)),
+        (2, new DateOnly(2027, 4, 15), new DateOnly(2027, 10, 15)),
+    ];
+}

@@ -1,0 +1,130 @@
+@* On a theater's manage page: for a demo theater, the setup checklist and the request to go live; for a live one, its plan. *@
+@using System.Security.Claims
+@using Microsoft.Extensions.Options
+@inject OnboardingService Onboarding
+@inject IOptions<PlanOptions> Plans
+
+@if (Theater.IsDemo)
+{
+    <section class="card border-info mb-4">
+        <div class="card-body">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                <h2 class="h5 mb-0"><span class="badge text-bg-info me-2">Demo</span>Set up your theater</h2>
+                <span class="text-muted small">@steps.Count(s => s.Done && !s.Optional) of @steps.Count(s => !s.Optional) required steps done</span>
+            </div>
+            <p class="small text-muted">
+                Your theater is private: only you and your staff can see it. Sales are test sales (no money is charged), so try the
+                whole thing, from buying a ticket to checking it in at the gate.
+            </p>
+            <ol class="list-unstyled mb-3">
+                @foreach (var step in steps)
+                {
+                    <li class="d-flex gap-2 mb-2">
+                        <span aria-hidden="true" class="@(step.Done ? "text-success" : "text-muted")">@(step.Done ? "✔" : "○")</span>
+                        <span>
+                            <a href="@step.Href">@step.Title</a>@if (step.Optional) { <span class="text-muted small"> (optional)</span> }
+                            <span class="visually-hidden">@(step.Done ? "done" : "to do")</span>
+                            <span class="d-block small text-muted">@step.Detail</span>
+                        </span>
+                    </li>
+                }
+            </ol>
+
+            <h3 class="h6">Go live</h3>
+            @if (Theater.GoLiveRequestedAt is DateTimeOffset asked)
+            {
+                <div class="alert alert-warning mb-0">
+                    You asked to go live on @TheaterTime.ToLocal(Theater, asked).ToString("MMM d, h:mm tt"). We'll review your theater
+                    and email the owner when it's live.
+                </div>
+            }
+            else if (!isOwner)
+            {
+                <p class="small text-muted mb-0">When everything's ready, the theater's owner can take it live.</p>
+            }
+            else
+            {
+                <p class="small">
+                    Going live lists your theater publicly and starts real sales, on the Standard plan: @QuoteText
+                    Your demo test tickets are cleared out.
+                </p>
+                @if (error is not null)
+                {
+                    <div class="alert alert-danger">@error</div>
+                }
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="accept-billing" @bind="acceptBilling" />
+                    <label class="form-check-label" for="accept-billing">
+                        I agree to the Standard plan's billing as described on the <a href="pricing" target="_blank">Pricing</a> page
+                        and in the <a href="legal/terms" target="_blank">Terms of Service</a>.
+                    </label>
+                </div>
+                <button class="btn btn-success" disabled="@busy" @onclick="RequestAsync">Ask to go live</button>
+            }
+        </div>
+    </section>
+}
+else if (isOwner)
+{
+    <section class="card mb-4">
+        <div class="card-body py-2 small">
+            <strong>Standard plan</strong>@if (Theater.LiveSince is DateTimeOffset since) { <text> · live since @TheaterTime.ToLocal(Theater, since).ToString("MMM d, yyyy")</text> }
+            · @QuoteText
+        </div>
+    </section>
+}
+
+@code {
+    [Parameter, EditorRequired] public Theater Theater { get; set; } = default!;
+    [Parameter, EditorRequired] public ClaimsPrincipal User { get; set; } = default!;
+    [Parameter, EditorRequired] public string BaseUri { get; set; } = "";
+    // Raised after the owner asks to go live, so the page reloads the theater.
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private List<SetupStep> steps = [];
+    private bool isOwner;
+    private bool acceptBilling;
+    private bool busy;
+    private string? error;
+
+    // e.g. "2 screens × $49 = $98 a month, billed for the 5 months of your season (May–Sep): about $490."
+    private string QuoteText
+    {
+        get
+        {
+            var q = Onboarding.Quote(Theater, Theater.Screens.Count);
+            var monthly = q.MonthlyTotal is decimal m ? Money.Format(m) : "$__";
+            var text = $"{q.Screens} screen{(q.Screens == 1 ? "" : "s")} × {Plans.Value.PriceDisplay} = {monthly} a month";
+            return q.BilledMonths is int months
+                ? $"{text}, billed for the {months} month{(months == 1 ? "" : "s")} of your season " +
+                  $"({Theater.SeasonOpensOn:MMM yyyy} – {Theater.SeasonClosesOn:MMM yyyy})" +
+                  (q.SeasonTotal is decimal total ? $": {Money.Format(total)} a season." : ".")
+                : $"{text}, every month (set your operating season in the profile to be billed only in season).";
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        isOwner = TheaterAccess.HasFullAccess(User, Theater);
+        steps = Theater.IsDemo ? await Onboarding.GetSetupStepsAsync(User, Theater.Id) : [];
+    }
+
+    private async Task RequestAsync()
+    {
+        error = null;
+        busy = true;
+        try
+        {
+            await Onboarding.RequestGoLiveAsync(User, Theater.Id, acceptBilling, BaseUri);
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex) when (ex is AppValidationException or AccessDeniedException or NotFoundException)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

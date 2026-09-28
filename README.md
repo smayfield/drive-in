@@ -27,9 +27,10 @@ Docker on one EC2 server. The setup mirrors LegoList.
   `/drive-in/admin-email`) becomes admin when it signs in, so the first admin just registers.
   Admins manage all theaters (`/admin/theaters`) and users (`/admin/users`). Note: removing admin
   from that seeded account won't stick; it gets it back at next sign-in.
-- **Owners**: each theater has one owner; one user may own several theaters. An admin assigns the
-  owner by email on the theater's admin page: existing accounts become owner immediately; otherwise
-  an invitation is emailed. Owners manage their theater at `/manage/{id}`, including employees.
+- **Owners**: each theater has one owner; one user may own several theaters. Owners either sign their
+  theater up themselves (see Onboarding) or an admin creates it and assigns the owner by email on the
+  theater's admin page: existing accounts become owner immediately; otherwise an invitation is emailed.
+  Owners manage their theater at `/manage/{id}`, including employees.
 - **Employees** are separate accounts bound to one theater, created only by invitation from its
   owner or anyone with "Invite employees". What they can do is set by **roles**.
 - **Roles** are defined per theater by its owner (Manage → Roles). A role is a named set of actions
@@ -103,6 +104,27 @@ invitee sets a password or continues with Google using the invited address.
 - **All sales are final**: there are no refunds or cancellations, including for weather. Sold tickets are records,
   so a showing with sales can't be removed or moved to another screen, a film or screen with sales can't be
   deleted, and a screen can't drop or relabel spots sold for upcoming showings.
+
+## Marketing site and onboarding
+
+- **Public pages** (MarketingLayout, statically rendered): home, `/features`, `/pricing`, `/faq`, and `/legal` (Terms of
+  Service, Privacy Policy, License & open-source notices). Prices come from `Plans:PricePerScreenPerMonth` and the
+  provider's details from `Company:*` (legal name, mailing address, governing state, contact email, effective date).
+  Unset values show as placeholders (`$__`, `[Company legal name]`), and the legal pages show a "draft, not in effect"
+  banner until `Company:LegalName` is set. The legal text is a starting draft for review by a lawyer. These values
+  aren't secret, so set them in `src/DriveIn.Web/appsettings.json` (through a PR, like any change).
+- **Sign-up** (`/get-started`, "Start free demo"): any signed-in personal account (not an employee account) creates a
+  theater with a name, web address, location, time zone and 1–4 screens, accepting the Terms (version and time are
+  recorded on the theater). At most `Plans:MaxTheatersPerOwner` (3) per account. The theater starts with the default
+  roles, screens laid out 8 rows × 15 spots, and sample prices, so a sale can be tried right away.
+- **Demo mode**: a signed-up theater is private (only its members can see it or buy from it) and its sales are test
+  sales: they go through the dummy payment processor whatever `Payments:Provider` says, and tickets are marked
+  test (receipts say so). The manage page shows a setup checklist.
+- **Going live**: the owner (or an admin) asks from the manage page, agreeing to the Standard plan's billing; admins
+  are emailed. An admin activates or declines it (with a note to the owner) on `/admin/theaters`. Activating makes the
+  theater public and selling for real, and deletes its test tickets. Theaters created by an admin are live from the start.
+- **Billing** is per screen for each calendar month the operating season touches (every month without a season); the
+  manage page shows the estimate. There's no billing processor yet: billing is handled outside the app.
 
 ## Local development
 

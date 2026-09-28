@@ -1,0 +1,74 @@
+@page "/legal/license"
+@layout MarketingLayout
+@using Microsoft.Extensions.Options
+@inject IOptions<CompanyOptions> CompanyOptions
+
+<PageTitle>License &amp; notices · Drive-In Online</PageTitle>
+
+<MarketingNav />
+<PageHero Eyebrow="Legal" Title="License & notices" Lede="@($"Effective {C.EffectiveDate}")" />
+
+<main class="wrap page">
+    <div class="prose">
+        <LegalDraftBanner />
+
+        <h2>Your license</h2>
+        <p>
+            Drive-In Online is software provided as a service by @C.Name. It's licensed, not sold. Subject to the
+            <a href="legal/terms">Terms of Service</a> (including payment of any fees), we grant you a limited, non-exclusive, non-transferable,
+            non-sublicensable, revocable license to access and use the Service:
+        </p>
+        <ul>
+            <li>for a theater Owner and its staff, to operate the theaters signed up under the Owner's account, while the account is in good standing;</li>
+            <li>for guests, to browse showings and buy and use tickets.</li>
+        </ul>
+
+        <h3>Restrictions</h3>
+        <p>You may not, and may not let anyone else:</p>
+        <ul>
+            <li>copy, modify, or create derivative works of the Service or its software, except as the law expressly allows;</li>
+            <li>decompile, disassemble or reverse engineer it, or try to extract its source code;</li>
+            <li>rent, lease, resell, sublicense or offer it as a service to others, or use it to build a competing product;</li>
+            <li>remove or alter any proprietary notices, or get around usage limits or security measures.</li>
+        </ul>
+
+        <h3>Ownership</h3>
+        <p>
+            We and our licensors keep all rights, title and interest in the Service, its software and the Drive-In Online name and marks. Theaters
+            keep all rights in their own content and data. This license ends when your account or subscription ends, or if you breach it.
+        </p>
+
+        <h2>Open-source notices</h2>
+        <p>The Service is built with the following open-source software, used under the licenses shown. Copyright belongs to their authors.</p>
+        <table class="estimate">
+            <thead><tr><th>Component</th><th>License</th></tr></thead>
+            <tbody>
+                @foreach (var (name, license, url) in Notices)
+                {
+                    <tr><td><a href="@url" rel="noopener">@name</a></td><td>@license</td></tr>
+                }
+            </tbody>
+        </table>
+        <p class="muted">Full license texts are available at each project's link.</p>
+    </div>
+</main>
+
+<MarketingFooter />
+
+@code {
+    private CompanyOptions C => CompanyOptions.Value;
+
+    private static readonly (string Name, string License, string Url)[] Notices =
+    [
+        (".NET, ASP.NET Core and Blazor", "MIT", "https://github.com/dotnet/aspnetcore"),
+        ("Entity Framework Core", "MIT", "https://github.com/dotnet/efcore"),
+        ("Npgsql and its Entity Framework Core provider", "PostgreSQL License", "https://github.com/npgsql/efcore.pg"),
+        ("EFCore.NamingConventions", "Apache License 2.0", "https://github.com/efcore/EFCore.NamingConventions"),
+        ("AWS SDK for .NET", "Apache License 2.0", "https://github.com/aws/aws-sdk-net"),
+        ("QRCoder", "MIT", "https://github.com/codebude/QRCoder"),
+        ("Bootstrap", "MIT", "https://github.com/twbs/bootstrap"),
+        ("Bungee and Bungee Shade fonts", "SIL Open Font License 1.1", "https://github.com/djrrb/Bungee"),
+        ("PostgreSQL", "PostgreSQL License", "https://www.postgresql.org/about/licence/"),
+        ("Caddy", "Apache License 2.0", "https://github.com/caddyserver/caddy"),
+    ];
+}
