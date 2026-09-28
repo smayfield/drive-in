@@ -8,7 +8,8 @@ namespace DriveIn.Web.Services;
 
 public sealed record FilmInput(string Title, string? Rating, int RuntimeMinutes);
 
-// Local times are in the theater's time zone. PriceScheduleId/Name are null when the showtime uses the default prices.
+// Local times are in the theater's time zone. PriceScheduleId/Name are the showtime's own schedule; null means no
+// override (it follows whatever the theater's default is), so a pinned schedule shows even if it's also the default.
 public sealed record ShowtimeView(
     int Id, int ScreenId, string ScreenName, int FilmId, string FilmTitle, string? Rating,
     DateTime StartsLocal, DateTime EndsLocal, int? PriceScheduleId, string? PriceScheduleName);
