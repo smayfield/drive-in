@@ -16,7 +16,6 @@ Docker on one EC2 server. The setup mirrors LegoList.
 | `infra/dns.yml` | CloudFormation: Route 53 hosted zone. |
 | `infra/email.yml` | CloudFormation: SES domain identity (DKIM, MAIL FROM). |
 | `infra/app.yml` | CloudFormation: VPC, EC2, EIP, ECR, ops bucket, snapshots, DNS records, GitHub deploy role. |
-| `infra/site.yml` | The old static site (S3 + CloudFront). Retired at cutover; see below. |
 | `.github/workflows/deploy.yml` | On merge to `main`: test, build ARM64 images, deploy via SSM. |
 
 ## Accounts and permissions
@@ -163,13 +162,15 @@ All stacks are in `us-east-1`. The domain is registered at GoDaddy with nameserv
    aws ssm put-parameter --type SecureString --name /drive-in/admin-email          --value you@example.com
    ```
    (`/drive-in/serve-apex` is managed by the app stack.)
-4. **Server**, staged on `app.drive-in.online` while the old site keeps the apex:
+4. **Server**, serving `drive-in.online` (`www` and `app` redirect to it). Run from the repo root:
    ```sh
    aws cloudformation deploy --stack-name drive-in-app --template-file infra/app.yml \
      --capabilities CAPABILITY_NAMED_IAM
    ```
-5. **Repo variables** for the Deploy workflow, from the stack outputs (PowerShell). `AWS_ROLE_ARN`
-   replaces the old static-site role:
+   To stage a server on `app.drive-in.online` only, without taking over the domain, add
+   `--parameter-overrides ServeApex=false`; switch it to `true` later and re-run the Deploy workflow
+   so Caddy picks up `Caddyfile.live`. The stack keeps its current `ServeApex` on later deploys.
+5. **Repo variables** for the Deploy workflow, from the stack outputs (PowerShell):
    ```powershell
    $out = aws cloudformation describe-stacks --stack-name drive-in-app --region us-east-1 --query "Stacks[0].Outputs" --output json | ConvertFrom-Json
    function Out($key) { ($out | Where-Object OutputKey -eq $key).OutputValue }
@@ -184,18 +185,13 @@ All stacks are in `us-east-1`. The domain is registered at GoDaddy with nameserv
    aws ssm describe-instance-information --region us-east-1 --filters "Key=InstanceIds,Values=$(Out InstanceId)" --query "InstanceInformationList[].PingStatus" --output text
    ```
 6. **Deploy**: merge to `main` (or run the Deploy workflow manually) and watch it with `gh run watch`.
-   Then check `https://app.drive-in.online`: registration email, Google sign-in, admin, invites.
+   Then check `https://drive-in.online`: registration email, Google sign-in, admin, invites.
 
-### Cutover from the static site
-
-1. Empty the old bucket and delete the `drive-in-site` stack (removes CloudFront and the apex/www
-   alias records): `aws s3 rm s3://<bucket> --recursive && aws cloudformation delete-stack --stack-name drive-in-site`.
-   The old `drive-in-github-deploy` role goes with it; also remove its repo variables:
-   `gh variable delete S3_BUCKET; gh variable delete CF_DISTRIBUTION_ID`.
-2. `aws cloudformation deploy --stack-name drive-in-app --template-file infra/app.yml --capabilities CAPABILITY_NAMED_IAM --parameter-overrides ServeApex=true`
-3. Re-run the Deploy workflow so the server switches to `Caddyfile.live` (Caddy gets certificates
-   for the apex and www; `www` and `app` then redirect to the apex).
-4. Delete `infra/site.yml` from the repo.
+The domain used to serve a static site (S3 + CloudFront, `drive-in-site` stack). It was retired on
+2026-09-28 by deleting that stack, deploying the app stack with `ServeApex=true`, and re-running the
+Deploy workflow. The apex didn't resolve between the first two steps, and resolvers cache that
+"no such name" for up to 15 minutes, so do such moves back to back. (Negative answers are cached for
+the lesser of the SOA record's TTL, 900 s on Route 53, and its MINIMUM field, 86400 s; RFC 2308.)
 
 ### Operations
 

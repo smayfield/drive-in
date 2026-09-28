@@ -12,12 +12,12 @@ Parameters:
   ServeApex:
     Type: String
     AllowedValues: ["true", "false"]
-    Default: "false"
+    Default: "true"
     Description: >
-      false = only app.<domain> points at the server (the apex still belongs to the
-      old CloudFront site). true = apex and www point here too; only set this after
-      the drive-in-site stack is deleted. Also tells deploy.sh which Caddyfile to use,
-      so redeploy the app after changing it.
+      true = the apex, www and app.<domain> point at the server (www and app redirect
+      to the apex). false = only app.<domain> does, for staging a server without taking
+      over the domain. Also tells deploy.sh which Caddyfile to use, so redeploy the app
+      after changing it.
   InstanceType:
     Type: String
     Default: t4g.small
@@ -224,7 +224,7 @@ Resources:
       Type: A
       TTL: "300"
       ResourceRecords: [!Ref ServerIp]
-  # These replace the CloudFront alias records from site.yml, so that stack must be gone first.
+  # The apex and www. Only when live, so a staging server doesn't take over the domain.
   ApexRecord:
     Type: AWS::Route53::RecordSet
     Condition: Live

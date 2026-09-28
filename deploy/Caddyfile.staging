@@ -1,5 +1,5 @@
-# Before cutover: the apex still points at the old CloudFront site, so only
-# app.drive-in.online is served (and only it gets a certificate).
+# Staging (ServeApex=false): only app.drive-in.online is served (and only it gets a certificate), e.g. to
+# bring up a replacement server without taking over the domain.
 app.drive-in.online {
 	encode zstd gzip
 	reverse_proxy web:8080
