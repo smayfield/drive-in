@@ -248,7 +248,8 @@ public sealed partial class OnboardingService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Couldn't send {Subject} to {To}", subject, to);
+            // The recipient isn't logged: email addresses don't belong in production logs.
+            logger.LogError(ex, "Couldn't send email {Subject}", subject);
         }
     }
 
