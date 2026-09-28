@@ -81,8 +81,8 @@ else
                         @if (CanManageScreens)
                         {
                             <td>
-                                <button class="btn btn-sm btn-link px-1" disabled="@first" title="Move up" @onclick="() => MoveAsync(screen, -1)">▲</button>
-                                <button class="btn btn-sm btn-link px-1" disabled="@last" title="Move down" @onclick="() => MoveAsync(screen, 1)">▼</button>
+                                <button class="btn btn-sm btn-link px-1" disabled="@first" title="Move up" aria-label="Move up" @onclick="() => MoveAsync(screen, -1)">▲</button>
+                                <button class="btn btn-sm btn-link px-1" disabled="@last" title="Move down" aria-label="Move down" @onclick="() => MoveAsync(screen, 1)">▼</button>
                             </td>
                         }
                         <td><a href="manage/@theater.Id/screens/@screen.Id">@screen.Name</a></td>

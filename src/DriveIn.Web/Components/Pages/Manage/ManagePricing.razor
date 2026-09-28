@@ -47,8 +47,8 @@ else
                                     var index = i;
                                     <tr @key="option">
                                         <td>
-                                            <button class="btn btn-sm btn-link px-1" disabled="@(index == 0)" title="Move up" @onclick="() => editor.Move(index, -1)">▲</button>
-                                            <button class="btn btn-sm btn-link px-1" disabled="@(index == editor.Options.Count - 1)" title="Move down" @onclick="() => editor.Move(index, 1)">▼</button>
+                                            <button class="btn btn-sm btn-link px-1" disabled="@(index == 0)" title="Move up" aria-label="Move up" @onclick="() => editor.Move(index, -1)">▲</button>
+                                            <button class="btn btn-sm btn-link px-1" disabled="@(index == editor.Options.Count - 1)" title="Move down" aria-label="Move down" @onclick="() => editor.Move(index, 1)">▼</button>
                                         </td>
                                         <td><input class="form-control form-control-sm" @bind="option.Name" maxlength="60" placeholder="e.g. 2 occupants" aria-label="Option name" /></td>
                                         <td><input class="form-control form-control-sm" @bind="option.Description" maxlength="200" aria-label="Option description" /></td>
@@ -58,7 +58,7 @@ else
                                                 <input class="form-control" type="number" min="0" step="0.01" @bind="option.Price" aria-label="Price" />
                                             </div>
                                         </td>
-                                        <td class="text-end"><button class="btn btn-sm btn-link text-danger px-1" title="Remove option" @onclick="() => editor.Options.Remove(option)">✕</button></td>
+                                        <td class="text-end"><button class="btn btn-sm btn-link text-danger px-1" title="Remove option" aria-label="Remove option" @onclick="() => editor.Options.Remove(option)">✕</button></td>
                                     </tr>
                                 }
                             </tbody>
