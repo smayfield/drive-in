@@ -130,6 +130,17 @@ builder.Services.AddScoped<EmployeeService>();
 builder.Services.AddScoped<UserAdminService>();
 builder.Services.AddScoped<RoleService>();
 
+// Online ticket sales. Card payments are off unless a processor is configured; "Dummy" (development only) approves
+// everything without taking money.
+builder.Services.Configure<PaymentOptions>(builder.Configuration.GetSection(PaymentOptions.Section));
+if (builder.Configuration[$"{PaymentOptions.Section}:Provider"] == "Dummy")
+    builder.Services.AddSingleton<IPaymentProcessor, DummyPaymentProcessor>();
+else
+    builder.Services.AddSingleton<IPaymentProcessor, UnavailablePaymentProcessor>();
+builder.Services.AddSingleton<SpotEvents>();
+builder.Services.AddScoped<TicketSalesService>();
+builder.Services.AddHostedService<HoldExpiryService>();
+
 var app = builder.Build();
 
 app.UseForwardedHeaders();

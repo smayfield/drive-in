@@ -1,0 +1,57 @@
+@page "/manage/{Id:int}/gate"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inherits AppComponentBase
+@inject TheaterService Theaters
+@inject TheaterAccess Access
+
+<PageTitle>Gate · Manage · Drive-In Online</PageTitle>
+
+<p><a href="manage/@Id">&larr; Back to theater</a></p>
+
+@if (theater is null)
+{
+    <Alerts Error="@Error" />
+    @if (Error is null) { <p>Loading…</p> }
+}
+else
+{
+    <h1>Gate <small class="text-muted fs-5">@theater.Name</small></h1>
+    <Alerts Error="@Error" />
+
+    <section class="card" style="max-width: 36rem">
+        <div class="card-body">
+            <p>
+                Scan the QR code on a guest's receipt with your phone's camera: it opens the ticket, where you can check it
+                and admit the car. If a code won't scan, type the ticket code printed under it.
+            </p>
+            <form class="d-flex gap-2" @onsubmit="Check">
+                <input class="form-control" placeholder="Ticket code" aria-label="Ticket code" autocomplete="off" @bind="code" />
+                <button type="submit" class="btn btn-primary">Check ticket</button>
+            </form>
+        </div>
+    </section>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private Theater? theater;
+    private string code = "";
+
+    protected override async Task LoadAsync()
+    {
+        theater = await Theaters.GetForManageAsync(User, Id);
+        if (!(await Access.GetPermissionsAsync(User, theater)).Contains(TheaterPermissions.AdmitGuests))
+            throw new AccessDeniedException();
+    }
+
+    private void Check()
+    {
+        var trimmed = TicketLinks.CodeFrom(code);
+        if (trimmed.Length == 0)
+            Error = "Enter a ticket code.";
+        else
+            Nav.NavigateTo($"tickets/{Uri.EscapeDataString(trimmed)}");
+    }
+}

@@ -4,6 +4,7 @@ using DriveIn.Web.Authorization;
 using DriveIn.Web.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.EntityFrameworkCore;
 
 namespace DriveIn.Web.Services;
 
@@ -63,4 +64,23 @@ internal static class AccountLinks
     public static string Invite(string baseUri, string token) => Combine(baseUri, $"invite/{Uri.EscapeDataString(token)}");
 
     private static string Combine(string baseUri, string path) => baseUri.TrimEnd('/') + "/" + path;
+}
+
+internal static class TicketRecords
+{
+    // Tickets that are sold, or being paid for, are sales records: their showings can't be removed. Holds on
+    // showings that are going away are dropped.
+    public static async Task RemoveHoldsOrThrowAsync(ApplicationDbContext db, IReadOnlyCollection<int> showtimeIds, string soldMessage)
+    {
+        if (showtimeIds.Count == 0)
+            return;
+        var tickets = await db.Tickets.Where(t => showtimeIds.Contains(t.ShowtimeId)).ToListAsync();
+        if (tickets.Any(t => t.Status != TicketStatus.Held))
+            throw new AppValidationException(soldMessage);
+        db.Tickets.RemoveRange(tickets);
+    }
+
+    // Tickets that hold or own a spot at these showings now (expired holds don't count).
+    public static IQueryable<Ticket> Active(ApplicationDbContext db, DateTimeOffset now) =>
+        db.Tickets.Where(t => t.Status != TicketStatus.Held || t.HeldUntil > now);
 }

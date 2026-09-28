@@ -81,6 +81,8 @@ public sealed class ScheduleService(IDbContextFactory<ApplicationDbContext> dbFa
         var showtimes = await db.Showtimes.Include(s => s.Features).Where(s => s.Features.Any(f => f.FilmId == filmId)).ToListAsync();
         if (showtimes.Any(s => s.EndsAt > time.GetUtcNow()))
             throw new AppValidationException($"\"{film.Title}\" is in upcoming showings. Remove them from the schedule first.");
+        await TicketRecords.RemoveHoldsOrThrowAsync(db, showtimes.Select(s => s.Id).ToList(),
+            $"Tickets were sold for showings of \"{film.Title}\", so it's kept with those sales records.");
         db.ShowtimeFeatures.RemoveRange(showtimes.SelectMany(s => s.Features));
         db.Showtimes.RemoveRange(showtimes);
         db.Films.Remove(film);
@@ -150,6 +152,8 @@ public sealed class ScheduleService(IDbContextFactory<ApplicationDbContext> dbFa
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var showtime = await LoadShowtimeAuthorizedAsync(db, user, showtimeId);
+        await TicketRecords.RemoveHoldsOrThrowAsync(db, [showtimeId],
+            "Tickets have been sold for this showing, so it can't be removed. Sales are final.");
         db.ShowtimeFeatures.RemoveRange(showtime.Features);
         db.Showtimes.Remove(showtime);
         await db.SaveChangesAsync();
@@ -167,13 +171,13 @@ public sealed class ScheduleService(IDbContextFactory<ApplicationDbContext> dbFa
 
     // --- Helpers ---
 
-    private static IQueryable<Showtime> WithFeatures(IQueryable<Showtime> query) =>
+    internal static IQueryable<Showtime> WithFeatures(IQueryable<Showtime> query) =>
         query.Include(s => s.Features.OrderBy(f => f.Position)).ThenInclude(f => f.Film);
 
     private static List<int> Runtimes(Showtime showtime) =>
         showtime.Features.OrderBy(f => f.Position).Select(f => f.Film!.RuntimeMinutes).ToList();
 
-    private static ShowtimeView ToView(Theater theater, Showtime s)
+    internal static ShowtimeView ToView(Theater theater, Showtime s)
     {
         var features = s.Features.OrderBy(f => f.Position).ToList();
         var starts = Showtime.FeatureStarts(s.StartsAt, Runtimes(s), s.IntermissionMinutes).ToList();
@@ -208,6 +212,12 @@ public sealed class ScheduleService(IDbContextFactory<ApplicationDbContext> dbFa
         var startsAt = TheaterTime.ToUtc(screen.Theater!, input.Date, input.StartTime);
         if (startsAt <= time.GetUtcNow())
             throw new AppValidationException("Showings must be in the future.");
+        if (!screen.Theater!.IsInSeason(input.Date))
+            throw new AppValidationException($"{input.Date:ddd, MMM d, yyyy} is outside the theater's season ({Seasons.Describe(screen.Theater)}).");
+        // Sold spots belong to the screen they were bought for.
+        if (showtime.Id != 0 && showtime.ScreenId != screen.Id
+            && await TicketRecords.Active(db, time.GetUtcNow()).AnyAsync(t => t.ShowtimeId == showtime.Id))
+            throw new AppValidationException("Tickets have been sold for this showing, so it can't move to another screen.");
         var endsAt = Showtime.ComputeEndsAt(startsAt, input.FilmIds.Select(id => films[id].RuntimeMinutes).ToList(), intermission);
         await EnsureFreeAsync(db, screen.Theater!, screen.Id, screen.Name, startsAt, endsAt, showtime.Id == 0 ? null : showtime.Id);
         await EnsureScheduleAsync(db, screen.TheaterId, input.PriceScheduleId);

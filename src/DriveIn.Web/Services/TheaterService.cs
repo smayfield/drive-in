@@ -69,6 +69,7 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
             ?? throw new NotFoundException("Theater not found.");
         await auth.RequireAsync(user, theater, TheaterPermissions.EditProfile);
         CopyProfile(input, theater);
+        await EnsureSeasonCoversShowingsAsync(db, theater);
         theater.UpdatedAt = time.GetUtcNow();
         await db.SaveChangesAsync();
     }
@@ -117,13 +118,14 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
             ?? throw new NotFoundException("Theater not found.");
         await EnsureSlugFreeAsync(db, input.Slug, exceptId: theater.Id);
         CopyProfile(input, theater);
+        await EnsureSeasonCoversShowingsAsync(db, theater);
         theater.Slug = input.Slug;
         theater.IsActive = input.IsActive;
         theater.UpdatedAt = time.GetUtcNow();
         await db.SaveChangesAsync();
     }
 
-    // Deletes the theater with its screens, schedule, pricing, invitations, roles, and employee accounts
+    // Deletes the theater with its screens, schedule, ticket sales, pricing, invitations, roles, and employee accounts
     // (employee accounts are only valid for this theater, so they go too).
     public async Task DeleteAsync(ClaimsPrincipal user, int id)
     {
@@ -140,6 +142,8 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
         db.TheaterRolePermissions.RemoveRange(db.TheaterRolePermissions.Where(p => roleIds.Contains(p.RoleId)));
         db.TheaterRoles.RemoveRange(db.TheaterRoles.Where(r => r.TheaterId == id));
         db.Users.RemoveRange(theater.Employees);
+        db.TicketAddOns.RemoveRange(db.TicketAddOns.Where(a => a.Ticket!.Showtime!.Screen!.TheaterId == id));
+        db.Tickets.RemoveRange(db.Tickets.Where(t => t.Showtime!.Screen!.TheaterId == id));
         db.ShowtimeFeatures.RemoveRange(db.ShowtimeFeatures.Where(f => f.Showtime!.Screen!.TheaterId == id));
         db.Showtimes.RemoveRange(db.Showtimes.Where(s => s.Screen!.TheaterId == id));
         db.Films.RemoveRange(db.Films.Where(f => f.TheaterId == id));
@@ -175,5 +179,23 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
         to.Website = from.Website;
         to.Description = from.Description;
         to.TimeZone = timeZone;
+        if (from.SeasonOpensOn > from.SeasonClosesOn)
+            throw new AppValidationException("The season can't close before it opens.");
+        to.SeasonOpensOn = from.SeasonOpensOn;
+        to.SeasonClosesOn = from.SeasonClosesOn;
+    }
+
+    // The season can't be changed to leave out showings that are already scheduled (and may have tickets sold).
+    private async Task EnsureSeasonCoversShowingsAsync(ApplicationDbContext db, Theater theater)
+    {
+        var now = time.GetUtcNow();
+        var starts = await db.Showtimes.Where(s => s.Screen!.TheaterId == theater.Id && s.EndsAt > now)
+            .Select(s => s.StartsAt).ToListAsync();
+        var outside = starts.Select(s => DateOnly.FromDateTime(TheaterTime.ToLocal(theater, s)))
+            .Where(d => !theater.IsInSeason(d)).Distinct().Order().ToList();
+        if (outside.Count > 0)
+            throw new AppValidationException(
+                $"Showings are scheduled outside that season ({string.Join(", ", outside.Take(5).Select(d => d.ToString("MMM d, yyyy")))}" +
+                $"{(outside.Count > 5 ? " …" : "")}). Move or remove them first.");
     }
 }

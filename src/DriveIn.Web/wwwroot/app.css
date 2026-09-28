@@ -126,3 +126,27 @@ h1:focus {
 .lot-empty { fill: #9aa3c7; font-size: 12px; font-style: italic; }
 .lot-building rect { fill: #ffd66b; }
 .lot-building text { fill: #0a0d1f; font-size: 13px; font-weight: 600; }
+
+/* Spot states on a showing's seat map (Showing.razor). */
+.lot-clickable { cursor: pointer; }
+.lot-clickable:hover .lot-spot, .lot-clickable:focus .lot-spot { stroke: #ffd66b; stroke-width: 2.5; }
+.lot-clickable:focus { outline: none; }
+.spot-available .lot-spot { fill: #1f7a4d; stroke: #3fbf7f; }
+.spot-held .lot-spot { fill: #6b5a1e; stroke: #b39a3a; }
+.spot-held .lot-spot-label { fill: #d9cfa6; }
+.spot-sold .lot-spot { fill: #2a2d40; stroke: #3b3f57; }
+.spot-sold .lot-spot-label { fill: #6c7293; }
+.spot-mine .lot-spot { fill: #ffd66b; stroke: #fff; stroke-width: 2.5; }
+.spot-mine .lot-spot-label { fill: #0a0d1f; font-weight: 700; }
+
+.spot-legend { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; font-size: 0.875rem; }
+.spot-legend span::before {
+    content: ""; display: inline-block; width: 0.9rem; height: 0.9rem; border-radius: 3px;
+    margin-right: 0.35rem; vertical-align: -0.1rem; border: 1px solid;
+}
+.spot-legend .spot-available::before { background: #1f7a4d; border-color: #3fbf7f; }
+.spot-legend .spot-held::before { background: #6b5a1e; border-color: #b39a3a; }
+.spot-legend .spot-sold::before { background: #2a2d40; border-color: #3b3f57; }
+.spot-legend .spot-mine::before { background: #ffd66b; border-color: #0a0d1f; }
+
+.ticket-qr { width: 240px; max-width: 100%; height: auto; image-rendering: pixelated; }

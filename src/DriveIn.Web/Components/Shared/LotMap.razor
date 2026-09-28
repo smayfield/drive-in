@@ -40,11 +40,26 @@
                     @foreach (var spot in row.Spots)
                     {
                         var cx = spot.X + SpotWidth / 2;
-                        <g>
-                            <title>Spot @spot.Label</title>
-                            <rect class="lot-spot" x="@N(spot.X)" y="@N(spot.Y)" width="@N(SpotWidth)" height="@N(SpotDepth)" rx="4" />
-                            <text class="lot-spot-label" x="@N(cx)" y="@N(labelY)" transform="@placed.Upright(cx, labelY)">@spot.Label</text>
-                        </g>
+                        var status = SpotStatus?.Invoke(spot.Row, spot.Number);
+                        var title = status is null ? $"Spot {spot.Label}" : $"Spot {spot.Label}: {status.Value.Label}";
+                        @if (OnSpotClick.HasDelegate && status is { Clickable: true })
+                        {
+                            <g class="lot-spot-group lot-clickable @status.Value.CssClass" role="button" tabindex="0" aria-label="@title"
+                               @onclick="() => OnSpotClick.InvokeAsync(spot)"
+                               @onkeydown="e => OnSpotKeyAsync(e, spot)">
+                                <title>@title</title>
+                                <rect class="lot-spot" x="@N(spot.X)" y="@N(spot.Y)" width="@N(SpotWidth)" height="@N(SpotDepth)" rx="4" />
+                                <text class="lot-spot-label" x="@N(cx)" y="@N(labelY)" transform="@placed.Upright(cx, labelY)">@spot.Label</text>
+                            </g>
+                        }
+                        else
+                        {
+                            <g class="lot-spot-group @status?.CssClass">
+                                <title>@title</title>
+                                <rect class="lot-spot" x="@N(spot.X)" y="@N(spot.Y)" width="@N(SpotWidth)" height="@N(SpotDepth)" rx="4" />
+                                <text class="lot-spot-label" x="@N(cx)" y="@N(labelY)" transform="@placed.Upright(cx, labelY)">@spot.Label</text>
+                            </g>
+                        }
                     }
                 </g>
             }
@@ -61,6 +76,10 @@
     // Links each screen's name, e.g. to its settings page.
     [Parameter] public Func<Screen, string?>? ScreenHref { get; set; }
 
+    // Single-screen maps: each spot's status (row, spot) for styling and its tooltip; clickable ones raise OnSpotClick.
+    [Parameter] public Func<int, int, LotSpotStatus?>? SpotStatus { get; set; }
+    [Parameter] public EventCallback<LotSpot> OnSpotClick { get; set; }
+
     private const double NameY = NameHeight / 2 + 1;
     private const double EmptyY = NameHeight + ScreenThickness + ScreenToFirstRow / 2 + 2;
 
@@ -69,6 +88,9 @@
     private string AriaLabel => Theater
         ? $"Lot map: {Screens.Count} screen{(Screens.Count == 1 ? "" : "s")}, {Screens.Sum(s => s.SpotCount)} spots"
         : $"Spot layout for {Screens.FirstOrDefault()?.Name}: {Screens.FirstOrDefault()?.SpotCount ?? 0} spots";
+
+    private Task OnSpotKeyAsync(KeyboardEventArgs e, LotSpot spot) =>
+        e.Key is "Enter" or " " ? OnSpotClick.InvokeAsync(spot) : Task.CompletedTask;
 
     protected override void OnParametersSet() =>
         plan = Theater || Screens.Count == 0 ? ForTheater(Screens) : ForScreen(Screens[0]);

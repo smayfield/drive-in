@@ -44,6 +44,19 @@
         <InputText id="web" class="form-control" @bind-Value="Model.Website" placeholder="https://" />
         <ValidationMessage For="() => Model.Website" />
     </div>
+    <div class="col-md-3">
+        <label class="form-label" for="season-opens">Season opens</label>
+        <InputDate id="season-opens" class="form-control" @bind-Value="Model.SeasonOpensOn" />
+    </div>
+    <div class="col-md-3">
+        <label class="form-label" for="season-closes">Season closes</label>
+        <InputDate id="season-closes" class="form-control" @bind-Value="Model.SeasonClosesOn" />
+    </div>
+    <div class="col-md-6 d-flex align-items-end">
+        <p class="form-text mb-2">
+            Showings can only be scheduled from opening day through closing day. Leave either blank for no limit.
+        </p>
+    </div>
     <div class="col-12">
         <label class="form-label" for="desc">Description</label>
         <InputTextArea id="desc" class="form-control" rows="4" @bind-Value="Model.Description" />

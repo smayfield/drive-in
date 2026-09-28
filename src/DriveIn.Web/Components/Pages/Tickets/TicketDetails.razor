@@ -1,0 +1,140 @@
+@page "/tickets/{Code}"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inherits AppComponentBase
+@inject TicketSalesService Sales
+
+<PageTitle>Ticket · Drive-In Online</PageTitle>
+
+@if (lookup is null)
+{
+    <Alerts Error="@Error" />
+    @if (Error is null) { <p>Loading…</p> }
+}
+else
+{
+    var v = lookup.View;
+    var t = v.Ticket;
+    var s = v.Showing;
+
+    @if (lookup.IsBuyer)
+    {
+        <p><a href="tickets">&larr; My tickets</a></p>
+    }
+
+    @if (New == "sent")
+    {
+        <div class="alert alert-success" role="status">You're all set! We've emailed your receipt to @t.Email.</div>
+    }
+    else if (New == "unsent")
+    {
+        <div class="alert alert-warning" role="status">
+            You're all set, but we couldn't email your receipt just now. This page has everything you need at the gate,
+            and you can try sending the receipt again below.
+        </div>
+    }
+    <Alerts Error="@Error" Success="@Success" />
+
+    @if (lookup.CanAdmit)
+    {
+        <section class="card mb-4 @(t.AdmittedAt is null && lookup.AdmitProblem is null ? "border-success" : "border-danger")">
+            <div class="card-body">
+                <h2 class="h5">Gate check</h2>
+                @if (lookup.AdmitProblem is string problem)
+                {
+                    <p class="fs-4 text-danger fw-bold mb-1">Don't admit</p>
+                    <p class="mb-0">@problem</p>
+                }
+                else
+                {
+                    <p class="fs-4 text-success fw-bold mb-1">Valid: spot @t.SpotLabel</p>
+                    <p>@s.Title · @s.StartsLocal.ToString("ddd, MMM d h:mm tt") · @s.ScreenName · @t.OptionName</p>
+                    <button class="btn btn-success btn-lg" @onclick="AdmitAsync">Admit car</button>
+                }
+            </div>
+        </section>
+    }
+
+    <section class="card ticket-card mx-auto" style="max-width: 32rem">
+        <div class="card-body text-center">
+            <h1 class="h4 mb-0">@v.Theater.Name</h1>
+            <p class="small text-muted">@TicketReceipt.Address(v.Theater)</p>
+            <h2 class="h5 mb-1">@s.Title</h2>
+            <p class="mb-1"><strong>@s.StartsLocal.ToString("dddd, MMMM d, yyyy · h:mm tt")</strong></p>
+            <p class="mb-3">@s.ScreenName · Spot <span class="fs-3 fw-bold">@t.SpotLabel</span></p>
+            @if (lookup.IsBuyer)
+            {
+                <img class="ticket-qr mb-2" src="@qr" alt="Ticket QR code for the gate" />
+                <p class="small text-muted mb-3">Show this code at the gate. Ticket @t.Code</p>
+            }
+            @if (v.AdmittedLocal is DateTime admitted)
+            {
+                <p class="badge text-bg-secondary fs-6">Used: admitted @admitted.ToString("MMM d h:mm tt")</p>
+            }
+
+            <table class="table table-sm text-start mb-2">
+                <tbody>
+                    <tr><td>@t.OptionName</td><td class="text-end">@Money.Format(t.OptionPrice)</td></tr>
+                    @foreach (var a in t.AddOns)
+                    {
+                        <tr><td>@a.Name</td><td class="text-end">@TicketReceipt.SignedMoney(a.Effect)</td></tr>
+                    }
+                    <tr class="fw-bold"><td>Total</td><td class="text-end">@Money.Format(t.Total)</td></tr>
+                </tbody>
+            </table>
+            <p class="small text-muted text-start">
+                @TicketReceipt.PaidWith(t) · Purchased @v.SoldLocal.ToString("MMM d, yyyy h:mm tt")<br />
+                Admits one car to this showing only; it can't be used on a later date. All sales are final: no refunds or
+                exchanges for any reason, including bad weather.
+            </p>
+            @if (lookup.IsBuyer)
+            {
+                <button class="btn btn-sm btn-outline-secondary" disabled="@sending" @onclick="ResendAsync">Email my receipt again</button>
+            }
+        </div>
+    </section>
+}
+
+@code {
+    [Parameter] public string Code { get; set; } = "";
+
+    // Set by checkout: "sent" or "unsent" (the receipt email failed).
+    [SupplyParameterFromQuery(Name = "new")] public string? New { get; set; }
+
+    private TicketLookup? lookup;
+    private string? qr;
+    private bool sending;
+
+    protected override async Task LoadAsync()
+    {
+        lookup = await Sales.GetByCodeAsync(User, Code);
+        qr = lookup.IsBuyer ? QrCodes.PngDataUri(TicketLinks.Ticket(BaseUri, Code)) : null;
+    }
+
+    private Task AdmitAsync() => RunAsync(async () =>
+    {
+        try
+        {
+            await Sales.AdmitAsync(User, Code);
+        }
+        finally
+        {
+            lookup = await Sales.GetByCodeAsync(User, Code);
+        }
+    }, "Admitted. Enjoy the show!");
+
+    private Task ResendAsync() => RunAsync(async () =>
+    {
+        sending = true;
+        try
+        {
+            New = null;
+            if (!await Sales.ResendReceiptAsync(User, Code, BaseUri))
+                throw new AppValidationException("We couldn't send the email just now. Please try again later.");
+        }
+        finally
+        {
+            sending = false;
+        }
+    }, $"Receipt sent to {lookup?.View.Ticket.Email}.");
+}

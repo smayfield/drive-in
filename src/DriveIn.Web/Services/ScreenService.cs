@@ -50,6 +50,19 @@ public sealed class ScreenService(IDbContextFactory<ApplicationDbContext> dbFact
 
         await using var db = await dbFactory.CreateDbContextAsync();
         var screen = await LoadAuthorizedAsync(db, user, screenId);
+        // Spots sold (or held) for upcoming showings must stay where they are and keep the label on the buyer's ticket.
+        var now = time.GetUtcNow();
+        var ticketed = await TicketRecords.Active(db, now)
+            .Where(t => t.Showtime!.ScreenId == screenId && t.Showtime.EndsAt > now)
+            .Select(t => new { t.Row, t.Spot, t.SpotLabel })
+            .ToListAsync();
+        if (ticketed.Count > 0 && input.LabelScheme != screen.LabelScheme)
+            throw new AppValidationException("Tickets are sold for upcoming showings on this screen, so its spot labels can't change until they've passed.");
+        var removed = ticketed.Where(t => t.Row > input.RowSpots.Count || t.Spot > input.RowSpots[t.Row - 1])
+            .Select(t => t.SpotLabel).Distinct().Order().ToList();
+        if (removed.Count > 0)
+            throw new AppValidationException($"Tickets are sold for upcoming showings in spots this layout removes: {string.Join(", ", removed.Take(10))}" +
+                $"{(removed.Count > 10 ? " …" : "")}. Keep those spots until the showings have passed.");
         screen.Name = name;
         screen.LabelScheme = input.LabelScheme;
         screen.RowSpots = input.RowSpots.ToList();
@@ -68,6 +81,8 @@ public sealed class ScreenService(IDbContextFactory<ApplicationDbContext> dbFact
         var showtimes = await db.Showtimes.Include(s => s.Features).Where(s => s.ScreenId == screenId).ToListAsync();
         if (showtimes.Any(s => s.EndsAt > time.GetUtcNow()))
             throw new AppValidationException($"{screen.Name} has upcoming showtimes. Remove them from the schedule first.");
+        await TicketRecords.RemoveHoldsOrThrowAsync(db, showtimes.Select(s => s.Id).ToList(),
+            $"Tickets were sold for showings on {screen.Name}, so it's kept with those sales records.");
         db.ShowtimeFeatures.RemoveRange(showtimes.SelectMany(s => s.Features));
         db.Showtimes.RemoveRange(showtimes);
         db.Screens.Remove(screen);
