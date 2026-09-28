@@ -233,8 +233,9 @@ public sealed class TicketSalesService(
             throw new AppValidationException("One of the add-ons you chose is no longer offered. Check your choices and try again.");
         var quote = TicketQuote.For(option, addOns);
         var card = quote.Total > 0 ? Cards.Validate(input.Card, now) : null;
-        var buyerEmail = await db.Users.Where(u => u.Id == userId).Select(u => u.Email).FirstOrDefaultAsync()
-            ?? throw new AppValidationException("Your account needs an email address to receive tickets.");
+        var buyerEmail = (await db.Users.Where(u => u.Id == userId).Select(u => u.Email).FirstOrDefaultAsync())?.Trim();
+        if (string.IsNullOrEmpty(buyerEmail))
+            throw new AppValidationException("Your account needs an email address to receive tickets.");
 
         // Paying: the hold can no longer expire out from under the charge.
         ticket.Status = TicketStatus.Paying;

@@ -48,9 +48,7 @@ else
 
     private void Check()
     {
-        var trimmed = code.Trim();
-        // Accept a pasted link as well as the bare code.
-        trimmed = trimmed[(trimmed.LastIndexOf('/') + 1)..];
+        var trimmed = TicketLinks.CodeFrom(code);
         if (trimmed.Length == 0)
             Error = "Enter a ticket code.";
         else

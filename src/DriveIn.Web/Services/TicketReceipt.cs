@@ -9,6 +9,14 @@ public static class TicketLinks
 {
     // Where a ticket's QR code points: gate staff scan it to admit the car; the buyer sees their ticket.
     public static string Ticket(string baseUri, string code) => baseUri.TrimEnd('/') + "/tickets/" + Uri.EscapeDataString(code);
+
+    // The ticket code from what gate staff type or paste: a bare code, or a ticket link (with any query or fragment).
+    public static string CodeFrom(string? input)
+    {
+        var text = (input ?? "").Trim();
+        text = text.Split('?', '#')[0].TrimEnd('/');
+        return Uri.UnescapeDataString(text[(text.LastIndexOf('/') + 1)..]).Trim();
+    }
 }
 
 public static class QrCodes

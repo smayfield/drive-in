@@ -462,6 +462,36 @@ public class TicketSalesTests
         Assert.Empty(db.TicketAddOns);
     }
 
+    [Theory]
+    [InlineData("abc_DEF-123", "abc_DEF-123")]
+    [InlineData("  abc_DEF-123 ", "abc_DEF-123")]
+    [InlineData("https://drive-in.online/tickets/abc_DEF-123", "abc_DEF-123")]
+    [InlineData("https://drive-in.online/tickets/abc_DEF-123?new=sent", "abc_DEF-123")]
+    [InlineData("https://drive-in.online/tickets/abc_DEF-123/#top", "abc_DEF-123")]
+    [InlineData("", "")]
+    public void Gate_staff_can_type_a_code_or_paste_a_ticket_link(string input, string code) =>
+        Assert.Equal(code, TicketLinks.CodeFrom(input));
+
+    [Fact]
+    public async Task A_buyer_without_an_email_address_is_not_charged()
+    {
+        await using var s = await SetUpAsync();
+        var user = await s.App.CreateUserAsync("blank@example.com");
+        var buyer = Principals.For(user);
+        var hold = await s.Sales.HoldAsync(buyer, s.Showing.Id, 1, 1);
+        await using (var db = s.App.Db())
+        {
+            (await db.Users.SingleAsync(u => u.Id == user.Id)).Email = "  ";
+            await db.SaveChangesAsync();
+        }
+
+        var ex = await Assert.ThrowsAsync<AppValidationException>(() =>
+            s.Sales.PurchaseAsync(buyer, hold.TicketId, Buy(s.Single), TestApp.BaseUri));
+
+        Assert.Contains("email address", ex.Message);
+        Assert.Empty(s.App.Payments.Charges);
+    }
+
     // --- Pricing and cards ---
 
     [Fact]
