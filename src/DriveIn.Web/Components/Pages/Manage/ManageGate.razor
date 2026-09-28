@@ -2,8 +2,12 @@
 @attribute [Authorize]
 @rendermode InteractiveServer
 @inherits AppComponentBase
+@implements IDisposable
 @inject TheaterService Theaters
 @inject TheaterAccess Access
+@inject TicketSalesService Sales
+@inject SpotEvents Events
+@inject TimeProvider Time
 
 <PageTitle>Gate · Manage · Drive-In Online</PageTitle>
 
@@ -17,41 +21,352 @@
 else
 {
     <h1>Gate <small class="text-muted fs-5">@theater.Name</small></h1>
-    <Alerts Error="@Error" />
 
-    <section class="card" style="max-width: 36rem">
-        <div class="card-body">
-            <p>
-                Scan the QR code on a guest's receipt with your phone's camera: it opens the ticket, where you can check it
-                and admit the car. If a code won't scan, type the ticket code printed under it.
-            </p>
-            <form class="d-flex gap-2" @onsubmit="Check">
-                <input class="form-control" placeholder="Ticket code" aria-label="Ticket code" autocomplete="off" @bind="code" />
-                <button type="submit" class="btn btn-primary">Check ticket</button>
-            </form>
-        </div>
-    </section>
+    <div class="row g-4">
+        @if (canAdmit)
+        {
+            <div class="@(canSell ? "col-lg-4" : "col-lg-8")">
+                <section class="card">
+                    <div class="card-body">
+                        <h2 class="h5">Check in</h2>
+                        <form class="d-flex gap-2 mb-2" @onsubmit="FindAsync">
+                            <input @ref="codeInput" class="form-control form-control-lg font-monospace" autocomplete="off" autocapitalize="characters"
+                                   placeholder="Gate code or scan" aria-label="Gate code, ticket code or scanned QR code" @bind="code" />
+                            <button type="submit" class="btn btn-primary btn-lg">Find</button>
+                        </form>
+                        <p class="small text-muted">
+                            Type the guest's 4-character gate code, or scan their QR code: a handheld scanner types into this
+                            box, or a phone's camera app opens the ticket directly.
+                        </p>
+                        @if (section == Section.CheckIn)
+                        {
+                            <Alerts Error="@Error" Success="@Success" />
+                        }
+                        @foreach (var found in lookups)
+                        {
+                            var t = found.View.Ticket;
+                            var s = found.View.Showing;
+                            var valid = found.AdmitProblem is null;
+                            <div class="card mb-2 @(valid ? "border-success" : "border-danger")" @key="t.Id">
+                                <div class="card-body">
+                                    <p class="fs-4 fw-bold mb-1 @(valid ? "text-success" : "text-danger")">@(valid ? "Valid" : "Not valid")</p>
+                                    @if (!valid)
+                                    {
+                                        <p class="mb-2">@found.AdmitProblem</p>
+                                    }
+                                    <p class="mb-1"><span class="fs-3 fw-bold">Spot @t.SpotLabel</span> · @s.ScreenName</p>
+                                    <p class="mb-1">@s.Title</p>
+                                    <p class="mb-1 small">@s.StartsLocal.ToString("ddd, MMM d · h:mm tt") · gate code <span class="font-monospace">@t.ShortCode</span></p>
+                                    <p class="mb-2 small text-muted">
+                                        @t.OptionName@foreach (var a in t.AddOns) { @($" · {a.Name}") }
+                                        · @(t.SoldAtGate ? "sold at the gate" : "bought online")
+                                    </p>
+                                    @if (valid)
+                                    {
+                                        <button class="btn btn-success btn-lg" disabled="@busy" @onclick="() => AdmitAsync(t.Code!)">Check in</button>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </section>
+            </div>
+        }
+
+        @if (canSell)
+        {
+            <div class="@(canAdmit ? "col-lg-8" : "col-12")">
+                <section class="card">
+                    <div class="card-body">
+                        <h2 class="h5">Sell a ticket</h2>
+                        @if (section == Section.Sell)
+                        {
+                            <Alerts Error="@Error" Success="@Success" />
+                        }
+                        @if (showings.Count == 0)
+                        {
+                            <p class="text-muted mb-0">No showings are left today.</p>
+                        }
+                        <div class="d-flex flex-wrap gap-2 mb-3">
+                            @foreach (var g in showings)
+                            {
+                                var selected = g.Showing.Id == sale?.Showing.Id;
+                                <button class="btn @(selected ? "btn-primary" : "btn-outline-primary") text-start" disabled="@(busy || Hold is not null)"
+                                        @onclick="() => SelectAsync(g.Showing.Id)">
+                                    <strong>@g.Showing.StartsLocal.ToString("h:mm tt")</strong> @g.Showing.Title
+                                    <span class="d-block small">@g.Showing.ScreenName · @g.Open open@(g.Showing.StartsLocal <= NowLocal ? " · started" : "")</span>
+                                </button>
+                            }
+                        </div>
+
+                        @if (sale is not null && availability is not null)
+                        {
+                            @if (!sale.OnSale)
+                            {
+                                <div class="alert alert-info">@sale.NotOnSaleReason</div>
+                            }
+                            <div class="row g-3">
+                                <div class="col-xxl-7">
+                                    <SeatMap Screen="sale.Screen" Availability="availability" CanPick="sale.OnSale && !busy && Hold is null"
+                                             OnPick="HoldAsync" MineLabel="This car" />
+                                </div>
+                                <div class="col-xxl-5">
+                                    @if (Hold is HoldView hold)
+                                    {
+                                        <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                                            <h3 class="h5 mb-0">Spot @hold.SpotLabel</h3>
+                                            <span class="badge text-bg-warning" role="timer" aria-live="off">held @Remaining</span>
+                                        </div>
+                                        <TicketChoices Prices="sale.Prices" AddOns="sale.AddOns" @bind-OptionId="optionId" @bind-AddOnIds="addOnIds" IdPrefix="gate" />
+                                        <div class="d-flex flex-wrap gap-2">
+                                            <button class="btn btn-success btn-lg" disabled="@(busy || Quote is null)" @onclick="SellAsync">
+                                                @(busy ? "Processing…" : Quote is { Total: > 0 } q ? $"Charge card {Money.Format(q.Total)}" : "Sell (no charge)")
+                                            </button>
+                                            <button class="btn btn-outline-secondary" disabled="@busy" @onclick="ReleaseAsync">Cancel</button>
+                                        </div>
+                                        <p class="small text-muted mt-2 mb-0">
+                                            Take the card on the terminal. The car is checked in when the sale goes through. Sales are final.
+                                        </p>
+                                    }
+                                    else if (lastSale is TicketView sold)
+                                    {
+                                        <div class="alert alert-success">
+                                            <p class="fs-5 fw-bold mb-1">Sold and checked in</p>
+                                            <p class="mb-1">Send the car to <strong>spot @sold.Ticket.SpotLabel</strong> on @sold.Showing.ScreenName.</p>
+                                            <p class="mb-0 small">@Money.Format(sold.Ticket.Total) · gate code <span class="font-monospace">@sold.Ticket.ShortCode</span></p>
+                                        </div>
+                                        <p class="text-muted small">Pick a green spot for the next car.</p>
+                                    }
+                                    else if (sale.OnSale)
+                                    {
+                                        <p class="text-muted">Pick a green spot for the car. @AvailableCount of @sale.Screen.SpotCount are open.</p>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </section>
+            </div>
+        }
+    </div>
 }
 
 @code {
     [Parameter] public int Id { get; set; }
 
+    private enum Section { None, CheckIn, Sell }
+
     private Theater? theater;
+    private bool canAdmit;
+    private bool canSell;
+    private bool busy;
+    private Section section;
+    private Timer? countdown;
+
+    // Check in
+    private ElementReference codeInput;
+    private bool focusCode;
     private string code = "";
+    private List<TicketLookup> lookups = [];
+
+    // Sell
+    private List<GateShowing> showings = [];
+    private ShowingForSale? sale;
+    private SpotAvailability? availability;
+    private int optionId;
+    private IReadOnlySet<int> addOnIds = new HashSet<int>();
+    private TicketView? lastSale;
+
+    private HoldView? Hold => availability?.MyHold;
+    private DateTime NowLocal => TheaterTime.ToLocal(theater!, Time.GetUtcNow());
+    private int AvailableCount => sale!.Screen.SpotCount - availability!.Spots.Count;
+    private TicketQuote? Quote => sale is null ? null : TicketChoices.Quote(sale.Prices, sale.AddOns, optionId, addOnIds);
+
+    private string Remaining
+    {
+        get
+        {
+            var left = Hold is null ? TimeSpan.Zero : Hold.HeldUntil - Time.GetUtcNow();
+            return left <= TimeSpan.Zero ? "0:00" : $"{(int)left.TotalMinutes}:{left.Seconds:00}";
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        Events.Changed += OnSpotsChanged;
+        countdown = new Timer(_ => InvokeAsync(TickAsync), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+    }
 
     protected override async Task LoadAsync()
     {
         theater = await Theaters.GetForManageAsync(User, Id);
-        if (!(await Access.GetPermissionsAsync(User, theater)).Contains(TheaterPermissions.AdmitGuests))
+        var permissions = await Access.GetPermissionsAsync(User, theater);
+        canAdmit = permissions.Contains(TheaterPermissions.AdmitGuests);
+        canSell = permissions.Contains(TheaterPermissions.SellAtGate);
+        if (!canAdmit && !canSell)
             throw new AccessDeniedException();
+        if (canSell)
+            showings = await Sales.ListGateShowingsAsync(User, Id);
+        focusCode = canAdmit;
     }
 
-    private void Check()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        var trimmed = TicketLinks.CodeFrom(code);
-        if (trimmed.Length == 0)
-            Error = "Enter a ticket code.";
-        else
-            Nav.NavigateTo($"tickets/{Uri.EscapeDataString(trimmed)}");
+        if (focusCode && theater is not null && canAdmit)
+        {
+            focusCode = false;
+            try
+            {
+                await codeInput.FocusAsync();
+            }
+            catch (Exception)
+            {
+                // Not rendered yet (e.g. prerendering); the attendant can tap the box.
+            }
+        }
+    }
+
+    // --- Check in ---
+
+    private Task FindAsync() => Run(Section.CheckIn, async () =>
+    {
+        lookups = [];
+        if (string.IsNullOrWhiteSpace(code))
+            return;
+        try
+        {
+            lookups = await Sales.FindAtGateAsync(User, Id, code);
+        }
+        finally
+        {
+            focusCode = true;
+        }
+    });
+
+    private Task AdmitAsync(string ticketCode) => Run(Section.CheckIn, async () =>
+    {
+        var found = lookups.First(l => l.View.Ticket.Code == ticketCode).View;
+        try
+        {
+            await Sales.AdmitAsync(User, ticketCode);
+            lookups = [];
+            code = "";
+            Success = $"Checked in: spot {found.Ticket.SpotLabel} on {found.Showing.ScreenName}.";
+        }
+        catch (AppValidationException)
+        {
+            lookups = await Sales.FindAtGateAsync(User, Id, ticketCode);
+            throw;
+        }
+        finally
+        {
+            focusCode = true;
+        }
+    });
+
+    // --- Sell ---
+
+    private Task SelectAsync(int showtimeId) => Run(Section.Sell, async () =>
+    {
+        lastSale = null;
+        sale = await Sales.GetGateShowingAsync(User, showtimeId);
+        availability = await Sales.GetAvailabilityAsync(User, showtimeId);
+        optionId = sale.Prices.Options.FirstOrDefault()?.Id ?? 0;
+        addOnIds = new HashSet<int>();
+    });
+
+    private Task HoldAsync(LotSpot spot) => Run(Section.Sell, async () =>
+    {
+        lastSale = null;
+        try
+        {
+            await Sales.HoldAtGateAsync(User, sale!.Showing.Id, spot.Row, spot.Number);
+        }
+        finally
+        {
+            await RefreshAsync();
+        }
+    });
+
+    private Task ReleaseAsync() => Run(Section.Sell, async () =>
+    {
+        if (Hold is HoldView hold)
+            await Sales.ReleaseHoldAsync(User, hold.TicketId);
+        await RefreshAsync();
+    });
+
+    private Task SellAsync() => Run(Section.Sell, async () =>
+    {
+        if (Hold is not HoldView hold || busy)
+            return;
+        busy = true;
+        try
+        {
+            lastSale = await Sales.SellAtGateAsync(User, hold.TicketId, optionId, addOnIds.ToList());
+            addOnIds = new HashSet<int>();
+            optionId = sale!.Prices.Options.FirstOrDefault()?.Id ?? 0;
+        }
+        finally
+        {
+            busy = false;
+            await RefreshAsync();
+        }
+    });
+
+    private async Task RefreshAsync()
+    {
+        if (sale is not null)
+            availability = await Sales.GetAvailabilityAsync(User, sale.Showing.Id);
+        if (canSell)
+            showings = await Sales.ListGateShowingsAsync(User, Id);
+    }
+
+    // Keeps errors and confirmations next to the panel the attendant is using.
+    private Task Run(Section where, Func<Task> action)
+    {
+        section = where;
+        return RunAsync(action);
+    }
+
+    private void OnSpotsChanged(int showtimeId)
+    {
+        if (sale?.Showing.Id != showtimeId && showings.All(g => g.Showing.Id != showtimeId))
+            return;
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                await RefreshAsync();
+                StateHasChanged();
+            }
+            catch (Exception)
+            {
+                // The circuit may be going away; the next change or action refreshes again.
+            }
+        });
+    }
+
+    private async Task TickAsync()
+    {
+        if (Hold is not HoldView hold)
+            return;
+        if (hold.HeldUntil <= Time.GetUtcNow() && !busy)
+        {
+            try
+            {
+                await RefreshAsync();
+            }
+            catch (Exception)
+            {
+                return;
+            }
+        }
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        Events.Changed -= OnSpotsChanged;
+        countdown?.Dispose();
     }
 }

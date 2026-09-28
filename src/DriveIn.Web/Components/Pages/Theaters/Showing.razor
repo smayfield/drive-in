@@ -50,13 +50,7 @@ else
                 @(Hold is null ? "Choose your spot" : $"Spot {Hold.SpotLabel}")
                 <small class="text-muted">@AvailableCount of @sale.Screen.SpotCount available</small>
             </h2>
-            <div class="spot-legend mb-2" aria-hidden="true">
-                <span class="spot-available">Available</span>
-                <span class="spot-held">On hold</span>
-                <span class="spot-sold">Sold</span>
-                <span class="spot-mine">Yours</span>
-            </div>
-            <LotMap Screens="[sale.Screen]" SpotStatus="StatusOf" OnSpotClick="HoldAsync" />
+            <SeatMap Screen="sale.Screen" Availability="availability" CanPick="sale.OnSale && !busy" OnPick="HoldAsync" />
             <p class="small text-muted mt-2">
                 The screen is at the top; the first row is nearest it. Spots update live as others buy.
                 Spots on hold come back if the buyer doesn't finish within @Ticket.HoldMinutes minutes.
@@ -99,51 +93,10 @@ else
                         </div>
                         <p class="small text-muted">Finish before the timer runs out or the spot goes back on sale.</p>
 
-                        <fieldset class="mb-3">
-                            <legend class="form-label fs-6 fw-semibold">Ticket</legend>
-                            @foreach (var o in sale.Prices.Options)
-                            {
-                                <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="option" id="option-@o.Id"
-                                           checked="@(optionId == o.Id)" @onchange="() => optionId = o.Id" />
-                                    <label class="form-check-label d-flex justify-content-between" for="option-@o.Id">
-                                        <span>@o.Name @if (o.Description is not null) { <span class="text-muted small ms-1">— @o.Description</span> }</span>
-                                        <span>@Money.Format(o.Price)</span>
-                                    </label>
-                                </div>
-                            }
-                        </fieldset>
-
-                        @if (sale.AddOns.Count > 0)
-                        {
-                            <fieldset class="mb-3">
-                                <legend class="form-label fs-6 fw-semibold">Add-ons</legend>
-                                @foreach (var a in sale.AddOns)
-                                {
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" id="addon-@a.Id"
-                                               checked="@addOnIds.Contains(a.Id)" @onchange="() => ToggleAddOn(a.Id)" />
-                                        <label class="form-check-label d-flex justify-content-between" for="addon-@a.Id">
-                                            <span>@a.Name @if (a.Description is not null) { <span class="text-muted small ms-1">— @a.Description</span> }</span>
-                                            <span>@a.Display</span>
-                                        </label>
-                                    </div>
-                                }
-                            </fieldset>
-                        }
+                        <TicketChoices Prices="sale.Prices" AddOns="sale.AddOns" @bind-OptionId="optionId" @bind-AddOnIds="addOnIds" />
 
                         @if (Quote is TicketQuote quote)
                         {
-                            <table class="table table-sm mb-3">
-                                <tbody>
-                                    <tr><td>@quote.Option.Name</td><td class="text-end">@Money.Format(quote.Option.Price)</td></tr>
-                                    @foreach (var line in quote.Lines)
-                                    {
-                                        <tr><td>@line.AddOn.Name</td><td class="text-end">@TicketReceipt.SignedMoney(line.Effect)</td></tr>
-                                    }
-                                    <tr class="fw-bold"><td>Total</td><td class="text-end">@Money.Format(quote.Total)</td></tr>
-                                </tbody>
-                            </table>
 
                             @if (quote.Total > 0)
                             {
@@ -215,7 +168,7 @@ else
     private Timer? countdown;
 
     private int optionId;
-    private readonly HashSet<int> addOnIds = [];
+    private IReadOnlySet<int> addOnIds = new HashSet<int>();
     private string cardName = "";
     private string cardNumber = "";
     private int expMonth;
@@ -226,9 +179,7 @@ else
     private int ThisYear => Time.GetUtcNow().Year;
     private int AvailableCount => sale!.Screen.SpotCount - availability!.Spots.Count;
 
-    private TicketQuote? Quote => sale?.Prices.Options.FirstOrDefault(o => o.Id == optionId) is PriceOption option
-        ? TicketQuote.For(option, sale.AddOns.Where(a => addOnIds.Contains(a.Id)))
-        : null;
+    private TicketQuote? Quote => sale is null ? null : TicketChoices.Quote(sale.Prices, sale.AddOns, optionId, addOnIds);
 
     private string Remaining
     {
@@ -253,14 +204,6 @@ else
         optionId = sale.Prices.Options.FirstOrDefault()?.Id ?? 0;
         availability = await Sales.GetAvailabilityAsync(User, ShowtimeId);
     }
-
-    private LotSpotStatus? StatusOf(int row, int spot) => availability![row, spot] switch
-    {
-        SpotState.Mine => new("spot-mine", "your spot", false),
-        SpotState.Held => new("spot-held", "on hold for another buyer", false),
-        SpotState.Sold => new("spot-sold", "sold", false),
-        _ => new("spot-available", "available", sale!.OnSale && !busy),
-    };
 
     private Task HoldAsync(LotSpot spot) => RunAsync(async () =>
     {
@@ -302,12 +245,6 @@ else
             await RefreshAsync();
         }
     });
-
-    private void ToggleAddOn(int id)
-    {
-        if (!addOnIds.Remove(id))
-            addOnIds.Add(id);
-    }
 
     private async Task RefreshAsync()
     {

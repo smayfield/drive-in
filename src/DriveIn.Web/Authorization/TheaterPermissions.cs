@@ -19,6 +19,7 @@ public static class TheaterPermissions
     public const string ManageEmployees = "employees.manage";
     public const string ManageRoles = "roles.manage";
     public const string AdmitGuests = "tickets.admit";
+    public const string SellAtGate = "tickets.sell";
 
     public static readonly IReadOnlyList<TheaterPermission> All =
     [
@@ -30,7 +31,8 @@ public static class TheaterPermissions
         new(InviteEmployees, "Staff", "Invite employees", "Send, resend and revoke employee invitations."),
         new(ManageEmployees, "Staff", "Manage employees", "Send employees password resets and delete employee accounts."),
         new(ManageRoles, "Staff", "Manage roles", "Create, edit and delete roles and assign them to employees. Only actions you have yourself can be granted."),
-        new(AdmitGuests, "Tickets", "Admit guests", "Check tickets at the gate (scan the QR code on a guest's receipt) and let the car in."),
+        new(AdmitGuests, "Tickets", "Admit guests", "Check tickets at the gate (scan the QR code or enter the 4-character gate code) and let the car in."),
+        new(SellAtGate, "Tickets", "Sell tickets at the gate", "Sell tickets to cars at the gate: choose a showing and spot, take payment and let the car in."),
     ];
 
     public static readonly IReadOnlySet<string> AllKeys = All.Select(p => p.Key).ToHashSet();
@@ -47,8 +49,8 @@ public static class DefaultTheaterRoles
             TheaterPermissions.All.Select(p => p.Key).ToArray()),
         ("Operations", "Keeps the theater's details, screens and schedule up to date.",
             [TheaterPermissions.EditProfile, TheaterPermissions.ManageScreens, TheaterPermissions.ManageSchedule]),
-        ("Ticketing", "Gate and box office staff: checks tickets and admits guests.",
-            [TheaterPermissions.AdmitGuests]),
+        ("Ticketing", "Gate and box office staff: sells tickets at the gate, checks tickets and admits guests.",
+            [TheaterPermissions.AdmitGuests, TheaterPermissions.SellAtGate]),
         ("Concessions", "Snack bar staff. Concessions actions will be added here as concessions features ship.",
             []),
     ];

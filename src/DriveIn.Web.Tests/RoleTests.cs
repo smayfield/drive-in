@@ -19,7 +19,7 @@ public class RoleTests
         var roles = await app.Get<RoleService>().ListAsync(admin, theater.Id);
         Assert.Equal(["Concessions", "Manager", "Operations", "Ticketing"], roles.Select(r => r.Name));
         Assert.Equal(AllKeys, roles.Single(r => r.Name == "Manager").Permissions.ToHashSet());
-        Assert.Equal([AdmitGuests], roles.Single(r => r.Name == "Ticketing").Permissions);
+        Assert.Equal([AdmitGuests, SellAtGate], roles.Single(r => r.Name == "Ticketing").Permissions.Order());
     }
 
     [Fact]

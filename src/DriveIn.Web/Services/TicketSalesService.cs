@@ -48,7 +48,7 @@ public sealed record TicketLookup(TicketView View, bool IsBuyer, bool CanAdmit, 
 // Ticket.HoldMinutes while they pay, and get an emailed receipt whose QR code is checked at the gate. Admitting
 // guests requires AdmitGuests at the theater. Every change to a showing's spots is published on SpotEvents so
 // open seat maps update live.
-public sealed class TicketSalesService(
+public sealed partial class TicketSalesService(
     IDbContextFactory<ApplicationDbContext> dbFactory,
     IAuthorizationService auth,
     IPaymentProcessor payments,
@@ -83,6 +83,11 @@ public sealed class TicketSalesService(
     {
         Guard.RequireUserId(user);
         await using var db = await dbFactory.CreateDbContextAsync();
+        return await LoadShowingForSaleAsync(db, showtimeId, atGate: false);
+    }
+
+    private async Task<ShowingForSale> LoadShowingForSaleAsync(ApplicationDbContext db, int showtimeId, bool atGate)
+    {
         var showtime = await ScheduleService.WithFeatures(db.Showtimes.AsNoTracking()).Include(s => s.Screen!.Theater)
             .FirstOrDefaultAsync(s => s.Id == showtimeId);
         if (showtime is null || !showtime.Screen!.Theater!.IsActive)
@@ -92,7 +97,7 @@ public sealed class TicketSalesService(
         var addOns = await db.AddOns.AsNoTracking().Where(a => a.TheaterId == theater.Id && a.IsActive)
             .OrderBy(a => a.SortOrder).ThenBy(a => a.Id).ToListAsync();
         return new ShowingForSale(theater, showtime.Screen, ScheduleService.ToView(theater, showtime), prices, addOns,
-            NotOnSaleReason(showtime, prices));
+            NotOnSaleReason(showtime, prices, atGate));
     }
 
     public async Task<SpotAvailability> GetAvailabilityAsync(ClaimsPrincipal user, int showtimeId)
@@ -119,14 +124,16 @@ public sealed class TicketSalesService(
 
     // Holds a spot for the user while they pay; the first to hold a spot gets it. Holding another spot lets go of
     // any spot the user already holds, so one person can't tie up several at once.
-    public async Task<HoldView> HoldAsync(ClaimsPrincipal user, int showtimeId, int row, int spot)
+    public Task<HoldView> HoldAsync(ClaimsPrincipal user, int showtimeId, int row, int spot) =>
+        HoldAsync(Guard.RequireUserId(user), showtimeId, row, spot, atGate: false);
+
+    private async Task<HoldView> HoldAsync(string userId, int showtimeId, int row, int spot, bool atGate)
     {
-        var userId = Guard.RequireUserId(user);
         for (var attempt = 1; ; attempt++)
         {
             try
             {
-                return await TryHoldAsync(userId, showtimeId, row, spot);
+                return await TryHoldAsync(userId, showtimeId, row, spot, atGate);
             }
             catch (DbUpdateConcurrencyException) when (attempt < 3)
             {
@@ -135,14 +142,14 @@ public sealed class TicketSalesService(
         }
     }
 
-    private async Task<HoldView> TryHoldAsync(string userId, int showtimeId, int row, int spot)
+    private async Task<HoldView> TryHoldAsync(string userId, int showtimeId, int row, int spot, bool atGate)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var showtime = await db.Showtimes.AsNoTracking().Include(s => s.Screen!.Theater)
             .FirstOrDefaultAsync(s => s.Id == showtimeId);
         if (showtime is null || !showtime.Screen!.Theater!.IsActive)
             throw new NotFoundException("Showing not found.");
-        if (NotOnSaleReason(showtime, await LoadPricesAsync(db, showtime)) is string reason)
+        if (NotOnSaleReason(showtime, await LoadPricesAsync(db, showtime), atGate) is string reason)
             throw new AppValidationException(reason);
         var screen = showtime.Screen;
         if (row < 1 || row > screen.RowSpots.Count || spot < 1 || spot > screen.RowSpots[row - 1])
@@ -211,35 +218,52 @@ public sealed class TicketSalesService(
     }
 
     // Pays for a held spot. The hold must still be the user's and not have run out. On approval the spot is sold to
-    // them and a receipt with the ticket's QR code is emailed. Sales are final.
+    // them and a receipt with the ticket's QR code and gate code is emailed. Sales are final.
     public async Task<PurchaseResult> PurchaseAsync(ClaimsPrincipal user, int ticketId, PurchaseInput input, string baseUri)
     {
         var userId = Guard.RequireUserId(user);
         await using var db = await dbFactory.CreateDbContextAsync();
+        var ticket = await SellHeldAsync(db, userId, ticketId, input.PriceOptionId, input.AddOnIds, input.Card, atGate: false);
+        var sent = await TrySendReceiptAsync(await LoadViewAsync(db, ticket.Id), baseUri);
+        return new PurchaseResult(ticket.Code!, sent);
+    }
+
+    // Charges for a spot the seller holds (the buyer online; the employee at the gate) and sells it. Online, the
+    // buyer's typed card is charged and the ticket is theirs. At the gate the charge is card-present (the processor's
+    // terminal), the ticket has no buyer account, and the car is admitted as it's sold.
+    private async Task<Ticket> SellHeldAsync(ApplicationDbContext db, string userId, int ticketId, int priceOptionId,
+        IReadOnlyList<int> addOnIds, CardInput? typedCard, bool atGate)
+    {
         var ticket = await db.Tickets.Include(t => t.Showtime!.Screen!.Theater)
             .FirstOrDefaultAsync(t => t.Id == ticketId && t.UserId == userId);
         var now = time.GetUtcNow();
         if (ticket is null || ticket.Status != TicketStatus.Held || ticket.HeldUntil <= now)
-            throw new AppValidationException("Your hold on this spot ran out. Choose a spot again.");
+            throw new AppValidationException("The hold on this spot ran out. Choose a spot again.");
         var showtime = ticket.Showtime!;
         var theater = showtime.Screen!.Theater!;
         var prices = await LoadPricesAsync(db, showtime);
-        if (NotOnSaleReason(showtime, prices) is string reason)
+        if (NotOnSaleReason(showtime, prices, atGate) is string reason)
             throw new AppValidationException(reason);
 
-        var option = prices.Options.FirstOrDefault(o => o.Id == input.PriceOptionId)
+        var option = prices.Options.FirstOrDefault(o => o.Id == priceOptionId)
             ?? throw new AppValidationException("Choose a ticket type.");
-        var addOnIds = input.AddOnIds.Distinct().ToList();
+        var ids = addOnIds.Distinct().ToList();
         var addOns = await db.AddOns.AsNoTracking()
-            .Where(a => addOnIds.Contains(a.Id) && a.TheaterId == theater.Id && a.IsActive)
+            .Where(a => ids.Contains(a.Id) && a.TheaterId == theater.Id && a.IsActive)
             .OrderBy(a => a.SortOrder).ThenBy(a => a.Id).ToListAsync();
-        if (addOns.Count != addOnIds.Count)
-            throw new AppValidationException("One of the add-ons you chose is no longer offered. Check your choices and try again.");
+        if (addOns.Count != ids.Count)
+            throw new AppValidationException("One of the add-ons chosen is no longer offered. Check the choices and try again.");
         var quote = TicketQuote.For(option, addOns);
-        var card = quote.Total > 0 ? Cards.Validate(input.Card, now) : null;
-        var buyerEmail = (await db.Users.Where(u => u.Id == userId).Select(u => u.Email).FirstOrDefaultAsync())?.Trim();
-        if (string.IsNullOrEmpty(buyerEmail))
-            throw new AppValidationException("Your account needs an email address to receive tickets.");
+        CardInput? card = null;
+        string? buyerEmail = null;
+        if (!atGate)
+        {
+            card = quote.Total > 0 ? Cards.Validate(typedCard, now) : null;
+            buyerEmail = (await db.Users.Where(u => u.Id == userId).Select(u => u.Email).FirstOrDefaultAsync())?.Trim();
+            if (string.IsNullOrEmpty(buyerEmail))
+                throw new AppValidationException("Your account needs an email address to receive tickets.");
+        }
+        var shortCode = await NewShortCodeAsync(db, theater.Id, now);
 
         // Paying: the hold can no longer expire out from under the charge.
         ticket.Status = TicketStatus.Paying;
@@ -250,13 +274,13 @@ public sealed class TicketSalesService(
         }
         catch (DbUpdateConcurrencyException)
         {
-            throw new AppValidationException("Your hold on this spot ran out. Choose a spot again.");
+            throw new AppValidationException("The hold on this spot ran out. Choose a spot again.");
         }
 
         PaymentResult result;
         try
         {
-            result = card is null
+            result = quote.Total == 0
                 ? new PaymentResult(true, null)
                 : await payments.ChargeAsync(new PaymentRequest(quote.Total,
                     $"{theater.Name}: {ScheduleService.ToView(theater, await WithFeaturesAsync(db, showtime)).Title}, spot {ticket.SpotLabel}", card));
@@ -269,13 +293,14 @@ public sealed class TicketSalesService(
         if (!result.Approved)
         {
             await BackToHeldAsync(db, ticket);
-            throw new AppValidationException($"Your payment wasn't approved: {result.DeclineReason ?? "declined"}. Check your card details or try another card.");
+            throw new AppValidationException(atGate
+                ? $"The card was declined: {result.DeclineReason ?? "declined"}. Try another card."
+                : $"Your payment wasn't approved: {result.DeclineReason ?? "declined"}. Check your card details or try another card.");
         }
 
         ticket.Status = TicketStatus.Sold;
         ticket.HeldUntil = null;
         ticket.SoldAt = now;
-        ticket.Email = buyerEmail;
         ticket.OptionName = option.Name;
         ticket.OptionPrice = option.Price;
         ticket.AddOns = quote.Lines.Select((l, i) => new TicketAddOn
@@ -283,16 +308,26 @@ public sealed class TicketSalesService(
             Position = i + 1, Name = l.AddOn.Name, Kind = l.AddOn.Kind, Amount = l.AddOn.Amount, Effect = l.Effect,
         }).ToList();
         ticket.Total = quote.Total;
-        ticket.CardBrand = card is null ? null : Cards.Brand(card.Number);
-        ticket.CardLast4 = card?.Number[^4..];
         ticket.PaymentReference = result.Reference;
         ticket.Code = NewCode();
+        ticket.ShortCode = shortCode;
+        if (atGate)
+        {
+            ticket.UserId = null;
+            ticket.SoldAtGate = true;
+            ticket.SoldById = userId;
+            ticket.AdmittedAt = now;
+        }
+        else
+        {
+            ticket.Email = buyerEmail;
+            ticket.CardBrand = card is null ? null : Cards.Brand(card.Number);
+            ticket.CardLast4 = card?.Number[^4..];
+        }
         ticket.Stamp = Guid.NewGuid();
         await db.SaveChangesAsync();
         events.Publish(ticket.ShowtimeId);
-
-        var sent = await TrySendReceiptAsync(await LoadViewAsync(db, ticket.Id), baseUri);
-        return new PurchaseResult(ticket.Code, sent);
+        return ticket;
     }
 
     // --- Tickets ---
@@ -384,15 +419,19 @@ public sealed class TicketSalesService(
 
     // --- Helpers ---
 
+    // Online sales stop when the showing starts; the gate keeps selling to latecomers until it ends.
     // Showtime.Screen.Theater must be loaded.
-    private string? NotOnSaleReason(Showtime showtime, PriceSchedule prices)
+    private string? NotOnSaleReason(Showtime showtime, PriceSchedule prices, bool atGate = false)
     {
         if (!showtime.Screen!.Theater!.IsActive)
-            return "This theater isn't selling tickets online.";
-        if (showtime.StartsAt <= time.GetUtcNow())
+            return atGate ? "This theater is inactive, so it can't sell tickets." : "This theater isn't selling tickets online.";
+        if (atGate && showtime.EndsAt <= time.GetUtcNow())
+            return "This showing has ended.";
+        if (!atGate && showtime.StartsAt <= time.GetUtcNow())
             return "This showing has started, so tickets are no longer sold online.";
         if (!payments.IsAvailable)
-            return "Online ticket sales aren't available yet.";
+            return atGate ? "Card payments aren't set up yet, so tickets can't be sold at the gate."
+                : "Online ticket sales aren't available yet.";
         if (prices.Options.Count == 0)
             return "Tickets for this showing aren't on sale yet.";
         return null;
@@ -403,13 +442,16 @@ public sealed class TicketSalesService(
         var showtime = ticket.Showtime!;
         var theater = showtime.Screen!.Theater!;
         var now = time.GetUtcNow();
+        var starts = TheaterTime.ToLocal(theater, showtime.StartsAt);
         if (ticket.AdmittedAt is DateTimeOffset at)
             return $"Already used: admitted {TheaterTime.ToLocal(theater, at):ddd, MMM d h:mm tt}.";
         if (now >= showtime.EndsAt)
-            return $"This ticket was for {TheaterTime.ToLocal(theater, showtime.StartsAt):ddd, MMM d} and can't be used on a later date.";
+            return $"Not valid: this ticket was for {starts:ddd, MMM d} and can't be used on a later date.";
         if (now < showtime.StartsAt.AddHours(-AdmitOpensHoursBefore))
-            return $"This ticket is for {TheaterTime.ToLocal(theater, showtime.StartsAt):ddd, MMM d h:mm tt}. " +
-                   $"Gates open {AdmitOpensHoursBefore} hours before the showing.";
+            return DateOnly.FromDateTime(starts) != DateOnly.FromDateTime(TheaterTime.ToLocal(theater, now))
+                ? $"Not valid today: this ticket is for {starts:ddd, MMM d} at {starts:h:mm tt}."
+                : $"Too early: this ticket is for the {starts:h:mm tt} showing, and gates open " +
+                  $"{starts.AddHours(-AdmitOpensHoursBefore):h:mm tt}.";
         return null;
     }
 
@@ -476,6 +518,19 @@ public sealed class TicketSalesService(
 
     private static bool IsUniqueViolation(DbUpdateException ex) =>
         ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation };
+
+    // A gate code not used by another of the theater's tickets for a showing that hasn't ended. There are ~700,000
+    // codes, so a clash is rare; a gate lookup still copes with duplicates by listing every match.
+    private static async Task<string> NewShortCodeAsync(ApplicationDbContext db, int theaterId, DateTimeOffset now)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            var code = ShortCodes.New();
+            if (attempt >= 10 || !await db.Tickets.AnyAsync(t => t.ShortCode == code
+                    && t.Showtime!.Screen!.TheaterId == theaterId && t.Showtime.EndsAt > now))
+                return code;
+        }
+    }
 
     // 128 random bits, URL-safe.
     private static string NewCode() => WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(16));

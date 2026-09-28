@@ -61,6 +61,19 @@ public class Ticket
     [MaxLength(32)]
     public string? Code { get; set; }
 
+    // Short enough to read out at the gate, e.g. "K7QM". Unique among the theater's tickets for showings that haven't
+    // ended when it's issued (checked, not enforced by the DB), so gate lookups also match on the theater and date.
+    [MaxLength(ShortCodes.Length)]
+    public string? ShortCode { get; set; }
+
+    // Sold at the gate rather than online: no buyer account (UserId is null), no receipt, paid on the terminal.
+    // Stored rather than derived from SoldById, which is cleared if the employee's account is deleted.
+    public bool SoldAtGate { get; set; }
+
+    // Gate sales: the employee who sold it, while their account exists.
+    public string? SoldById { get; set; }
+    public ApplicationUser? SoldBy { get; set; }
+
     // Set when gate staff let the car in; a ticket admits once.
     public DateTimeOffset? AdmittedAt { get; set; }
 }
@@ -93,4 +106,22 @@ public class TicketAddOn
 
     // What it did to the total: positive for fees, negative for discounts.
     public decimal Effect { get; set; }
+}
+
+public static class ShortCodes
+{
+    public const int Length = 4;
+
+    // No 0/O, 1/I/L or 5/S, which are easy to mix up when read aloud or off a phone.
+    public const string Alphabet = "ABCDEFGHJKMNPQRTUVWXYZ2346789";
+
+    public static string New() =>
+        new(System.Security.Cryptography.RandomNumberGenerator.GetItems<char>(Alphabet, Length));
+
+    // What a guest reads out: case and spaces don't matter.
+    public static string? Normalize(string? input)
+    {
+        var s = new string((input ?? "").Where(c => !char.IsWhiteSpace(c) && c != '-').ToArray()).ToUpperInvariant();
+        return s.Length == Length && s.All(Alphabet.Contains) ? s : null;
+    }
 }

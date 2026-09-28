@@ -32,7 +32,7 @@ else
             <a class="list-group-item list-group-item-action" href="tickets/@t.Code">
                 <div class="d-flex justify-content-between flex-wrap gap-2">
                     <strong>@t.Showing.Title</strong>
-                    <span>Spot <strong>@t.Ticket.SpotLabel</strong></span>
+                    <span>Spot <strong>@t.Ticket.SpotLabel</strong> · gate code <strong class="font-monospace">@t.Ticket.ShortCode</strong></span>
                 </div>
                 <div class="small text-muted">@t.Theater.Name · @t.Showing.ScreenName · @t.Showing.StartsLocal.ToString("ddd, MMM d · h:mm tt")</div>
             </a>

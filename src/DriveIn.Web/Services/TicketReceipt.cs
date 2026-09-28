@@ -54,8 +54,10 @@ public sealed record TicketReceipt(string Subject, string Html, IReadOnlyList<In
             <p style="margin: 0 0 4px"><strong>{s.StartsLocal:dddd, MMMM d, yyyy} at {s.StartsLocal:h:mm tt}</strong></p>
             <p style="margin: 0 0 16px">{E(s.ScreenName)} · Spot <strong style="font-size: 20px">{E(t.SpotLabel)}</strong></p>
             <p style="text-align: center; margin: 0 0 4px"><img src="cid:{QrContentId}" width="240" height="240" alt="Ticket QR code"></p>
+            <p style="text-align: center; margin: 0 0 4px; font-size: 14px">Gate code</p>
+            <p style="text-align: center; margin: 0 0 8px; font-size: 32px; font-weight: bold; letter-spacing: 6px; font-family: Menlo, Consolas, monospace">{E(t.ShortCode)}</p>
             <p style="text-align: center; margin: 0 0 16px; color: #555; font-size: 13px">
-              Show this code at the gate. Ticket {E(view.Code)} · <a href="{E(link)}">View your ticket</a>
+              Show the QR code at the gate, or tell the attendant your gate code. <a href="{E(link)}">View your ticket</a>
             </p>
             <table style="width: 100%; border-collapse: collapse; font-size: 14px">
               <tr><td style="padding: 4px 0">{E(t.OptionName)}</td><td style="text-align: right">{Money.Format(t.OptionPrice)}</td></tr>
@@ -81,7 +83,9 @@ public sealed record TicketReceipt(string Subject, string Html, IReadOnlyList<In
     }
 
     public static string PaidWith(Ticket t) =>
-        t.CardLast4 is null ? "No payment needed" : $"Paid with {t.CardBrand} ending {t.CardLast4}";
+        t.Total == 0 ? "No payment needed"
+        : t.SoldAtGate ? "Paid by card at the gate"
+        : $"Paid with {t.CardBrand} ending {t.CardLast4}";
 
     public static string SignedMoney(decimal amount) => amount < 0 ? "−" + Money.Format(-amount) : "+" + Money.Format(amount);
 

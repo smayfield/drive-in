@@ -5,7 +5,9 @@ namespace DriveIn.Web.Services;
 // Card details as typed at checkout. They go straight to the processor; only the brand and last four digits are kept.
 public sealed record CardInput(string NameOnCard, string Number, int ExpiryMonth, int ExpiryYear, string Cvc);
 
-public sealed record PaymentRequest(decimal Amount, string Description, CardInput Card);
+// Card is what the buyer typed online; null for a card-present charge at the gate (the card is tapped or swiped on
+// the processor's terminal, so its details never reach the app).
+public sealed record PaymentRequest(decimal Amount, string Description, CardInput? Card);
 
 public sealed record PaymentResult(bool Approved, string? Reference, string? DeclineReason = null)
 {

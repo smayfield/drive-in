@@ -11,7 +11,7 @@ public class TicketSalesTests
     private static readonly DateOnly Day = new(2026, 9, 5);
     private static readonly CardInput Visa = new("Pat Buyer", "4242 4242 4242 4242", 12, 2030, "123");
 
-    private sealed record Setup(
+    internal sealed record Setup(
         TestApp App, ApplicationUser Owner, Theater Theater, Screen Screen, Showtime Showing,
         PriceOption Single, PriceOption CarLoad, AddOn OutsideFood, AddOn Veteran, AddOn Senior) : IAsyncDisposable
     {
@@ -22,7 +22,7 @@ public class TicketSalesTests
 
     // Chicago time; one screen of two rows (3 and 4 spots); Jaws at 8 PM on Sep 5 (01:00 UTC Sep 6); prices $10/$25;
     // a $5 fee, a $2 discount and a 10% discount. The clock starts at 2026-09-01 12:00 UTC.
-    private static async Task<Setup> SetUpAsync()
+    internal static async Task<Setup> SetUpAsync()
     {
         var app = new TestApp();
         var owner = await app.CreateUserAsync("owner@example.com");
@@ -51,10 +51,10 @@ public class TicketSalesTests
         return new Setup(app, owner, theater, screen, showing, prices.Options[0], prices.Options[1], food, veteran, senior);
     }
 
-    private static async Task<ClaimsPrincipal> BuyerAsync(TestApp app, string email = "buyer@example.com") =>
+    internal static async Task<ClaimsPrincipal> BuyerAsync(TestApp app, string email = "buyer@example.com") =>
         Principals.For(await app.CreateUserAsync(email));
 
-    private static PurchaseInput Buy(PriceOption option, params AddOn[] addOns) => new(option.Id, addOns.Select(a => a.Id).ToList(), Visa);
+    internal static PurchaseInput Buy(PriceOption option, params AddOn[] addOns) => new(option.Id, addOns.Select(a => a.Id).ToList(), Visa);
 
     [Fact]
     public async Task A_buyer_holds_a_spot_pays_and_gets_an_emailed_ticket_with_a_qr_code()
@@ -73,7 +73,7 @@ public class TicketSalesTests
         // $25 + $5 − $2 − 10% of $25.
         var charge = Assert.Single(s.App.Payments.Charges);
         Assert.Equal(25.50m, charge.Amount);
-        Assert.Equal("4242424242424242", charge.Card.Number);
+        Assert.Equal("4242424242424242", charge.Card!.Number);
         await using var db = s.App.Db();
         var ticket = await db.Tickets.Include(t => t.AddOns).SingleAsync();
         Assert.Equal(TicketStatus.Sold, ticket.Status);
@@ -340,7 +340,7 @@ public class TicketSalesTests
 
     // --- The gate ---
 
-    private static async Task<string> SellAsync(Setup s, ClaimsPrincipal buyer, int row = 1, int spot = 1)
+    internal static async Task<string> SellAsync(Setup s, ClaimsPrincipal buyer, int row = 1, int spot = 1)
     {
         var hold = await s.Sales.HoldAsync(buyer, s.Showing.Id, row, spot);
         return (await s.Sales.PurchaseAsync(buyer, hold.TicketId, Buy(s.Single), TestApp.BaseUri)).Code;
@@ -382,7 +382,7 @@ public class TicketSalesTests
         var staff = Principals.For(gate);
 
         // Showing starts 01:00 UTC Sep 6; gates open 3 hours before.
-        Assert.Contains("Gates open", (await s.Sales.GetByCodeAsync(staff, code)).AdmitProblem);
+        Assert.Contains("Not valid today: this ticket is for Sat, Sep 5", (await s.Sales.GetByCodeAsync(staff, code)).AdmitProblem);
         await Assert.ThrowsAsync<AppValidationException>(() => s.Sales.AdmitAsync(staff, code));
 
         s.App.Time.SetUtcNow(new DateTimeOffset(2026, 9, 5, 22, 30, 0, TimeSpan.Zero));

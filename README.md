@@ -34,9 +34,9 @@ Docker on one EC2 server. The setup mirrors LegoList.
 - **Employees** are separate accounts bound to one theater, created only by invitation from its
   owner or anyone with "Invite employees". What they can do is set by **roles**.
 - **Roles** are defined per theater by its owner (Manage → Roles). A role is a named set of actions
-  (edit profile, manage screens, manage schedule, manage pricing, view/invite/manage employees, manage roles, admit guests). Employees can have several
+  (edit profile, manage screens, manage schedule, manage pricing, view/invite/manage employees, manage roles, admit guests, sell tickets at the gate). Employees can have several
   roles and get the union of their actions; new employees have none, so they can't do anything until
-  assigned a role. New theaters start with Manager (everything), Operations, Ticketing (admit guests) and Concessions,
+  assigned a role. New theaters start with Manager (everything), Operations, Ticketing (admit guests, sell at the gate) and Concessions,
   which owners can change or delete. Someone with "Manage roles" can only grant, change or remove
   actions they hold themselves, and can't delete an employee who has more authority than they do.
 
@@ -85,13 +85,22 @@ invitee sets a password or continues with Google using the invited address.
   works because the app is a single server; running several would need a shared bus such as Postgres LISTEN/NOTIFY.
 - **Payment** is by credit card only, through `IPaymentProcessor`. There's no real processor yet: set
   `Payments:Provider` to `Dummy` (on in `appsettings.Development.json`) for one that approves everything without
-  taking money. With it unset, as in production, nothing is sold online. Only the card brand and last four digits
+  taking money. With it unset, as in production, nothing is sold, online or at the gate. Only the card brand and last four digits
   are stored. A ticket whose total is $0 after discounts needs no card.
 - On approval the spot is sold to the buyer and a **receipt** is emailed with a QR code (an inline image) linking to
-  `tickets/{code}`, a random 128-bit code. Buyers see their tickets under My tickets and can resend the receipt.
-- **At the gate**, staff with "Admit guests" scan the QR code with a phone camera (or type the code on Manage →
-  Gate) and admit the car. A ticket admits once, only from 3 hours before its showing until it ends, so it can't
-  be used on a later date.
+  `tickets/{code}` (a random 128-bit code) and a 4-character **gate code** (e.g. `K7QM`; no look-alike characters)
+  the guest can read out instead. Buyers see their tickets under My tickets and can resend the receipt.
+- **The gate** (Manage → Gate) has two panels, each shown to staff with its permission:
+  - **Check in** ("Admit guests"): type the gate code, or scan the QR code (a handheld scanner types into the box;
+    a phone's camera app opens `tickets/{code}` directly). It shows the showing, screen and spot, and whether the
+    ticket is valid: it admits once, only at this theater, from 3 hours before its showing until it ends, so a
+    ticket for another date is refused. Gate codes are unique among a theater's upcoming tickets (checked when
+    issued, not by the DB), so a lookup matches the theater's tickets from yesterday on and lists any duplicates.
+  - **Sell a ticket** ("Sell tickets at the gate"): pick one of today's showings (the gate keeps selling after a
+    showing starts, until it ends), pick a spot on the live map (held for the car as online), choose the ticket
+    option and add-ons, and charge the card on the terminal. The charge is card-present (`PaymentRequest.Card` is
+    null; the dummy processor approves it), the ticket has no buyer account (`SoldById` is the attendant), and the
+    car is checked in as it's sold. Online buyers and the gate compete for the same spots; first to hold wins.
 - **All sales are final**: there are no refunds or cancellations, including for weather. Sold tickets are records,
   so a showing with sales can't be removed or moved to another screen, a film or screen with sales can't be
   deleted, and a screen can't drop or relabel spots sold for upcoming showings.

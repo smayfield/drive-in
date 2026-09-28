@@ -1,0 +1,74 @@
+@* Choosing a ticket option and add-ons, with the running total. The service recomputes the price when selling. *@
+
+<fieldset class="mb-3">
+    <legend class="form-label fs-6 fw-semibold">Ticket</legend>
+    @foreach (var o in Prices.Options)
+    {
+        <div class="form-check">
+            <input class="form-check-input" type="radio" name="@($"{IdPrefix}-option")" id="@($"{IdPrefix}-option-{o.Id}")"
+                   checked="@(OptionId == o.Id)" @onchange="() => SetOptionAsync(o.Id)" />
+            <label class="form-check-label d-flex justify-content-between" for="@($"{IdPrefix}-option-{o.Id}")">
+                <span>@o.Name @if (o.Description is not null) { <span class="text-muted small ms-1">— @o.Description</span> }</span>
+                <span>@Money.Format(o.Price)</span>
+            </label>
+        </div>
+    }
+</fieldset>
+
+@if (AddOns.Count > 0)
+{
+    <fieldset class="mb-3">
+        <legend class="form-label fs-6 fw-semibold">Add-ons</legend>
+        @foreach (var a in AddOns)
+        {
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="@($"{IdPrefix}-addon-{a.Id}")"
+                       checked="@AddOnIds.Contains(a.Id)" @onchange="() => ToggleAsync(a.Id)" />
+                <label class="form-check-label d-flex justify-content-between" for="@($"{IdPrefix}-addon-{a.Id}")">
+                    <span>@a.Name @if (a.Description is not null) { <span class="text-muted small ms-1">— @a.Description</span> }</span>
+                    <span>@a.Display</span>
+                </label>
+            </div>
+        }
+    </fieldset>
+}
+
+@if (Quote(Prices, AddOns, OptionId, AddOnIds) is TicketQuote quote)
+{
+    <table class="table table-sm mb-3">
+        <tbody>
+            <tr><td>@quote.Option.Name</td><td class="text-end">@Money.Format(quote.Option.Price)</td></tr>
+            @foreach (var line in quote.Lines)
+            {
+                <tr><td>@line.AddOn.Name</td><td class="text-end">@TicketReceipt.SignedMoney(line.Effect)</td></tr>
+            }
+            <tr class="fw-bold"><td>Total</td><td class="text-end">@Money.Format(quote.Total)</td></tr>
+        </tbody>
+    </table>
+}
+
+@code {
+    [Parameter, EditorRequired] public PriceSchedule Prices { get; set; } = default!;
+    [Parameter, EditorRequired] public List<AddOn> AddOns { get; set; } = [];
+    // Both two-way bound (@bind-OptionId, @bind-AddOnIds), so the parent re-renders its total and pay button.
+    [Parameter] public int OptionId { get; set; }
+    [Parameter] public EventCallback<int> OptionIdChanged { get; set; }
+    [Parameter, EditorRequired] public IReadOnlySet<int> AddOnIds { get; set; } = new HashSet<int>();
+    [Parameter] public EventCallback<IReadOnlySet<int>> AddOnIdsChanged { get; set; }
+    [Parameter] public string IdPrefix { get; set; } = "ticket";
+
+    public static TicketQuote? Quote(PriceSchedule prices, IEnumerable<AddOn> addOns, int optionId, IReadOnlySet<int> addOnIds) =>
+        prices.Options.FirstOrDefault(o => o.Id == optionId) is PriceOption option
+            ? TicketQuote.For(option, addOns.Where(a => addOnIds.Contains(a.Id)))
+            : null;
+
+    private Task SetOptionAsync(int id) => OptionIdChanged.InvokeAsync(id);
+
+    private Task ToggleAsync(int id)
+    {
+        var ids = AddOnIds.ToHashSet();
+        if (!ids.Remove(id))
+            ids.Add(id);
+        return AddOnIdsChanged.InvokeAsync(ids);
+    }
+}

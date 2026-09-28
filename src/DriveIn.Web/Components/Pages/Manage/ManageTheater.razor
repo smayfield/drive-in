@@ -24,7 +24,7 @@ else
             {
                 <a class="btn btn-outline-secondary" href="theaters/@theater.Slug">View public page</a>
             }
-            @if (Can(TheaterPermissions.AdmitGuests))
+            @if (Can(TheaterPermissions.AdmitGuests) || Can(TheaterPermissions.SellAtGate))
             {
                 <a class="btn btn-outline-primary" href="manage/@theater.Id/gate">Gate</a>
             }
