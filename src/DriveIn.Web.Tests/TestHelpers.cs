@@ -25,8 +25,9 @@ public sealed class FakeEmailSender : IAppEmailSender
     public Task SendAsync(string to, string subject, string htmlBody, IReadOnlyList<InlineImage>? images = null,
         CancellationToken ct = default)
     {
+        // A faulted task, not a synchronous throw, like a real async sender.
         if (FailWith is not null)
-            throw FailWith;
+            return Task.FromException(FailWith);
         Sent.Add((to, subject, htmlBody));
         Images.Add(images);
         return Task.CompletedTask;
