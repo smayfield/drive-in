@@ -17,13 +17,17 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
     // Live theaters, plus any demo theaters the user belongs to (so owners and staff can try them out).
     public async Task<List<Theater>> ListActiveAsync(ClaimsPrincipal user)
     {
+        // CanBrowse as a query, so private demo theaters aren't loaded only to be filtered out.
+        var userId = user.GetUserId();
+        var admin = userId is not null && user.IsAdmin();
+        var employeeTheaterId = userId is null ? null : user.GetEmployeeTheaterId();
         await using var db = await dbFactory.CreateDbContextAsync();
-        var theaters = await db.Theaters.AsNoTracking()
-            .Where(t => t.IsActive)
+        return await db.Theaters.AsNoTracking()
+            .Where(t => t.IsActive && (t.Mode == TheaterMode.Live || admin
+                || (userId != null && t.OwnerId == userId) || t.Id == employeeTheaterId))
             .Include(t => t.Screens)
             .OrderBy(t => t.Name)
             .ToListAsync();
-        return theaters.Where(t => CanBrowse(user, t)).ToList();
     }
 
     public async Task<Theater?> GetBySlugAsync(ClaimsPrincipal user, string slug)

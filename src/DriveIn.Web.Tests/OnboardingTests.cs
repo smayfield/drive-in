@@ -149,7 +149,9 @@ public class OnboardingTests
         await Assert.ThrowsAsync<NotFoundException>(() => sales.GetShowingAsync(stranger, showing.Id));
         await Assert.ThrowsAsync<NotFoundException>(() => sales.HoldAsync(stranger, showing.Id, 1, 1));
 
-        foreach (var member in new[] { me, Principals.For(staff) })
+        var admin = Principals.For(await app.CreateUserAsync("admin@example.com", admin: true), admin: true);
+        Assert.Empty(await theaters.ListActiveAsync(Principals.Anonymous));
+        foreach (var member in new[] { me, Principals.For(staff), admin })
         {
             Assert.Single(await theaters.ListActiveAsync(member));
             Assert.NotNull(await theaters.GetBySlugAsync(member, theater.Slug));
