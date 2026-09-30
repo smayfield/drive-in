@@ -7,8 +7,10 @@ namespace DriveIn.Web.Data;
 public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : IdentityDbContext<ApplicationUser>(options)
 {
     public DbSet<Theater> Theaters => Set<Theater>();
+    public DbSet<TheaterLogo> TheaterLogos => Set<TheaterLogo>();
     public DbSet<Screen> Screens => Set<Screen>();
     public DbSet<Film> Films => Set<Film>();
+    public DbSet<FilmPoster> FilmPosters => Set<FilmPoster>();
     public DbSet<Showtime> Showtimes => Set<Showtime>();
     public DbSet<ShowtimeFeature> ShowtimeFeatures => Set<ShowtimeFeature>();
     public DbSet<PriceSchedule> PriceSchedules => Set<PriceSchedule>();
@@ -56,6 +58,15 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        builder.Entity<TheaterLogo>(l =>
+        {
+            l.HasKey(x => x.TheaterId);
+            l.HasOne(x => x.Theater)
+                .WithOne()
+                .HasForeignKey<TheaterLogo>(x => x.TheaterId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         builder.Entity<Screen>(s =>
         {
             s.HasOne(x => x.Theater)
@@ -70,6 +81,15 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             f.HasOne(x => x.Theater)
                 .WithMany()
                 .HasForeignKey(x => x.TheaterId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<FilmPoster>(p =>
+        {
+            p.HasKey(x => x.FilmId);
+            p.HasOne(x => x.Film)
+                .WithOne()
+                .HasForeignKey<FilmPoster>(x => x.FilmId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

@@ -226,11 +226,17 @@ else
     <section>
         <h2 class="h4">Films</h2>
         <table class="table align-middle">
-            <thead><tr><th>Title</th><th style="width: 8rem">Rating</th><th style="width: 10rem">Runtime (min)</th>@if (canManage) { <th style="width: 14rem"></th> }</tr></thead>
+            <thead><tr><th style="width: 4.5rem"></th><th>Title</th><th style="width: 8rem">Rating</th><th style="width: 10rem">Runtime (min)</th>@if (canManage) { <th style="width: 14rem"></th> }</tr></thead>
             <tbody>
                 @foreach (var f in films)
                 {
                     <tr @key="f.Id">
+                        <td>
+                            @if (f.PosterUrl is not null)
+                            {
+                                <img src="@f.PosterUrl" alt="Poster for @f.Title" width="46" height="69" style="object-fit: cover" loading="lazy" />
+                            }
+                        </td>
                         @if (editingFilm?.Id == f.Id)
                         {
                             <td><input class="form-control form-control-sm" @bind="editingFilm.Title" maxlength="200" aria-label="Title" /></td>
@@ -243,7 +249,12 @@ else
                         }
                         else
                         {
-                            <td>@f.Title</td>
+                            <td>
+                                @f.Title @if (f.ReleaseYear is not null) { <span class="text-muted">(@f.ReleaseYear)</span> }
+                                @if (f.Genres is not null) { <div class="small text-muted">@f.Genres</div> }
+                                @if (f.Directors is not null) { <div class="small text-muted">Directed by @f.Directors</div> }
+                                @if (f.Cast is not null) { <div class="small text-muted">Starring @f.Cast</div> }
+                            </td>
                             <td>@f.Rating</td>
                             <td>@f.RuntimeMinutes</td>
                             @if (canManage)
@@ -262,10 +273,53 @@ else
                             }
                         }
                     </tr>
+                    @if (editingFilm?.Id == f.Id)
+                    {
+                        <tr @key="@($"details-{f.Id}")" class="table-warning">
+                            <td></td>
+                            <td colspan="4">
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-2">
+                                        <label class="form-label small" for="film-year">Year</label>
+                                        <input id="film-year" class="form-control form-control-sm" type="number" min="@Film.MinReleaseYear" @bind="editingFilm.ReleaseYear" />
+                                    </div>
+                                    <div class="col-md-5">
+                                        <label class="form-label small" for="film-directors">Directed by</label>
+                                        <input id="film-directors" class="form-control form-control-sm" @bind="editingFilm.Directors" maxlength="300" />
+                                    </div>
+                                    <div class="col-md-5">
+                                        <label class="form-label small" for="film-genres">Genres</label>
+                                        <input id="film-genres" class="form-control form-control-sm" @bind="editingFilm.Genres" maxlength="200" placeholder="Horror, Thriller" />
+                                    </div>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small" for="film-cast">Starring</label>
+                                    <input id="film-cast" class="form-control form-control-sm" @bind="editingFilm.Cast" maxlength="500" />
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small" for="film-overview">Description</label>
+                                    <textarea id="film-overview" class="form-control form-control-sm" rows="3" @bind="editingFilm.Overview" maxlength="2000"></textarea>
+                                </div>
+                                <div class="mb-1">
+                                    <label class="form-label small" for="film-poster">Poster</label>
+                                    <div class="d-flex flex-wrap align-items-center gap-3">
+                                        <InputFile id="film-poster" class="form-control form-control-sm w-auto" accept=".jpg,.jpeg,.png,.gif,image/jpeg,image/png,image/gif"
+                                                   OnChange="UploadPosterAsync" />
+                                        @if (editingFilm.PosterUpdatedAt is not null)
+                                        {
+                                            <button class="btn btn-sm btn-outline-danger" @onclick="RemovePosterAsync">Remove poster</button>
+                                        }
+                                    </div>
+                                    <div class="form-text">JPG, GIF or PNG, up to @(FilmPoster.MaxBytes / (1024 * 1024)) MB. Use artwork you have the right to show, such as the distributor's promotional poster. Uploads save right away; use Save for the other details.</div>
+                                </div>
+                            </td>
+                        </tr>
+                    }
                 }
                 @if (canManage)
                 {
                     <tr>
+                        <td></td>
                         <td><input class="form-control form-control-sm" placeholder="New film title" @bind="newFilm.Title" maxlength="200" aria-label="New film title" /></td>
                         <td><input class="form-control form-control-sm" placeholder="PG-13" @bind="newFilm.Rating" maxlength="10" aria-label="New film rating" /></td>
                         <td><input class="form-control form-control-sm" type="number" min="1" max="@Film.MaxRuntimeMinutes" @bind="newFilm.RuntimeMinutes" aria-label="New film runtime in minutes" /></td>
@@ -423,6 +477,7 @@ else
         await ReloadAsync();
     });
 
+    // Adds the film, then opens it for editing so its details and poster can be filled in.
     private Task AddFilmAsync() => RunAsync(async () =>
     {
         var film = await Schedule.AddFilmAsync(User, Id, new FilmInput(newFilm.Title, newFilm.Rating, newFilm.RuntimeMinutes));
@@ -430,19 +485,52 @@ else
         await ReloadAsync();
         if (draft.EditingId is null && draft.Features.Count == 1)
             draft.Features[0].FilmId = film.Id;
+        StartEditFilm(film);
     });
 
     private void StartEditFilm(Film film)
     {
         confirmFilmId = null;
-        editingFilm = new Film { Id = film.Id, Title = film.Title, Rating = film.Rating, RuntimeMinutes = film.RuntimeMinutes };
+        editingFilm = new Film
+        {
+            Id = film.Id, Title = film.Title, Rating = film.Rating, RuntimeMinutes = film.RuntimeMinutes,
+            ReleaseYear = film.ReleaseYear, Overview = film.Overview, Directors = film.Directors, Cast = film.Cast,
+            Genres = film.Genres, PosterUpdatedAt = film.PosterUpdatedAt,
+        };
     }
 
     private Task SaveFilmAsync() => RunAsync(async () =>
     {
-        await Schedule.UpdateFilmAsync(User, editingFilm!.Id, new FilmInput(editingFilm.Title, editingFilm.Rating, editingFilm.RuntimeMinutes));
+        var f = editingFilm!;
+        await Schedule.UpdateFilmAsync(User, f.Id, new FilmInput(f.Title, f.Rating, f.RuntimeMinutes, f.ReleaseYear,
+            f.Overview, f.Directors, f.Cast, f.Genres));
         await ReloadAsync();
     });
+
+    // Posters save immediately; the edit form (and any unsaved text in it) stays open.
+    private Task UploadPosterAsync(InputFileChangeEventArgs e) => RunAsync(async () =>
+    {
+        var file = e.File;
+        if (file.Size > FilmPoster.MaxBytes)
+            throw new AppValidationException($"Posters can be at most {FilmPoster.MaxBytes / (1024 * 1024)} MB.");
+        using var buffer = new MemoryStream();
+        await using (var stream = file.OpenReadStream(FilmPoster.MaxBytes))
+            await stream.CopyToAsync(buffer);
+        await Schedule.SetPosterAsync(User, editingFilm!.Id, buffer.ToArray());
+        await RefreshPosterAsync();
+    }, "Poster saved.");
+
+    private Task RemovePosterAsync() => RunAsync(async () =>
+    {
+        await Schedule.RemovePosterAsync(User, editingFilm!.Id);
+        await RefreshPosterAsync();
+    }, "Poster removed.");
+
+    private async Task RefreshPosterAsync()
+    {
+        films = await Schedule.ListFilmsAsync(User, Id);
+        editingFilm!.PosterUpdatedAt = films.FirstOrDefault(x => x.Id == editingFilm.Id)?.PosterUpdatedAt;
+    }
 
     private Task DeleteFilmAsync(int filmId) => RunAsync(async () =>
     {

@@ -56,6 +56,28 @@ else
     {
         <section class="mb-5">
             <h2 class="h4">Profile</h2>
+            <div class="mb-4">
+                <label class="form-label" for="logo-file">Logo</label>
+                <div class="d-flex flex-wrap align-items-center gap-3">
+                    @if (theater.LogoUrl is not null)
+                    {
+                        <img src="@theater.LogoUrl" alt="@theater.Name logo" style="max-height: 6rem; max-width: 12rem; object-fit: contain" class="border rounded p-1" />
+                    }
+                    else
+                    {
+                        <span class="text-muted">No logo yet.</span>
+                    }
+                    <div>
+                        <InputFile id="logo-file" class="form-control form-control-sm" accept=".jpg,.jpeg,.png,.gif,image/jpeg,image/png,image/gif"
+                                   OnChange="UploadLogoAsync" />
+                        <div class="form-text">JPG, GIF or PNG, up to @(TheaterLogo.MaxBytes / (1024 * 1024)) MB. Shown on your theater's public page.</div>
+                    </div>
+                    @if (theater.LogoUrl is not null)
+                    {
+                        <button class="btn btn-sm btn-outline-danger" @onclick="RemoveLogoAsync">Remove logo</button>
+                    }
+                </div>
+            </div>
             <EditForm Model="profile" OnValidSubmit="SaveProfileAsync">
                 <DataAnnotationsValidator />
                 <TheaterProfileFields Model="profile" />
@@ -172,6 +194,24 @@ else
         // Reload: the plan panel's checklist and billing estimate depend on the profile (time zone, season).
         theater = await Theaters.GetForManageAsync(User, Id);
     }, "Profile saved.");
+
+    private Task UploadLogoAsync(InputFileChangeEventArgs e) => RunAsync(async () =>
+    {
+        var file = e.File;
+        if (file.Size > TheaterLogo.MaxBytes)
+            throw new AppValidationException($"Logos can be at most {TheaterLogo.MaxBytes / (1024 * 1024)} MB.");
+        using var buffer = new MemoryStream();
+        await using (var stream = file.OpenReadStream(TheaterLogo.MaxBytes))
+            await stream.CopyToAsync(buffer);
+        await Theaters.SetLogoAsync(User, Id, buffer.ToArray());
+        theater = await Theaters.GetForManageAsync(User, Id);
+    }, "Logo saved.");
+
+    private Task RemoveLogoAsync() => RunAsync(async () =>
+    {
+        await Theaters.RemoveLogoAsync(User, Id);
+        theater = await Theaters.GetForManageAsync(User, Id);
+    }, "Logo removed.");
 
     private Task AddScreenAsync() => RunAsync(async () =>
     {

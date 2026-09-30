@@ -6,7 +6,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DriveIn.Web.Services;
 
-public sealed record FilmInput(string Title, string? Rating, int RuntimeMinutes);
+// The details after the runtime are optional and shown on the public theater page.
+public sealed record FilmInput(
+    string Title, string? Rating, int RuntimeMinutes, int? ReleaseYear = null, string? Overview = null,
+    string? Directors = null, string? Cast = null, string? Genres = null);
 
 // A showing: one or more films (in order) on a screen. IntermissionMinutes null uses the theater's default;
 // PriceScheduleId null uses the theater's default prices.
@@ -14,7 +17,11 @@ public sealed record ShowtimeInput(
     int ScreenId, IReadOnlyList<int> FilmIds, DateOnly Date, TimeOnly StartTime,
     int? IntermissionMinutes = null, int? PriceScheduleId = null);
 
-public sealed record FeatureView(int FilmId, string Title, string? Rating, int RuntimeMinutes, DateTime StartsLocal, DateTime EndsLocal);
+// The trailing fields are the film's optional details; null where the theater left them out.
+public sealed record FeatureView(
+    int FilmId, string Title, string? Rating, int RuntimeMinutes, DateTime StartsLocal, DateTime EndsLocal,
+    string? PosterUrl = null, int? Year = null, string? Overview = null, string? Directors = null, string? Cast = null,
+    string? Genres = null);
 
 // Local times are in the theater's time zone. PriceScheduleId/Name are the showtime's own schedule; null means no
 // override (it follows whatever the theater's default is), so a pinned schedule shows even if it's also the default.
@@ -85,8 +92,53 @@ public sealed class ScheduleService(IDbContextFactory<ApplicationDbContext> dbFa
             $"Tickets were sold for showings of \"{film.Title}\", so it's kept with those sales records.");
         db.ShowtimeFeatures.RemoveRange(showtimes.SelectMany(s => s.Features));
         db.Showtimes.RemoveRange(showtimes);
+        db.FilmPosters.RemoveRange(db.FilmPosters.Where(p => p.FilmId == filmId));
         db.Films.Remove(film);
         await db.SaveChangesAsync();
+    }
+
+    // --- Posters ---
+
+    // Requires ManageSchedule. Replaces any existing poster. The type is taken from the file's bytes, and only JPEG,
+    // GIF and PNG are accepted (not SVG, which can carry script).
+    public async Task SetPosterAsync(ClaimsPrincipal user, int filmId, byte[] data)
+    {
+        if (data.Length == 0)
+            throw new AppValidationException("Choose an image file.");
+        if (data.Length > FilmPoster.MaxBytes)
+            throw new AppValidationException($"Posters can be at most {FilmPoster.MaxBytes / (1024 * 1024)} MB.");
+        var contentType = UploadedImages.Sniff(data)
+            ?? throw new AppValidationException("Posters must be JPG, GIF or PNG images.");
+
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var film = await LoadFilmAuthorizedAsync(db, user, filmId);
+        var poster = await db.FilmPosters.FirstOrDefaultAsync(p => p.FilmId == filmId);
+        if (poster is null)
+            db.FilmPosters.Add(poster = new FilmPoster { FilmId = filmId });
+        poster.ContentType = contentType;
+        poster.Data = data;
+        film.PosterUpdatedAt = time.GetUtcNow();
+        await db.SaveChangesAsync();
+    }
+
+    public async Task RemovePosterAsync(ClaimsPrincipal user, int filmId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var film = await LoadFilmAuthorizedAsync(db, user, filmId);
+        db.FilmPosters.RemoveRange(db.FilmPosters.Where(p => p.FilmId == filmId));
+        film.PosterUpdatedAt = null;
+        await db.SaveChangesAsync();
+    }
+
+    // The poster of a film at a theater the user may browse (see TheaterService.CanBrowse); null when there's none
+    // or it isn't visible to them.
+    public async Task<FilmPoster?> GetPosterAsync(ClaimsPrincipal user, int filmId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var film = await db.Films.AsNoTracking().Include(f => f.Theater).FirstOrDefaultAsync(f => f.Id == filmId);
+        if (film?.PosterUpdatedAt is null || !TheaterService.CanBrowse(user, film.Theater!))
+            return null;
+        return await db.FilmPosters.AsNoTracking().FirstOrDefaultAsync(p => p.FilmId == filmId);
     }
 
     // --- Intermission ---
@@ -183,7 +235,8 @@ public sealed class ScheduleService(IDbContextFactory<ApplicationDbContext> dbFa
         var starts = Showtime.FeatureStarts(s.StartsAt, Runtimes(s), s.IntermissionMinutes).ToList();
         return new ShowtimeView(s.Id, s.ScreenId, s.Screen!.Name,
             features.Select((f, i) => new FeatureView(f.FilmId, f.Film!.Title, f.Film.Rating, f.Film.RuntimeMinutes,
-                TheaterTime.ToLocal(theater, starts[i]), TheaterTime.ToLocal(theater, starts[i].AddMinutes(f.Film.RuntimeMinutes)))).ToList(),
+                TheaterTime.ToLocal(theater, starts[i]), TheaterTime.ToLocal(theater, starts[i].AddMinutes(f.Film.RuntimeMinutes)),
+                f.Film.PosterUrl, f.Film.ReleaseYear, f.Film.Overview, f.Film.Directors, f.Film.Cast, f.Film.Genres)).ToList(),
             s.IntermissionMinutes,
             TheaterTime.ToLocal(theater, s.StartsAt), TheaterTime.ToLocal(theater, s.EndsAt),
             s.PriceScheduleId, s.PriceSchedule?.Name);
@@ -289,6 +342,14 @@ public sealed class ScheduleService(IDbContextFactory<ApplicationDbContext> dbFa
         return film;
     }
 
+    private static string? Detail(string? value, int max, string name)
+    {
+        var text = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        if (text?.Length > max)
+            throw new AppValidationException($"{name} can be at most {max} characters.");
+        return text;
+    }
+
     private static void Apply(FilmInput input, Film film)
     {
         var title = (input.Title ?? "").Trim();
@@ -301,8 +362,15 @@ public sealed class ScheduleService(IDbContextFactory<ApplicationDbContext> dbFa
             throw new AppValidationException("Ratings can be at most 10 characters.");
         if (input.RuntimeMinutes is < 1 or > Film.MaxRuntimeMinutes)
             throw new AppValidationException($"Runtime must be 1 to {Film.MaxRuntimeMinutes} minutes.");
+        if (input.ReleaseYear is int year && (year < Film.MinReleaseYear || year > DateTime.UtcNow.Year + 5))
+            throw new AppValidationException($"The year must be between {Film.MinReleaseYear} and {DateTime.UtcNow.Year + 5}.");
         film.Title = title;
         film.Rating = rating;
         film.RuntimeMinutes = input.RuntimeMinutes;
+        film.ReleaseYear = input.ReleaseYear;
+        film.Overview = Detail(input.Overview, 2000, "The description");
+        film.Directors = Detail(input.Directors, 300, "Directors");
+        film.Cast = Detail(input.Cast, 500, "Cast");
+        film.Genres = Detail(input.Genres, 200, "Genres");
     }
 }

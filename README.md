@@ -62,6 +62,16 @@ invitee sets a password or continues with Google using the invited address.
   `America/Chicago`) and stored in UTC.
 - A theater may set an operating **season** (profile → Season opens / closes, either end optional). Showings
   can only be scheduled within it, and it can't be changed to leave out showings already scheduled.
+- **Film details and posters** (Schedule → Films → Edit): besides title, rating and runtime, a film can have a year, genres,
+  director, cast and a description, and an uploaded poster (JPG, GIF or PNG, up to 2 MB; "Manage schedule"). There's no
+  external movie database: IMDb has no free API, and TMDB's commercial license is $150 a month, so theaters enter these
+  by hand and upload artwork they have the right to show (e.g. the distributor's promotional poster). Posters are stored in the
+  database (`film_posters`) and served from `/films/{id}/poster` to signed-in users who can browse the theater. They show
+  on the theater's page beside each showing.
+- **Logo**: with "Edit profile", a theater uploads a JPG, GIF or PNG (up to 2 MB) on its manage page. The type is checked
+  from the file's bytes (no SVG). It's stored in the database (`theater_logos`, so backups include it) and served from
+  `/theaters/{slug}/logo` to signed-in users who can browse that theater (demo theaters: members only). It shows on the
+  theaters list and the theater's page.
 
 ## Pricing
 

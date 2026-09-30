@@ -14,7 +14,13 @@ else
     <PageTitle>@theater.Name · Drive-In Online</PageTitle>
 
     <p><a href="theaters">&larr; All theaters</a></p>
-    <h1>@theater.Name</h1>
+    <div class="d-flex align-items-center gap-3 mb-2">
+        @if (theater.LogoUrl is not null)
+        {
+            <img src="@theater.LogoUrl" alt="@theater.Name logo" style="max-height: 6rem; max-width: 12rem; object-fit: contain" />
+        }
+        <h1 class="mb-0">@theater.Name</h1>
+    </div>
     @if (theater.SeasonOpensOn is not null || theater.SeasonClosesOn is not null)
     {
         <p class="text-muted">Season: @Seasons.Describe(theater)</p>
@@ -39,8 +45,23 @@ else
                     @foreach (var s in day)
                     {
                         <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2">
+                            <div class="d-flex gap-2">
+                                @foreach (var f in s.Features.Where(f => f.PosterUrl is not null))
+                                {
+                                    <img src="@f.PosterUrl" alt="Poster for @f.Title" width="60" height="90" style="object-fit: cover" loading="lazy" />
+                                }
                             <div>
                                 <strong>@s.StartsLocal.ToString("h:mm tt")</strong> · @s.Title
+                                @foreach (var f in s.Features.Where(f => f.Directors is not null || f.Cast is not null || f.Year is not null))
+                                {
+                                    <div class="small">
+                                        @if (s.IsMultiFeature) { <span class="fw-semibold">@f.Title</span> }
+                                        @if (f.Year is not null) { <span class="text-muted">(@f.Year)</span> }
+                                        @if (f.Genres is not null) { <span class="text-muted"> · @f.Genres</span> }
+                                        @if (f.Directors is not null) { <div class="text-muted">Directed by @f.Directors</div> }
+                                        @if (f.Cast is not null) { <div class="text-muted">Starring @f.Cast</div> }
+                                    </div>
+                                }
                                 <div class="small text-muted">
                                     @s.ScreenName
                                     @if (s.IsMultiFeature)
@@ -53,6 +74,7 @@ else
                                     }
                                     · ends @s.EndsLocal.ToString("h:mm tt")
                                 </div>
+                            </div>
                             </div>
                             <a class="btn btn-sm btn-primary" href="theaters/@theater.Slug/showings/@s.Id">Choose a spot</a>
                         </li>
