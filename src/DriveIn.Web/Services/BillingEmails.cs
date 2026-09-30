@@ -49,14 +49,15 @@ public static class BillingEmails
         return new BillingEmail($"Receipt for invoice {invoice.DisplayNumber} ({invoice.TheaterName})", html.ToString());
     }
 
-    public static BillingEmail Voided(Invoice invoice, CompanyOptions company)
+    public static BillingEmail Voided(Invoice invoice, CompanyOptions company, string link)
     {
         var html = new StringBuilder();
         Open(html, company, $"Invoice {invoice.DisplayNumber} is void");
         html.Append($"""<p>We've cancelled invoice {E(invoice.DisplayNumber)} ({E(Period(invoice))}, {Money.Format(invoice.Total)}) for {E(invoice.TheaterName)}. You don't need to pay it.</p>""");
         if (invoice.VoidReason is { Length: > 0 } reason)
             html.Append($"""<p style="white-space: pre-line">{E(reason)}</p>""");
-        html.Append($"""<p style="font-size: 14px">Questions? Reply to this email or write to {E(company.Email)}.</p></div>""");
+        html.Append($"""<p style="font-size: 14px">Questions? Reply to this email or write to {E(company.Email)}.</p>""");
+        Close(html, link);
         return new BillingEmail($"Invoice {invoice.DisplayNumber} for {invoice.TheaterName} is void", html.ToString());
     }
 

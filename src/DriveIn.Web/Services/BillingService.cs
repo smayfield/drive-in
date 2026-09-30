@@ -401,7 +401,7 @@ public sealed class BillingService(
     }
 
     // Only while nothing has been paid on it (there are no refunds). The owner is told if it had been issued.
-    public async Task VoidAsync(ClaimsPrincipal user, int invoiceId, string? reason)
+    public async Task VoidAsync(ClaimsPrincipal user, int invoiceId, string? reason, string baseUri)
     {
         Guard.RequireAdmin(user);
         var why = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
@@ -419,7 +419,7 @@ public sealed class BillingService(
         invoice.VoidReason = why;
         await db.SaveChangesAsync();
         if (wasIssued)
-            await TrySendAsync(invoice.BillToEmail, BillingEmails.Voided(invoice, company.Value));
+            await TrySendAsync(invoice.BillToEmail, BillingEmails.Voided(invoice, company.Value, InvoiceLink(baseUri, invoice)));
     }
 
     // Returns whether the receipt was emailed.

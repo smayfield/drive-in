@@ -142,7 +142,7 @@
 
     private Task VoidAsync() => Act(async () =>
     {
-        await Billing.VoidAsync(User, Id, voidReason);
+        await Billing.VoidAsync(User, Id, voidReason, BaseUri);
         voiding = false;
     }, "Voided.");
 

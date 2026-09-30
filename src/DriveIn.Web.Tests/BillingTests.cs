@@ -185,7 +185,7 @@ public class BillingTests
 
         // A voided draft doesn't use up a number.
         var voided = await OnlyDraftAsync(s.App, second.Theater.Id);
-        await s.Billing.VoidAsync(s.Admin, voided.Id, "Comped first month");
+        await s.Billing.VoidAsync(s.Admin, voided.Id, "Comped first month", TestApp.BaseUri);
         await s.Billing.UpdateBillingEmailAsync(s.OwnerUser, s.Theater.Id, "accounts@example.com");
 
         var result = await s.Billing.IssueAllDraftsAsync(s.Admin, TestApp.BaseUri);
@@ -253,7 +253,7 @@ public class BillingTests
             s.Billing.RecordPaymentAsync(s.Admin, draft.Id, new PaymentInput(49m, PaymentMethod.Check, null, Sep), TestApp.BaseUri));
         await Assert.ThrowsAsync<AppValidationException>(() =>
             s.Billing.RecordPaymentAsync(s.Admin, draft.Id, new PaymentInput(1m, PaymentMethod.Check, null, Sep.AddDays(1)), TestApp.BaseUri)); // tomorrow
-        await Assert.ThrowsAsync<AppValidationException>(() => s.Billing.VoidAsync(s.Admin, draft.Id, null));
+        await Assert.ThrowsAsync<AppValidationException>(() => s.Billing.VoidAsync(s.Admin, draft.Id, null, TestApp.BaseUri));
 
         await s.Billing.RecordPaymentAsync(s.Admin, draft.Id, new PaymentInput(48m, PaymentMethod.BankTransfer, null, Sep), TestApp.BaseUri);
         var paid = await s.Billing.GetInvoiceForAdminAsync(s.Admin, draft.Id);
@@ -276,11 +276,12 @@ public class BillingTests
         var draft = await OnlyDraftAsync(s.App, s.Theater.Id);
         await s.Billing.IssueAsync(s.Admin, [draft.Id], TestApp.BaseUri);
 
-        await s.Billing.VoidAsync(s.Admin, draft.Id, "Wrong screen count");
+        await s.Billing.VoidAsync(s.Admin, draft.Id, "Wrong screen count", TestApp.BaseUri);
 
         var notice = Assert.Single(s.App.Email.Sent, m => m.Subject.EndsWith("is void"));
         Assert.Equal("owner@example.com", notice.To);
         Assert.Contains("Wrong screen count", notice.Body);
+        Assert.Contains($"manage/{s.Theater.Id}/billing/invoices/{draft.Id}", notice.Body);
         Assert.Equal(1, await s.Billing.GenerateDraftsAsync(s.Admin));
     }
 
