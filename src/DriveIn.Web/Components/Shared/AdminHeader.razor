@@ -1,0 +1,29 @@
+@* The top of every admin page: the page title and tabs between the admin sections. Admin pages are for site admins only;
+   the pages and services enforce that, not this. *@
+
+<div class="manage-head">
+    <MudText Class="muted">
+        <MudLink Href="admin/theaters">Admin</MudLink>
+        @if (Parent is not null)
+        {
+            <span> / </span><MudLink Href="@Parent.Value.Href">@Parent.Value.Text</MudLink>
+        }
+    </MudText>
+
+    <MudText Typo="Typo.h4" Component="h1" Class="mt-1 mb-2">@Title</MudText>
+
+    <nav class="manage-tabs" aria-label="Admin">
+        <a class="manage-tab @(Current == "theaters" ? "active" : null)" href="admin/theaters" aria-current="@(Current == "theaters" ? "page" : null)">Theaters</a>
+        <a class="manage-tab @(Current == "users" ? "active" : null)" href="admin/users" aria-current="@(Current == "users" ? "page" : null)">Users</a>
+    </nav>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    // "theaters" or "users".
+    [Parameter] public string Current { get; set; } = "theaters";
+
+    // A page under a tab (a theater's edit page) links back to it.
+    [Parameter] public (string Href, string Text)? Parent { get; set; }
+}

@@ -6,52 +6,52 @@
 
 <PageTitle>Theaters · Admin · Drive-In Online</PageTitle>
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="mb-0">Theaters</h1>
-    <a class="btn btn-primary" href="admin/theaters/new">New theater</a>
+<AdminHeader Title="Theaters" Current="theaters" />
+
+<div class="mb-3">
+    <MudButton Href="admin/theaters/new" Variant="Variant.Filled" Color="Color.Primary">New theater</MudButton>
 </div>
 
 <Alerts Error="@Error" Success="@Success" />
 
 @if (requests.Count > 0)
 {
-    <section class="card border-warning mb-4">
-        <div class="card-body">
-            <h2 class="h5">Go-live requests</h2>
-            <p class="small text-muted">Activating lists the theater publicly, starts real sales and billing, and deletes its demo test tickets.</p>
-            @foreach (var r in requests)
-            {
-                <div class="border-top pt-2 mt-2" @key="r.Id">
-                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
-                        <div>
-                            <a href="admin/theaters/@r.Id"><strong>@r.Name</strong></a>
-                            <span class="text-muted small">
-                                · @(r.Owner?.Email ?? "no owner") · asked @TheaterTime.ToLocal(r, r.GoLiveRequestedAt!.Value).ToString("MMM d, h:mm tt")
-                                · @r.Screens.Count screen@(r.Screens.Count == 1 ? "" : "s")
-                            </span>
-                        </div>
-                        <div class="d-flex gap-2">
-                            <a class="btn btn-sm btn-outline-secondary" href="manage/@r.Id">Review setup</a>
-                            <button class="btn btn-sm btn-success" @onclick="() => ActivateAsync(r)">Activate</button>
-                            <button class="btn btn-sm btn-outline-danger" @onclick="() => decliningId = decliningId == r.Id ? null : r.Id">Decline…</button>
-                        </div>
+    <MudPaper Outlined Class="pa-3 mb-4" Style="border-color: var(--mud-palette-warning)">
+        <MudText Typo="Typo.h5">Go-live requests</MudText>
+        <MudText Typo="Typo.body2" Class="muted mb-1">Activating lists the theater publicly, starts real sales and billing, and deletes its demo test tickets.</MudText>
+        @foreach (var r in requests)
+        {
+            <div class="role-row" @key="r.Id">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <div>
+                        <MudLink Href="@($"admin/theaters/{r.Id}")"><strong>@r.Name</strong></MudLink>
+                        <span class="muted small">
+                            · @(r.Owner?.Email ?? "no owner") · asked @TheaterTime.ToLocal(r, r.GoLiveRequestedAt!.Value).ToString("MMM d, h:mm tt")
+                            · @r.Screens.Count screen@(r.Screens.Count == 1 ? "" : "s")
+                        </span>
                     </div>
-                    @if (decliningId == r.Id)
-                    {
-                        <div class="input-group input-group-sm mt-2">
-                            <input class="form-control" placeholder="Note to the owner (optional)" @bind="declineNote" maxlength="1000" aria-label="Note to the owner" />
-                            <button class="btn btn-danger" @onclick="() => DeclineAsync(r)">Decline and email owner</button>
-                        </div>
-                    }
+                    <div class="d-flex flex-wrap gap-2">
+                        <MudButton Href="@($"manage/{r.Id}")" Size="Size.Small" Variant="Variant.Outlined">Review setup</MudButton>
+                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success" OnClick="() => ActivateAsync(r)">Activate</MudButton>
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="() => decliningId = decliningId == r.Id ? null : r.Id">Decline…</MudButton>
+                    </div>
                 </div>
-            }
-        </div>
-    </section>
+                @if (decliningId == r.Id)
+                {
+                    <div class="d-flex flex-wrap gap-2 align-items-start mt-2">
+                        <MudTextField T="string" @bind-Value="declineNote" Placeholder="Note to the owner (optional)" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                      MaxLength="1000" Class="field-grow" aria-label="Note to the owner" />
+                        <MudButton Variant="Variant.Filled" Color="Color.Error" Class="mt-1" OnClick="() => DeclineAsync(r)">Decline and email owner</MudButton>
+                    </div>
+                }
+            </div>
+        }
+    </MudPaper>
 }
 
 @if (theaters is not null)
 {
-    <table class="table align-middle">
+    <MudSimpleTable Dense Hover Outlined Class="manage-table">
         <thead>
             <tr><th>Name</th><th>Slug</th><th>Location</th><th>Owner</th><th class="text-end">Screens</th><th class="text-end">Employees</th><th></th></tr>
         </thead>
@@ -60,10 +60,10 @@
             {
                 <tr @key="t.Id">
                     <td>
-                        <a href="admin/theaters/@t.Id">@t.Name</a>
-                        @if (!t.IsActive) { <span class="badge text-bg-secondary ms-1">Inactive</span> }
-                        @if (t.Mode == TheaterMode.Demo) { <span class="badge text-bg-info ms-1">Demo</span> }
-                        @if (t.GoLiveRequestedAt is not null) { <span class="badge text-bg-warning ms-1">Wants to go live</span> }
+                        <MudLink Href="@($"admin/theaters/{t.Id}")">@t.Name</MudLink>
+                        @if (!t.IsActive) { <MudChip T="string" Size="Size.Small" Class="ms-1 my-0">Inactive</MudChip> }
+                        @if (t.Mode == TheaterMode.Demo) { <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="ms-1 my-0">Demo</MudChip> }
+                        @if (t.GoLiveRequestedAt is not null) { <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ms-1 my-0">Wants to go live</MudChip> }
                     </td>
                     <td><code>@t.Slug</code></td>
                     <td>@string.Join(", ", new[] { t.City, t.State }.Where(s => !string.IsNullOrWhiteSpace(s)))</td>
@@ -71,24 +71,24 @@
                     <td class="text-end">@t.ScreenCount</td>
                     <td class="text-end">@t.EmployeeCount</td>
                     <td class="text-end text-nowrap">
-                        <a class="btn btn-sm btn-outline-secondary" href="manage/@t.Id">Manage</a>
+                        <MudButton Href="@($"manage/{t.Id}")" Size="Size.Small" Variant="Variant.Outlined">Manage</MudButton>
                         @if (confirmDeleteId == t.Id)
                         {
-                            <button class="btn btn-sm btn-danger" @onclick="() => DeleteAsync(t)">@DeleteLabel(t)</button>
-                            <button class="btn btn-sm btn-link" @onclick="() => confirmDeleteId = null">Cancel</button>
+                            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Error" OnClick="() => DeleteAsync(t)">@DeleteLabel(t)</MudButton>
+                            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="() => confirmDeleteId = null">Cancel</MudButton>
                         }
                         else
                         {
-                            <button class="btn btn-sm btn-outline-danger" @onclick="() => confirmDeleteId = t.Id">Delete</button>
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="() => confirmDeleteId = t.Id">Delete</MudButton>
                         }
                     </td>
                 </tr>
             }
         </tbody>
-    </table>
+    </MudSimpleTable>
     @if (theaters.Count == 0)
     {
-        <p class="text-muted">No theaters yet.</p>
+        <MudText Class="muted mt-2">No theaters yet.</MudText>
     }
 }
 

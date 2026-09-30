@@ -15,8 +15,8 @@ See README.md for the full picture. Conventions worth knowing before changing co
   `Class="muted"` for muted text (`Color.Secondary` is the teal accent); copy a `@for` variable into a local before using
   it inside a component's child content (it's rendered after the loop moves on); MudBlazor's `lg` breakpoint is 1280px,
   not Bootstrap's 992px; on a Mud input, `Style` lands on the inner input root, so use `Class` (see `.field-grow` in `manage.css`) for
-  layout like flex sizing. Every manage page starts with `ManageHeader` (title plus permission-aware tabs). Bootstrap is still
-  loaded for pages not yet moved to MudBlazor (admin and account pages).
+  layout like flex sizing. Every manage page starts with `ManageHeader` and every admin page with `AdminHeader` (title plus tabs). Bootstrap is still
+  loaded, but only the static pages (account, Invite, Error) still use it; the last step is restyling those and dropping it.
 - **Authorization lives in services, not just pages.** Every `Services/*` method takes the acting
   `ClaimsPrincipal` and checks it: `Guard.RequireAdmin` for site-admin work, or
   `auth.RequireAsync(user, theater, TheaterPermissions.X)` for anything done at a theater. Pages derive
