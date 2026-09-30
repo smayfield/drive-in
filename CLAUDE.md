@@ -3,6 +3,8 @@
 See README.md for the full picture. Conventions worth knowing before changing code:
 
 - **Branch + PR only.** Never commit to `main`; merging deploys to production.
+- **Keep `features.md` current.** It's the technical list of features and behaviors; any PR that adds, changes or
+  removes one updates it (and the README only when setup or infrastructure changes).
 - **One app**: `src/DriveIn.Web` (Blazor Web App). `Routes` is interactive by default; pages marked
   `[ExcludeFromInteractiveRouting]` stay static SSR: the Identity account pages under `Components/Account` (they need
   the HTTP response for cookies), marketing and legal pages, Invite, Error and NotFound. So don't put `@rendermode` on pages.
