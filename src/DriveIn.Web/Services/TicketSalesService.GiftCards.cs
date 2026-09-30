@@ -134,7 +134,7 @@ public sealed partial class TicketSalesService
         await using var db = await dbFactory.CreateDbContextAsync();
         var email = await db.Users.AsNoTracking().Where(u => u.Id == userId && u.EmailConfirmed)
             .Select(u => u.Email).FirstOrDefaultAsync();
-        var lowered = email?.Trim().ToLowerInvariant();
+        var lowered = email is null ? null : Guard.NormalizeEmail(email);
         var cards = await db.GiftCards.AsNoTracking().Include(g => g.Theater)
             .Where(g => g.PurchaserId == userId || (lowered != null && g.RecipientEmail != null && g.RecipientEmail.ToLower() == lowered))
             .OrderByDescending(g => g.PurchasedAt).ToListAsync();
