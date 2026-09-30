@@ -15,7 +15,7 @@
     <nav class="manage-tabs" aria-label="Admin">
         <a class="manage-tab @(Current == "theaters" ? "active" : null)" href="admin/theaters" aria-current="@(Current == "theaters" ? "page" : null)">Theaters</a>
         <a class="manage-tab @(Current == "users" ? "active" : null)" href="admin/users" aria-current="@(Current == "users" ? "page" : null)">Users</a>
-        <a class="manage-tab @(Current == "billing" ? "active" : null)" href="admin/billing" aria-current="@(Current == "billing" && Sub is null ? "page" : null)">Billing</a>
+        <a class="manage-tab @(Current == "billing" ? "active" : null)" href="admin/billing" aria-current="@(Current != "billing" ? null : Sub is null ? "page" : "true")">Billing</a>
     </nav>
     @if (Current == "billing" && Sub is not null)
     {

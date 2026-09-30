@@ -37,7 +37,7 @@
     </div>
 
     <table class="invoice-lines">
-        <thead><tr><th>Description</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Amount</th>@if (LineActions is not null) { <th class="no-print"></th> }</tr></thead>
+        <thead><tr><th>Description</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Amount</th>@if (LineActions is not null) { <th class="no-print"><span class="visually-hidden">Actions</span></th> }</tr></thead>
         <tbody>
             @foreach (var line in Invoice.Lines.OrderBy(l => l.SortOrder))
             {

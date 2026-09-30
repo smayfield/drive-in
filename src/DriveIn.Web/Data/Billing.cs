@@ -92,7 +92,7 @@ public class Invoice
 
     public string DisplayNumber => FormatNumber(Number);
 
-    // Issued and unpaid after its due date (a date in the theater's time zone, compared with today there).
+    // Issued and unpaid after its due date. Billing dates are UTC dates, so pass today's UTC date (BillingService.Today).
     public bool IsOverdue(DateOnly today) => Status == InvoiceStatus.Issued && DueOn is DateOnly due && due < today;
 
     public static string FormatNumber(int? number) => number is int n ? $"INV-{n:000000}" : "Draft";
