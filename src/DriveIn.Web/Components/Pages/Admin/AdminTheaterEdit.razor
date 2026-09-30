@@ -1,7 +1,6 @@
 @page "/admin/theaters/new"
 @page "/admin/theaters/{Id:int}"
 @attribute [Authorize(Policy = Policies.Admin)]
-@rendermode InteractiveServer
 @inherits AppComponentBase
 @inject TheaterService Theaters
 @inject InvitationService Invitations

@@ -5,15 +5,17 @@
 
 <PageTitle>My tickets · Drive-In Online</PageTitle>
 
-<h1>My tickets</h1>
+<MudText Typo="Typo.h3" Component="h1" Class="mb-4">My tickets</MudText>
 
 @if (tickets is null)
 {
-    <p>Loading…</p>
+    <MudProgressCircular Indeterminate Size="Size.Small" aria-label="Loading tickets" />
 }
 else if (tickets.Count == 0)
 {
-    <p class="text-muted">You haven't bought any tickets yet. <a href="theaters">Find a showing</a></p>
+    <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined">
+        You haven't bought any tickets yet. <MudLink Href="theaters">Find a showing</MudLink>
+    </MudAlert>
 }
 else
 {
@@ -21,35 +23,52 @@ else
     var upcoming = tickets.Where(t => t.Ticket.Showtime!.EndsAt > now).ToList();
     var past = tickets.Except(upcoming).OrderByDescending(t => t.Ticket.Showtime!.StartsAt).ToList();
 
-    <h2 class="h5">Upcoming</h2>
+    <MudText Typo="Typo.h4" Class="mb-2">Upcoming</MudText>
     @if (upcoming.Count == 0)
     {
-        <p class="text-muted">No upcoming showings. <a href="theaters">Find a showing</a></p>
+        <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Class="mb-4">
+            No upcoming showings. <MudLink Href="theaters">Find a showing</MudLink>
+        </MudAlert>
     }
-    <div class="list-group mb-4">
-        @foreach (var t in upcoming)
-        {
-            <a class="list-group-item list-group-item-action" href="tickets/@t.Code">
-                <div class="d-flex justify-content-between flex-wrap gap-2">
-                    <strong>@t.Showing.Title @if (t.Ticket.IsTest) { <span class="badge text-bg-warning">Test</span> }</strong>
-                    <span>Spot <strong>@t.Ticket.SpotLabel</strong> · gate code <strong class="font-monospace">@t.Ticket.ShortCode</strong></span>
-                </div>
-                <div class="small text-muted">@t.Theater.Name · @t.Showing.ScreenName · @t.Showing.StartsLocal.ToString("ddd, MMM d · h:mm tt")</div>
-            </a>
-        }
-    </div>
+    @foreach (var t in upcoming)
+    {
+        <Stub>
+            <Poster>
+                @foreach (var f in t.Showing.Features.Where(f => f.PosterUrl is not null))
+                {
+                    <img src="@f.PosterUrl" alt="Poster for @f.Title" loading="lazy" />
+                }
+            </Poster>
+            <ChildContent>
+                <h2 class="stub-title">
+                    @t.Showing.Title
+                    @if (t.Ticket.IsTest) { <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ms-1 my-0">Test</MudChip> }
+                </h2>
+                <p class="stub-meta">@t.Theater.Name · @t.Showing.ScreenName</p>
+                <p class="stub-meta">@t.Showing.StartsLocal.ToString("dddd, MMM d · h:mm tt")</p>
+            </ChildContent>
+            <Aside>
+                <span class="stub-note">Spot</span>
+                <span class="ticket-spot">@t.Ticket.SpotLabel</span>
+                <span class="stub-note">Gate code <strong class="font-monospace">@t.Ticket.ShortCode</strong></span>
+                <MudButton Href="@($"tickets/{t.Code}")" Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small">Show ticket</MudButton>
+            </Aside>
+        </Stub>
+    }
 
     @if (past.Count > 0)
     {
-        <h2 class="h5">Past</h2>
-        <div class="list-group">
-            @foreach (var t in past)
-            {
-                <a class="list-group-item list-group-item-action text-muted" href="tickets/@t.Code">
-                    @t.Showing.Title · @t.Theater.Name · @t.Showing.StartsLocal.ToString("MMM d, yyyy") · spot @t.Ticket.SpotLabel
-                </a>
-            }
-        </div>
+        <MudText Typo="Typo.h4" Class="mt-6 mb-2">Past</MudText>
+        <MudPaper Outlined>
+            <MudList T="string" Dense>
+                @foreach (var t in past)
+                {
+                    <MudListItem Href="@($"tickets/{t.Code}")" Class="muted">
+                        @t.Showing.Title · @t.Theater.Name · @t.Showing.StartsLocal.ToString("MMM d, yyyy") · spot @t.Ticket.SpotLabel
+                    </MudListItem>
+                }
+            </MudList>
+        </MudPaper>
     }
 }
 

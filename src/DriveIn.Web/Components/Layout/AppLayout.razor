@@ -1,0 +1,145 @@
+@inherits LayoutComponentBase
+@using DriveIn.Web.Services
+@using DriveIn.Web.Authorization
+@inject TheaterService Theaters
+
+<MudThemeProvider @ref="themeProvider" Theme="DriveInTheme.Theme" IsDarkMode="isDark" IsDarkModeChanged="OnDarkModeChanged" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<a class="skip-link" href="@(Nav.Uri.Split('#')[0])#main">Skip to content</a>
+
+<MudLayout>
+    <MudAppBar Elevation="0" Class="app-appbar">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" Class="d-md-none"
+                       aria-label="Open menu" OnClick="() => drawerOpen = !drawerOpen" />
+        <a class="app-brand" href="/">Drive-In Online</a>
+        <nav class="app-links d-none d-md-flex" aria-label="Main">
+            @foreach (var link in Links)
+            {
+                <NavLink class="app-link" href="@link.Href">@link.Text</NavLink>
+            }
+        </nav>
+        <MudSpacer />
+        <div class="app-user d-none d-md-flex">
+            <AuthorizeView>
+                <Authorized>
+                    <NavLink class="app-link" href="Account/Manage">@DisplayName(context.User)</NavLink>
+                    <SignOutForm />
+                </Authorized>
+                <NotAuthorized>
+                    <NavLink class="app-link" href="Account/Login">Sign in</NavLink>
+                    <NavLink class="app-link" href="Account/Register">Register</NavLink>
+                </NotAuthorized>
+            </AuthorizeView>
+        </div>
+    </MudAppBar>
+
+    <MudDrawer @bind-Open="drawerOpen" Variant="DrawerVariant.Temporary" Elevation="2" Class="d-md-none">
+        <MudDrawerHeader><span class="app-brand app-brand-drawer">Drive-In Online</span></MudDrawerHeader>
+        <nav class="app-drawer-links" aria-label="Main" @onclick="() => drawerOpen = false">
+            @foreach (var link in Links)
+            {
+                <NavLink class="app-link" href="@link.Href">@link.Text</NavLink>
+            }
+            <AuthorizeView>
+                <Authorized>
+                    <NavLink class="app-link" href="Account/Manage">@DisplayName(context.User)</NavLink>
+                    <SignOutForm />
+                </Authorized>
+                <NotAuthorized>
+                    <NavLink class="app-link" href="Account/Login">Sign in</NavLink>
+                    <NavLink class="app-link" href="Account/Register">Register</NavLink>
+                </NotAuthorized>
+            </AuthorizeView>
+        </nav>
+    </MudDrawer>
+
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.Large" Class="py-4">
+            <main id="main" tabindex="-1">
+                @Body
+            </main>
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
+</div>
+
+@code {
+    private sealed record NavItem(string Href, string Text);
+
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+    [CascadingParameter(Name = "InitialDarkMode")] private bool InitialDarkMode { get; set; }
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+
+    private MudThemeProvider? themeProvider;
+    private bool isDark;
+    private bool drawerOpen;
+    private bool manages;
+    private bool isAdmin;
+    private bool signedIn;
+    private bool isEmployee;
+
+    private IEnumerable<NavItem> Links
+    {
+        get
+        {
+            if (signedIn)
+            {
+                yield return new("theaters", "Theaters");
+                yield return new("tickets", "My tickets");
+                if (!manages && !isEmployee)
+                    yield return new("get-started", "Sign up a theater");
+                if (manages)
+                    yield return new("manage", "Manage");
+            }
+            if (isAdmin)
+            {
+                yield return new("admin/theaters", "Admin: Theaters");
+                yield return new("admin/users", "Admin: Users");
+            }
+        }
+    }
+
+    protected override void OnInitialized() => isDark = InitialDarkMode;
+
+    // Owners aren't a role and can change at any time, so ask the database. A layout's parameters change on each
+    // navigation, so this refreshes as the user moves around.
+    protected override async Task OnParametersSetAsync()
+    {
+        var user = AuthState is null ? null : (await AuthState).User;
+        signedIn = user?.Identity?.IsAuthenticated == true;
+        isAdmin = signedIn && user!.IsAdmin();
+        isEmployee = signedIn && user!.GetEmployeeTheaterId() is not null;
+        manages = signedIn && (isAdmin || isEmployee || (await Theaters.ListManagedAsync(user!)).Count > 0);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || themeProvider is null)
+            return;
+        // Match the device setting now that JS is available; the provider then follows later changes itself.
+        var system = await themeProvider.GetSystemDarkModeAsync();
+        if (system != isDark)
+        {
+            isDark = system;
+            StateHasChanged();
+        }
+    }
+
+    private Task OnDarkModeChanged(bool dark)
+    {
+        isDark = dark;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private static string DisplayName(System.Security.Claims.ClaimsPrincipal user) =>
+        user.FindFirst("drivein:display_name")?.Value ?? user.Identity?.Name ?? "Account";
+}

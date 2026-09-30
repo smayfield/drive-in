@@ -1,41 +1,39 @@
 @* Choosing a ticket option and add-ons, with the running total. The service recomputes the price when selling. *@
 
-<fieldset class="mb-3">
-    <legend class="form-label fs-6 fw-semibold">Ticket</legend>
-    @foreach (var o in Prices.Options)
-    {
-        <div class="form-check">
-            <input class="form-check-input" type="radio" name="@($"{IdPrefix}-option")" id="@($"{IdPrefix}-option-{o.Id}")"
-                   checked="@(OptionId == o.Id)" @onchange="() => SetOptionAsync(o.Id)" />
-            <label class="form-check-label d-flex justify-content-between" for="@($"{IdPrefix}-option-{o.Id}")">
-                <span>@o.Name @if (o.Description is not null) { <span class="text-muted small ms-1">— @o.Description</span> }</span>
-                <span>@Money.Format(o.Price)</span>
-            </label>
-        </div>
-    }
+<fieldset class="mb-3 border-0 p-0">
+    <legend class="mud-typography mud-typography-h6">Ticket</legend>
+    <MudRadioGroup T="int" Value="OptionId" ValueChanged="SetOptionAsync">
+        @foreach (var o in Prices.Options)
+        {
+            <MudRadio Value="@o.Id" Color="Color.Primary" Class="w-100 tc-line">
+                <span class="d-flex justify-content-between gap-3 tc-label">
+                    <span>@o.Name @if (o.Description is not null) { <span class="muted small ms-1">— @o.Description</span> }</span>
+                    <span>@Money.Format(o.Price)</span>
+                </span>
+            </MudRadio>
+        }
+    </MudRadioGroup>
 </fieldset>
 
 @if (AddOns.Count > 0)
 {
-    <fieldset class="mb-3">
-        <legend class="form-label fs-6 fw-semibold">Add-ons</legend>
+    <fieldset class="mb-3 border-0 p-0">
+        <legend class="mud-typography mud-typography-h6">Add-ons</legend>
         @foreach (var a in AddOns)
         {
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" id="@($"{IdPrefix}-addon-{a.Id}")"
-                       checked="@AddOnIds.Contains(a.Id)" @onchange="() => ToggleAsync(a.Id)" />
-                <label class="form-check-label d-flex justify-content-between" for="@($"{IdPrefix}-addon-{a.Id}")">
-                    <span>@a.Name @if (a.Description is not null) { <span class="text-muted small ms-1">— @a.Description</span> }</span>
+            <MudCheckBox T="bool" Value="AddOnIds.Contains(a.Id)" ValueChanged="() => ToggleAsync(a.Id)" Color="Color.Primary" Class="w-100 tc-line">
+                <span class="d-flex justify-content-between gap-3 tc-label">
+                    <span>@a.Name @if (a.Description is not null) { <span class="muted small ms-1">— @a.Description</span> }</span>
                     <span>@a.Display</span>
-                </label>
-            </div>
+                </span>
+            </MudCheckBox>
         }
     </fieldset>
 }
 
 @if (Quote(Prices, AddOns, OptionId, AddOnIds) is TicketQuote quote)
 {
-    <table class="table table-sm mb-3">
+    <MudSimpleTable Dense Class="mb-3" Style="box-shadow: none; background: transparent">
         <tbody>
             <tr><td>@quote.Option.Name</td><td class="text-end">@Money.Format(quote.Option.Price)</td></tr>
             @foreach (var line in quote.Lines)
@@ -44,7 +42,7 @@
             }
             <tr class="fw-bold"><td>Total</td><td class="text-end">@Money.Format(quote.Total)</td></tr>
         </tbody>
-    </table>
+    </MudSimpleTable>
 }
 
 @code {

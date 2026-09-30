@@ -4,41 +4,47 @@
 
 <PageTitle>Theaters · Drive-In Online</PageTitle>
 
-<h1>Drive-in theaters</h1>
+<MudText Typo="Typo.h3" Component="h1" Class="mb-4">Drive-in theaters</MudText>
 
 @if (theaters is null)
 {
-    <p>Loading…</p>
+    <MudProgressCircular Indeterminate Size="Size.Small" aria-label="Loading theaters" />
 }
 else if (theaters.Count == 0)
 {
-    <p class="text-muted">No theaters yet.</p>
+    <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined">No theaters are open yet.</MudAlert>
 }
 else
 {
-    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
+    <MudGrid Spacing="3">
         @foreach (var t in theaters)
         {
-            <div class="col">
-                <div class="card h-100">
-                    <div class="card-body">
+            <MudItem xs="12" sm="6" md="4" @key="t.Id">
+                <MudPaper Outlined Class="theater-card">
+                    <div class="theater-card-sign">
                         @if (t.LogoUrl is not null)
                         {
-                            <img src="@t.LogoUrl" alt="@t.Name logo" class="mb-2" style="max-height: 4rem; max-width: 100%; object-fit: contain" loading="lazy" />
+                            <img src="@t.LogoUrl" alt="@t.Name logo" loading="lazy" />
                         }
-                        <h2 class="h5 card-title"><a href="theaters/@t.Slug">@t.Name</a></h2>
-                        <p class="card-text text-muted mb-1">@Location(t)</p>
-                        <p class="card-text small">@t.Screens.Count screen@(t.Screens.Count == 1 ? "" : "s") · @t.Screens.Sum(s => s.SpotCount) spots</p>
+                        <h2 class="theater-card-name"><a href="theaters/@t.Slug">@t.Name</a></h2>
+                    </div>
+                    <div class="theater-card-body">
+                        <MudText>@Location(t)</MudText>
+                        <MudText Typo="Typo.body2" Class="muted ">
+                            @t.Screens.Count screen@(t.Screens.Count == 1 ? "" : "s") · @t.Screens.Sum(s => s.SpotCount) spots
+                        </MudText>
                         @if (t.SeasonOpensOn is not null || t.SeasonClosesOn is not null)
                         {
-                            <p class="card-text small text-muted">Season: @Seasons.Describe(t)</p>
+                            <MudText Typo="Typo.body2" Class="muted ">Season: @Seasons.Describe(t)</MudText>
                         }
-                        <a class="btn btn-sm btn-outline-primary" href="theaters/@t.Slug">Showings &amp; tickets</a>
                     </div>
-                </div>
-            </div>
+                    <div class="pa-3 pt-0">
+                        <MudButton Href="@($"theaters/{t.Slug}")" Variant="Variant.Outlined" Color="Color.Primary" FullWidth>Showings &amp; tickets</MudButton>
+                    </div>
+                </MudPaper>
+            </MudItem>
         }
-    </div>
+    </MudGrid>
 }
 
 @code {

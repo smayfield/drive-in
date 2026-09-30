@@ -1,6 +1,5 @@
 @page "/tickets/{Code}"
 @attribute [Authorize]
-@rendermode InteractiveServer
 @inherits AppComponentBase
 @inject TicketSalesService Sales
 
@@ -9,7 +8,7 @@
 @if (lookup is null)
 {
     <Alerts Error="@Error" />
-    @if (Error is null) { <p>Loading…</p> }
+    @if (Error is null) { <MudProgressCircular Indeterminate Size="Size.Small" aria-label="Loading ticket" /> }
 }
 else
 {
@@ -19,66 +18,69 @@ else
 
     @if (lookup.IsBuyer)
     {
-        <p><a href="tickets">&larr; My tickets</a></p>
+        <MudLink Href="tickets" Class="d-inline-block mb-3">&larr; My tickets</MudLink>
     }
 
     @if (New == "sent")
     {
-        <div class="alert alert-success" role="status">You're all set! We've emailed your receipt to @t.Email.</div>
+        <MudAlert Severity="Severity.Success" Class="mb-3" role="status">You're all set! We've emailed your receipt to @t.Email.</MudAlert>
     }
     else if (New == "unsent")
     {
-        <div class="alert alert-warning" role="status">
+        <MudAlert Severity="Severity.Warning" Class="mb-3" role="status">
             You're all set, but we couldn't email your receipt just now. This page has everything you need at the gate,
             and you can try sending the receipt again below.
-        </div>
+        </MudAlert>
     }
     <Alerts Error="@Error" Success="@Success" />
 
     @if (lookup.CanAdmit)
     {
-        <section class="card mb-4 @(t.AdmittedAt is null && lookup.AdmitProblem is null ? "border-success" : "border-danger")">
-            <div class="card-body">
-                <h2 class="h5">Gate check</h2>
-                @if (lookup.AdmitProblem is string problem)
-                {
-                    <p class="fs-4 text-danger fw-bold mb-1">Don't admit</p>
-                    <p class="mb-0">@problem</p>
-                }
-                else
-                {
-                    <p class="fs-4 text-success fw-bold mb-1">Valid: spot @t.SpotLabel</p>
-                    <p>@s.Title · @s.StartsLocal.ToString("ddd, MMM d h:mm tt") · @s.ScreenName · @t.OptionName</p>
-                    <button class="btn btn-success btn-lg" @onclick="AdmitAsync">Admit car</button>
-                }
-            </div>
-        </section>
+        var ok = t.AdmittedAt is null && lookup.AdmitProblem is null;
+        <MudPaper Outlined Class="pa-4 mb-4 mx-auto" Style="@($"max-width: 32rem; border-color: var(--mud-palette-{(ok ? "success" : "error")})")">
+            <MudText Typo="Typo.h5" Class="mb-1">Gate check</MudText>
+            @if (lookup.AdmitProblem is string problem)
+            {
+                <MudText Typo="Typo.h4" Color="Color.Error">Don't admit</MudText>
+                <MudText>@problem</MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.h4" Color="Color.Success">Valid: spot @t.SpotLabel</MudText>
+                <MudText Class="mb-3">@s.Title · @s.StartsLocal.ToString("ddd, MMM d h:mm tt") · @s.ScreenName · @t.OptionName</MudText>
+                <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Large" FullWidth OnClick="AdmitAsync">Admit car</MudButton>
+            }
+        </MudPaper>
     }
 
-    <section class="card ticket-card mx-auto" style="max-width: 32rem">
-        <div class="card-body text-center">
+    <MudPaper Outlined Class="mx-auto overflow-hidden" Style="max-width: 32rem">
+        <div class="theater-card-sign text-center">
+            <h1 class="theater-card-name">@v.Theater.Name</h1>
+            <p class="marquee-sub mb-0">@TicketReceipt.Address(v.Theater)</p>
+        </div>
+        <div class="pa-4 text-center">
             @if (t.IsTest)
             {
-                <p class="badge text-bg-warning">Test ticket (demo theater): no money was charged</p>
+                <MudChip T="string" Color="Color.Warning" Class="mb-2">Test ticket (demo theater): no money was charged</MudChip>
             }
-            <h1 class="h4 mb-0">@v.Theater.Name</h1>
-            <p class="small text-muted">@TicketReceipt.Address(v.Theater)</p>
-            <h2 class="h5 mb-1">@s.Title</h2>
-            <p class="mb-1"><strong>@s.StartsLocal.ToString("dddd, MMMM d, yyyy · h:mm tt")</strong></p>
-            <p class="mb-3">@s.ScreenName · Spot <span class="fs-3 fw-bold">@t.SpotLabel</span></p>
+            <MudText Typo="Typo.h5" Class="mb-1">@s.Title</MudText>
+            <MudText><strong>@s.StartsLocal.ToString("dddd, MMMM d, yyyy · h:mm tt")</strong></MudText>
+            <MudText>@s.ScreenName</MudText>
+            <MudText Typo="Typo.caption" Class="muted d-block mt-2">Spot</MudText>
+            <div class="ticket-spot mb-3">@t.SpotLabel</div>
             @if (lookup.IsBuyer)
             {
                 <img class="ticket-qr mb-2" src="@qr" alt="Ticket QR code for the gate" />
-                <p class="mb-0 small">Gate code</p>
-                <p class="gate-code mb-2">@t.ShortCode</p>
-                <p class="small text-muted mb-3">Show the QR code at the gate, or tell the attendant your gate code.</p>
+                <MudText Typo="Typo.caption" Class="muted d-block">Gate code</MudText>
+                <div class="gate-code mb-2">@t.ShortCode</div>
+                <MudText Typo="Typo.body2" Class="muted mb-3">Show the QR code at the gate, or tell the attendant your gate code.</MudText>
             }
             @if (v.AdmittedLocal is DateTime admitted)
             {
-                <p class="badge text-bg-secondary fs-6">Used: admitted @admitted.ToString("MMM d h:mm tt")</p>
+                <MudChip T="string" Class="mb-2">Used: admitted @admitted.ToString("MMM d h:mm tt")</MudChip>
             }
 
-            <table class="table table-sm text-start mb-2">
+            <MudSimpleTable Dense Class="text-start mb-2" Style="box-shadow: none; background: transparent">
                 <tbody>
                     <tr><td>@t.OptionName</td><td class="text-end">@Money.Format(t.OptionPrice)</td></tr>
                     @foreach (var a in t.AddOns)
@@ -87,18 +89,18 @@ else
                     }
                     <tr class="fw-bold"><td>Total</td><td class="text-end">@Money.Format(t.Total)</td></tr>
                 </tbody>
-            </table>
-            <p class="small text-muted text-start">
+            </MudSimpleTable>
+            <MudText Typo="Typo.caption" Class="muted d-block text-start mb-3">
                 @TicketReceipt.PaidWith(t) · Purchased @v.SoldLocal.ToString("MMM d, yyyy h:mm tt")<br />
                 Admits one car to this showing only; it can't be used on a later date. All sales are final: no refunds or
                 exchanges for any reason, including bad weather.
-            </p>
+            </MudText>
             @if (lookup.IsBuyer)
             {
-                <button class="btn btn-sm btn-outline-secondary" disabled="@sending" @onclick="ResendAsync">Email my receipt again</button>
+                <MudButton Variant="Variant.Outlined" Size="Size.Small" Disabled="@sending" OnClick="ResendAsync">Email my receipt again</MudButton>
             }
         </div>
-    </section>
+    </MudPaper>
 }
 
 @code {

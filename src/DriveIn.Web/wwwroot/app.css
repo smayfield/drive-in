@@ -1,20 +1,139 @@
-html, body {
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+/* Theme tokens. Keep in step with Components/Layout/DriveInTheme.cs (MudBlazor) and with marketing.css. The light or
+   dark values apply from theme.js, which follows the visitor's OS/browser setting. Bootstrap variables are themed here
+   too, so pages that haven't moved to MudBlazor yet follow the same scheme. */
+:root, [data-bs-theme="light"] {
+    --di-bg: #eceff6;
+    --di-surface: #ffffff;
+    --di-ink: #14172b;
+    --di-muted: #4b5070;
+    --di-line: #d5d9e6;
+    --di-primary: #c8283b;
+    --di-on-primary: #ffffff;
+    --di-accent: #0b7a8a;
+    --di-bulb: #ffd66b;
+    --di-night: #0a0d1f;
+
+    --bs-body-font-family: Barlow, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --bs-body-bg: var(--di-bg);
+    --bs-body-color: var(--di-ink);
+    --bs-secondary-color: var(--di-muted);
+    --bs-border-color: var(--di-line);
+    --bs-link-color: var(--di-accent);
+    --bs-link-color-rgb: 11, 122, 138;
+    --bs-link-hover-color: #075c69;
+    --bs-link-hover-color-rgb: 7, 92, 105;
 }
 
-a, .btn-link {
-    color: #006bb7;
+[data-bs-theme="dark"] {
+    --di-bg: #0a0d1f;
+    --di-surface: #151a38;
+    --di-ink: #efedf6;
+    --di-muted: #a8a6bd;
+    --di-line: #2a2f52;
+    --di-primary: #ff5468;
+    --di-on-primary: #0a0d1f;
+    --di-accent: #5ef2ff;
+
+    --bs-body-bg: var(--di-bg);
+    --bs-body-color: var(--di-ink);
+    --bs-secondary-color: var(--di-muted);
+    --bs-tertiary-bg: #12163a;
+    --bs-secondary-bg: #1b2148;
+    --bs-border-color: var(--di-line);
+    --bs-link-color: var(--di-accent);
+    --bs-link-color-rgb: 94, 242, 255;
+    --bs-link-hover-color: #a6f7ff;
+    --bs-link-hover-color-rgb: 166, 247, 255;
+}
+
+html, body {
+    font-family: var(--bs-body-font-family);
+    background: var(--di-bg);
+    color: var(--di-ink);
 }
 
 .btn-primary {
-    color: #fff;
-    background-color: #1b6ec2;
-    border-color: #1861ac;
+    --bs-btn-color: var(--di-on-primary);
+    --bs-btn-bg: var(--di-primary);
+    --bs-btn-border-color: var(--di-primary);
+    --bs-btn-hover-color: var(--di-on-primary);
+    --bs-btn-hover-bg: color-mix(in srgb, var(--di-primary) 88%, black);
+    --bs-btn-hover-border-color: color-mix(in srgb, var(--di-primary) 88%, black);
+    --bs-btn-active-color: var(--di-on-primary);
+    --bs-btn-active-bg: color-mix(in srgb, var(--di-primary) 80%, black);
+    --bs-btn-active-border-color: color-mix(in srgb, var(--di-primary) 80%, black);
+    --bs-btn-disabled-bg: var(--di-primary);
+    --bs-btn-disabled-border-color: var(--di-primary);
 }
 
-.btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
-  box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
+.card, .list-group, .modal-content, .dropdown-menu {
+    --bs-card-bg: var(--di-surface);
+    --bs-list-group-bg: var(--di-surface);
+    --bs-list-group-color: var(--di-ink);
+    --bs-list-group-border-color: var(--di-line);
+    --bs-card-border-color: var(--di-line);
 }
+
+.btn:focus-visible, .form-control:focus, .form-select:focus, .form-check-input:focus, a:focus-visible {
+    outline: 2px solid var(--di-accent);
+    outline-offset: 2px;
+    box-shadow: none;
+}
+
+/* The interactive app shell (Components/Layout/AppLayout.razor). Deliberately plain: this is the working part. */
+.app-appbar { border-bottom: 1px solid rgba(255, 214, 107, 0.16); }
+
+.app-brand {
+    font-family: "Bungee", system-ui, sans-serif;
+    font-size: 1.05rem;
+    letter-spacing: 0.02em;
+    color: var(--di-bulb);
+    text-decoration: none;
+    white-space: nowrap;
+}
+.app-brand:hover { color: #fff0bd; }
+.app-brand-drawer { color: var(--di-primary); }
+
+.app-links, .app-user { align-items: center; gap: 0.25rem; }
+.app-links { margin-left: 1.5rem; }
+
+.app-link {
+    display: inline-block;
+    padding: 0.4rem 0.75rem;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: #d9d6ea;
+    font: inherit;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+}
+.app-link:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
+.app-link.active { color: #fff; box-shadow: inset 0 -2px 0 var(--di-bulb); border-radius: 6px 6px 0 0; }
+
+.app-signout { margin: 0; }
+
+.app-drawer-links { display: flex; flex-direction: column; padding: 0.5rem; }
+.app-drawer-links .app-link { color: var(--mud-palette-drawer-text); padding: 0.75rem 1rem; }
+.app-drawer-links .app-link:hover { background: var(--mud-palette-action-default-hover); color: var(--mud-palette-drawer-text); }
+.app-drawer-links .app-link.active { color: var(--di-primary); box-shadow: none; font-weight: 700; }
+
+.skip-link {
+    position: absolute;
+    left: 0.5rem;
+    top: -4rem;
+    z-index: 2000;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    background: var(--di-bulb);
+    color: var(--di-night);
+    font-weight: 600;
+}
+.skip-link:focus { top: 0.5rem; }
+
+main:focus { outline: none; }
+
 
 .content {
     padding-top: 1.1rem;
