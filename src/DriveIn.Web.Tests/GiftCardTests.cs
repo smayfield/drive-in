@@ -87,6 +87,26 @@ public class GiftCardTests
     }
 
     [Fact]
+    public async Task A_new_gift_card_never_reuses_a_code_already_sold_at_any_theater()
+    {
+        await using var s = await SetUpWithGiftCardsAsync();
+        var buyer = await BuyerAsync(s.App);
+        var first = await BuyCardAsync(s, buyer, 25m);
+        var codes = new Queue<string>([first.Code, first.Code, "ABCDEFGHJKMNPQRS"]);
+        s.Sales.NewGiftCardCode = codes.Dequeue;
+
+        var second = await BuyCardAsync(s, buyer, 25m);
+
+        Assert.Equal("ABCDEFGHJKMNPQRS", second.Code);
+        await using var db = s.App.Db();
+        Assert.Equal(2, await db.GiftCards.Select(g => g.Code).Distinct().CountAsync());
+        // And the database backs it up: the code is unique across all theaters, not per theater.
+        var index = Assert.Single(db.Model.FindEntityType(typeof(GiftCard))!.GetIndexes(),
+            i => i.Properties.Select(p => p.Name).SequenceEqual([nameof(GiftCard.Code)]));
+        Assert.True(index.IsUnique);
+    }
+
+    [Fact]
     public async Task Gift_cards_are_only_sold_when_the_theater_turns_them_on()
     {
         await using var s = await SetUpAsync(); // off by default

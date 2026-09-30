@@ -98,16 +98,26 @@ public sealed partial class TicketSalesService
             Kind = GiftCardTransactionKind.Purchase, Amount = amount, BalanceAfter = amount, At = now,
         });
         db.GiftCards.Add(giftCard);
-        try
+        for (var attempt = 1; ; attempt++)
         {
-            await db.SaveChangesAsync();
-        }
-        catch (Exception ex)
-        {
-            // The card has been charged, so leave a trail for support to issue it by hand.
-            logger.LogError(ex, "Charged {Amount} for a gift card at theater {TheaterId} but couldn't save it (payment {Reference})",
-                amount, theater.Id, result.Reference);
-            throw;
+            try
+            {
+                await db.SaveChangesAsync();
+                break;
+            }
+            catch (DbUpdateException ex) when (IsGiftCardCodeClash(ex) && attempt < 5)
+            {
+                // Another card took this code between the check and the save. The buyer has paid, so pick another
+                // rather than fail; the unique index means two cards can never share a code.
+                giftCard.Code = await NewGiftCardCodeAsync(db);
+            }
+            catch (Exception ex)
+            {
+                // The card has been charged, so leave a trail for support to issue it by hand.
+                logger.LogError(ex, "Charged {Amount} for a gift card at theater {TheaterId} but couldn't save it (payment {Reference})",
+                    amount, theater.Id, result.Reference);
+                throw;
+            }
         }
 
         var buyerEmailed = await TrySendGiftCardAsync(buyerEmail, giftCard, theater, baseUri, buyer?.DisplayName, forRecipient: false);
@@ -254,16 +264,23 @@ public sealed partial class TicketSalesService
 
     private static string? Clean(string? text) => string.IsNullOrWhiteSpace(text) ? null : text.Trim();
 
-    private static async Task<string> NewGiftCardCodeAsync(ApplicationDbContext db)
+    // Makes the codes for new gift cards; tests swap it to force a clash.
+    internal Func<string> NewGiftCardCode { get; set; } = GiftCardCodes.New;
+
+    private async Task<string> NewGiftCardCodeAsync(ApplicationDbContext db)
     {
         for (var attempt = 0; ; attempt++)
         {
-            var code = GiftCardCodes.New();
-            // ~78 random bits: a clash is not going to happen, but the unique index is the real guard.
+            var code = NewGiftCardCode();
+            // ~78 random bits: a clash is not going to happen, but the unique index on the code is the real
+            // guard, and PurchaseGiftCardAsync retries the save with a new code if it trips.
             if (attempt >= 5 || !await db.GiftCards.AnyAsync(g => g.Code == code))
                 return code;
         }
     }
+
+    // The code is the only unique column this save can clash on.
+    private static bool IsGiftCardCodeClash(DbUpdateException ex) => IsUniqueViolation(ex);
 
     private async Task<bool> TrySendGiftCardAsync(string to, GiftCard card, Theater theater, string baseUri, string? fromName, bool forRecipient)
     {
