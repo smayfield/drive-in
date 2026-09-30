@@ -26,6 +26,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<TheaterRole> TheaterRoles => Set<TheaterRole>();
     public DbSet<TheaterRolePermission> TheaterRolePermissions => Set<TheaterRolePermission>();
     public DbSet<EmployeeRole> EmployeeRoles => Set<EmployeeRole>();
+    public DbSet<Subscription> Subscriptions => Set<Subscription>();
+    public DbSet<Invoice> Invoices => Set<Invoice>();
+    public DbSet<InvoiceLine> InvoiceLines => Set<InvoiceLine>();
+    public DbSet<InvoicePayment> InvoicePayments => Set<InvoicePayment>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -292,6 +296,67 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .WithMany(r => r.Permissions)
                 .HasForeignKey(x => x.RoleId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<Subscription>(s =>
+        {
+            s.HasIndex(x => x.TheaterId).IsUnique();
+            s.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+            s.Property(x => x.PricePerScreenPerMonth).HasPrecision(10, 2);
+            // Deleting a theater ends its subscription; its issued invoices are kept (Invoice.SubscriptionId goes null).
+            s.HasOne(x => x.Theater)
+                .WithMany()
+                .HasForeignKey(x => x.TheaterId)
+                .OnDelete(DeleteBehavior.Cascade);
+            s.HasOne(x => x.CanceledBy)
+                .WithMany()
+                .HasForeignKey(x => x.CanceledById)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<Invoice>(i =>
+        {
+            i.HasIndex(x => x.Number).IsUnique();
+            // One live invoice per subscription and month; a voided one can be replaced.
+            i.HasIndex(x => new { x.SubscriptionId, x.PeriodMonth }).IsUnique()
+                .HasFilter("status <> 'Void'").HasDatabaseName("ix_invoices_one_per_subscription_month");
+            i.HasIndex(x => new { x.Status, x.PeriodMonth });
+            i.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+            i.Property(x => x.Total).HasPrecision(10, 2);
+            // Invoices are records: they outlive the theater and its subscription.
+            i.HasOne(x => x.Subscription)
+                .WithMany(s => s.Invoices)
+                .HasForeignKey(x => x.SubscriptionId)
+                .OnDelete(DeleteBehavior.SetNull);
+            i.HasOne(x => x.Theater)
+                .WithMany()
+                .HasForeignKey(x => x.TheaterId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<InvoiceLine>(l =>
+        {
+            l.Property(x => x.UnitPrice).HasPrecision(10, 2);
+            l.Property(x => x.Amount).HasPrecision(10, 2);
+            l.HasOne(x => x.Invoice)
+                .WithMany(i => i.Lines)
+                .HasForeignKey(x => x.InvoiceId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<InvoicePayment>(p =>
+        {
+            p.Property(x => x.Amount).HasPrecision(10, 2);
+            p.Property(x => x.Method).HasConversion<string>().HasMaxLength(20);
+            p.HasIndex(x => x.ReceivedOn);
+            p.HasOne(x => x.Invoice)
+                .WithMany(i => i.Payments)
+                .HasForeignKey(x => x.InvoiceId)
+                .OnDelete(DeleteBehavior.Cascade);
+            p.HasOne(x => x.RecordedBy)
+                .WithMany()
+                .HasForeignKey(x => x.RecordedById)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         builder.Entity<EmployeeRole>(m =>

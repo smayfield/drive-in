@@ -18,6 +18,15 @@ public sealed class PlanOptions
         : "$__";
 }
 
+// How invoices are issued (BillingService).
+public sealed class BillingOptions
+{
+    public const string Section = "Billing";
+
+    // An issued invoice is due this many days later.
+    public int PaymentTermsDays { get; set; } = 15;
+}
+
 // The provider named in the Terms of Service, Privacy Policy and license. Until LegalName is set, the legal pages
 // show placeholders and a banner saying they're drafts and not yet in effect.
 public sealed class CompanyOptions

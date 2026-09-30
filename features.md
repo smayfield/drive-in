@@ -31,7 +31,7 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   union of their roles' (`employee_roles`); none by default.
 - **Anti-escalation** (`Guard.RequireWithinAuthority`): a non-owner can only create/edit/delete/assign/remove roles, or delete
   employees, whose permissions are a subset of their own.
-- Default roles for a *new* theater (`DefaultTheaterRoles`): Manager (all), Operations (`theater.edit`, `screens.manage`,
+- Default roles for a *new* theater (`DefaultTheaterRoles`): Manager (all but `billing.*`, which stay with the owner unless granted), Operations (`theater.edit`, `screens.manage`,
   `schedule.manage`), Ticketing (`tickets.admit`, `tickets.sell`, `tickets.move`), Concessions (none). Changing defaults doesn't touch existing
   theaters; that needs a data migration.
 
@@ -54,6 +54,8 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 | `giftcards.manage` | Manage gift cards | Turn gift-card sales on/off |
 | `giftcards.view` | View gift cards | Sales, balances, amount owed (last four chars of code only) |
 | `reports.view` | View reports | Sales, attendance and gift card reports, CSV downloads |
+| `billing.view` | View billing | The theater's subscription, issued invoices and payments (Billing tab) |
+| `billing.manage` | Manage billing | Billing email, cancel the subscription (sees the subscription, not invoices, without `billing.view`) |
 
 ## 3. Theater modes and sign-up
 
@@ -64,10 +66,11 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   1 to 4 screens; must accept Terms (version + time stored on the theater); max `Plans:MaxTheatersPerOwner` (3) per account.
   Seeds default roles, screens of 8 rows x 15 spots (rows 5 to 8 marked for large vehicles), and sample prices.
 - Go-live: owner or admin requests (agreeing to Standard-plan billing); admins are emailed; admin activates or declines with a
-  note at `/admin/theaters`. Activation sets Live and deletes test tickets (with their `ticket_moves`), `comp_events` and gift cards. Admin-created theaters
-  start Live.
-- Billing estimate on the manage page: per screen per calendar month the season touches (every month if no season). No billing
-  processor; billing is external.
+  note at `/admin/theaters`. Activation sets Live and deletes test tickets (with their `ticket_moves`), `comp_events` and gift cards,
+  and starts the theater's subscription at `Plans:PricePerScreenPerMonth` (none if that's unset), drafting the go-live month's
+  invoice (see Billing). Admin-created theaters start Live without a subscription.
+- Plan panel on the manage page: for a demo theater, the estimate (per screen per calendar month the season touches, every month if
+  no season); for a live one, the subscription's locked-in price and a link to Billing.
 
 ## 4. Theater configuration (`/manage/{id}` and subpages)
 
@@ -85,6 +88,8 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 | `/manage/{id}/comps` | Free admission |
 | `/manage/{id}/giftcards` | Gift cards |
 | `/manage/{id}/reports` | Sales, attendance and gift card reports |
+| `/manage/{id}/billing` | Subscription, invoices, billing email, cancel (`billing.view` / `billing.manage`) |
+| `/manage/{id}/billing/invoices/{invoiceId}` | One issued invoice, printable (`billing.view`) |
 
 - **Profile:** name, unique slug (public URL), address/contact, description, IANA time zone. Times are entered/shown in that zone,
   stored in UTC.
@@ -205,21 +210,56 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   checks `reports.view`, 403 otherwise): UTF-8 with BOM, RFC 4180 quoting, invariant numbers, and text starting with
   `= + - @` (or tab/CR) prefixed with `'` so spreadsheets don't run it as a formula (`ReportCsv`).
 
-## 10. Admin (`Policies.Admin`)
+## 10. Billing (`BillingService`, `BillingReportService`, `BillingEmails`)
+
+- **Subscriptions** (`subscriptions`, one per theater): Standard plan, `PricePerScreenPerMonth` locked in when it starts (admins can
+  change it; applies to invoices drafted afterwards, and the Terms promise 30 days' notice), `StartedOn` (theater-local date),
+  Active or Canceled, optional `BillingEmail` (else the owner's email). Started by go-live activation, or by an admin at
+  `/admin/billing/subscriptions` for live theaters without one (admin-created, or activated with no price configured).
+- **Billed months:** screens × price for each calendar month (theater time zone) that the subscription covers and the season touches
+  (`Seasons.TouchesMonth`; every month with no season), in full: no proration for the start or cancel month. Not billed while the
+  theater is inactive or has no screens (`BillingService.IsBillable`). Screen count is taken when the draft is made.
+- **Drafting:** `BillingJobService` runs at startup then hourly and drafts this month's and last month's invoice (catching up after
+  downtime) where due and missing; admins get one email when drafts are created. Unique index on subscription + month for invoices
+  that aren't void, so concurrent runs can't double-bill. Admins can run it from `/admin/billing`.
+- **Invoices** (`invoices`, `invoice_lines`, `invoice_payments`): Draft → Issued → Paid, or Void.
+  - Drafts: admins add adjustment or credit lines (negative price) or remove lines; owners don't see drafts.
+  - Issue (one, or all drafts): assigns the next number `INV-000001` (sequential, retried on a clash; voided drafts use none), due
+    `Billing:PaymentTermsDays` (15) later, refreshes the bill-to snapshot, and emails the invoice. Total can't be below $0; a $0
+    invoice is issued already paid. A failed email doesn't undo the issue; the admin is told and can resend.
+  - Payments are recorded by an admin (no processor yet): amount up to the balance (partial allowed), method (check, bank transfer,
+    card, other), reference, date received (not in the future). Each emails a receipt; the invoice is Paid at zero balance.
+  - Void: only with no payments (no refunds); emails the bill-to if it had been issued; the month can then be drafted again.
+  - Invoices snapshot theater name/address and bill-to name/email. Deleting a theater deletes its subscription and drafts and keeps
+    issued invoices with no theater.
+  - Dates (issued, due, overdue, received) are UTC dates. Overdue = issued and past due.
+- **Cancel:** the owner (`billing.manage`) or an admin. The current month is the last billed (`EndsAfterMonth`, billed if in season
+  and not yet drafted); issued invoices stand. Emails the bill-to, and the admins when the owner cancels. Admin reactivation resumes
+  from the current month if it had lapsed (the gap isn't billed).
+- **Emails** (`BillingEmails`): invoice, receipt and void notice, with `Company:*` name/address/contact and a link to the invoice on
+  the theater's Billing page.
+- **Reports** (`/admin/billing/reports`): for a range of months (at most 60): active/cancelled subscriptions, billed screens,
+  projected billing this and next month; invoiced (by month billed) and collected (by date received) per month; per theater
+  invoiced/paid/owed; receivables aging today (not yet due, 1–30, 31–60, 61–90, over 90 days past due). CSV at
+  `/admin/billing/{invoices|payments|aging}.csv?from=yyyy-MM&to=yyyy-MM` (admins only), same format as the theater reports' CSV.
+
+## 11. Admin (`Policies.Admin`)
 
 - `/admin/theaters`, `/admin/theaters/new`, `/admin/theaters/{id}`: list, create (owner by email: immediate if the account exists,
   else invitation), edit, review go-live requests (activate or decline with note).
 - `/admin/users` (`UserAdminService`): list; create a confirmed account (optionally admin) that is emailed a link to set a
   password; make/remove admin (not on self); delete (not self). The seeded admin regains admin at sign-in.
+- `/admin/billing` (invoices: filter, draft now, issue all), `/admin/billing/invoices/{id}` (lines, issue, void, record payment,
+  resend, print), `/admin/billing/subscriptions` (start, price, cancel, reactivate), `/admin/billing/reports`. See Billing.
 
-## 11. Static and marketing pages
+## 12. Static and marketing pages
 
 - `[ExcludeFromInteractiveRouting]` static SSR with plain CSS (`static.css`, `marketing.css`): `/`, `/features`, `/pricing`,
   `/faq`, `/legal`, `/legal/terms`, `/legal/privacy`, `/legal/license`, `/invite/{token}`, `/Error`, `/not-found`, account pages.
-- Config: `Plans:PricePerScreenPerMonth`, `Company:*` (legal name, mailing address, governing state, contact email, effective date).
+- Config: `Plans:PricePerScreenPerMonth`, `Billing:PaymentTermsDays`, `Company:*` (legal name, mailing address, governing state, contact email, effective date).
   Unset values render as placeholders; legal pages show a "draft, not in effect" banner until `Company:LegalName` is set.
 
-## 12. UI and platform
+## 13. UI and platform
 
 - Blazor Web App, interactive server by default (`Routes`); MudBlazor for interactive pages in `AppLayout`; no Bootstrap.
 - Light/dark follow OS via `wwwroot/theme.js` (`data-theme`, `di-scheme` cookie so the server prerenders the right palette);
@@ -231,9 +271,10 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 - Deploy: merge to `main` runs tests, builds ARM64 images, runs an EF migration bundle, then deploys via SSM; Caddy fronts the app.
   Nightly `pg_dump` (30 days) plus daily EBS snapshots (7).
 
-## 13. Not built
+## 14. Not built
 
 - A real payment processor (production can't sell until `Payments:Provider` is set to one).
 - Concessions ordering, announcements (the Concessions role has no permissions yet).
-- Automated billing.
+- Paying invoices online (payments are recorded by an admin), sales tax on invoices, and overdue reminders or suspension for
+  non-payment.
 - Multi-server deployment (in-process `SpotEvents`).

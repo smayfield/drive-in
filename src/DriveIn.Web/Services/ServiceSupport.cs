@@ -52,6 +52,13 @@ internal static class Guard
     public static string NormalizeEmail(string email) => email.Trim().ToLowerInvariant();
 }
 
+internal static class DbErrors
+{
+    // A unique index rejected the save (Postgres; the InMemory provider used by tests has no unique indexes).
+    public static bool IsUniqueViolation(DbUpdateException ex) =>
+        ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation };
+}
+
 internal static class AccountLinks
 {
     // Same format as the Identity UI's ForgotPassword page, so Account/ResetPassword accepts it.

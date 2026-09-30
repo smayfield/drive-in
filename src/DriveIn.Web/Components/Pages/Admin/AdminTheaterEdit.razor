@@ -4,6 +4,7 @@
 @inherits AppComponentBase
 @inject TheaterService Theaters
 @inject InvitationService Invitations
+@inject BillingService Billing
 
 <PageTitle>@Title · Admin · Drive-In Online</PageTitle>
 
@@ -36,6 +37,23 @@
 
     @if (Id is not null)
     {
+        <section class="manage-section">
+            <MudText Typo="Typo.h5">Billing</MudText>
+            <MudText Typo="Typo.body2">
+                @if (subscription is null)
+                {
+                    <text>No subscription: this theater isn't billed.</text>
+                }
+                else
+                {
+                    <text>@subscription.Plan plan, @Money.Format(subscription.PricePerScreenPerMonth) per screen, since @subscription.StartedOn.ToString("MMM d, yyyy")</text>
+                    @if (!subscription.IsActive) { <text> · cancelled, last month billed @subscription.EndsAfterMonth?.ToString("MMM yyyy")</text> }
+                }
+                · <MudLink Href="admin/billing/subscriptions" Typo="Typo.body2">Subscriptions</MudLink>
+                · <MudLink Href="@($"manage/{Id}/billing")" Typo="Typo.body2">Invoices</MudLink>
+            </MudText>
+        </section>
+
         <section class="manage-section">
             <MudText Typo="Typo.h5">Owner</MudText>
             <MudText>Current owner: <strong>@(ownerEmail ?? "none")</strong></MudText>
@@ -84,6 +102,7 @@
     private string? ownerEmail;
     private string ownerInviteEmail = "";
     private List<Invitation> pending = [];
+    private Subscription? subscription;
 
     private string Title => Id is null ? "New theater" : model.Name;
 
@@ -95,6 +114,7 @@
             model = theater.CopyForEdit();
             ownerEmail = theater.Owner?.Email;
             pending = await Invitations.ListPendingAsync(User, id);
+            subscription = await Billing.GetSubscriptionAsync(User, id);
         }
         loaded = true;
     }

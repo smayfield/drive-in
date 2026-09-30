@@ -134,6 +134,9 @@ builder.Services.AddScoped<RoleService>();
 builder.Services.Configure<PlanOptions>(builder.Configuration.GetSection(PlanOptions.Section));
 builder.Services.Configure<CompanyOptions>(builder.Configuration.GetSection(CompanyOptions.Section));
 builder.Services.AddScoped<OnboardingService>();
+builder.Services.Configure<BillingOptions>(builder.Configuration.GetSection(BillingOptions.Section));
+builder.Services.AddScoped<BillingService>();
+builder.Services.AddScoped<BillingReportService>();
 
 // Online ticket sales. Card payments are off unless a processor is configured; "Dummy" (development only) approves
 // everything without taking money.
@@ -147,6 +150,7 @@ builder.Services.AddSingleton<SpotEvents>();
 builder.Services.AddScoped<TicketSalesService>();
 builder.Services.AddScoped<ReportService>();
 builder.Services.AddHostedService<HoldExpiryService>();
+builder.Services.AddHostedService<BillingJobService>();
 
 var app = builder.Build();
 
@@ -235,6 +239,35 @@ app.MapGet("/manage/{theaterId:int}/reports/{kind}.csv", async (int theaterId, s
         return Results.BadRequest(ex.Message);
     }
 }).RequireAuthorization();
+
+// Admin billing reports as CSV. ?from=&to= are months as yyyy-MM (both included).
+app.MapGet("/admin/billing/{kind}.csv", async (string kind, string? from, string? to, HttpContext http, BillingReportService reports) =>
+{
+    if (!ReportCsv.BillingKinds.Contains(kind))
+        return Results.NotFound();
+    if (!DateOnly.TryParseExact(from + "-01", "yyyy-MM-dd", out var fromMonth) || !DateOnly.TryParseExact(to + "-01", "yyyy-MM-dd", out var toMonth))
+        return Results.BadRequest("Give from and to months as yyyy-MM.");
+    try
+    {
+        var report = await reports.GetReportAsync(http.User, fromMonth, toMonth);
+        var csv = kind switch
+        {
+            "payments" => ReportCsv.BillingPayments(report),
+            "aging" => ReportCsv.BillingAging(report),
+            _ => ReportCsv.BillingInvoices(report),
+        };
+        http.Response.Headers.CacheControl = "no-store";
+        return Results.File(ReportCsv.ToBytes(csv), "text/csv; charset=utf-8", $"billing-{kind}-{from}-{to}.csv");
+    }
+    catch (AccessDeniedException)
+    {
+        return Results.Forbid();
+    }
+    catch (AppValidationException ex)
+    {
+        return Results.BadRequest(ex.Message);
+    }
+}).RequireAuthorization(Policies.Admin);
 
 await DbSeeder.SeedAsync(app.Services);
 

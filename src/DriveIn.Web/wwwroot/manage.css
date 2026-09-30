@@ -19,6 +19,8 @@
 }
 .manage-tab:hover { color: var(--mud-palette-text-primary); }
 .manage-tab.active { border-bottom-color: var(--mud-palette-primary); color: var(--mud-palette-text-primary); }
+.manage-subtabs { margin-top: 0.25rem; font-size: 0.9rem; }
+.manage-subtabs .manage-tab { padding: 0.35rem 0.75rem; }
 
 /* A section on a manage page: a heading and its content, spaced consistently. */
 .manage-section { margin-bottom: 2rem; }
@@ -63,4 +65,23 @@
 .report-tile { display: flex; flex-direction: column; gap: 0.15rem; padding: 0.75rem 1rem; }
 .report-tile-label { color: var(--mud-palette-text-secondary); font-size: 0.85rem; font-weight: 500; }
 .report-tile-value { font-size: 1.6rem; font-weight: 600; line-height: 1.2; }
+.report-total td { font-weight: 600; }
 .report-ledger { max-width: 32rem; }
+
+/* An invoice (InvoiceView): reads like a paper one, and prints as one without the app around it. */
+.invoice { max-width: 52rem; padding: 1.5rem; }
+.invoice-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; margin-bottom: 1.25rem; }
+.invoice-meta td { padding: 0.1rem 1rem 0.1rem 0; }
+.invoice-meta td:first-child { color: var(--mud-palette-text-secondary); }
+.invoice-lines { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+.invoice-lines th, .invoice-lines td { padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--mud-palette-lines-default); }
+.invoice-lines th { text-align: left; font-weight: 600; }
+.invoice-lines .num { text-align: right; white-space: nowrap; }
+.invoice-lines tfoot td { border-bottom: none; }
+.invoice-lines .invoice-total td { font-weight: 700; }
+
+@media print {
+    .mud-appbar, .mud-drawer, .manage-head, .no-print { display: none !important; }
+    .mud-main-content { padding: 0 !important; }
+    .invoice { border: none !important; box-shadow: none !important; padding: 0; max-width: none; }
+}

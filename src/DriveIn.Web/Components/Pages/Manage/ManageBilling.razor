@@ -1,0 +1,166 @@
+@page "/manage/{Id:int}/billing"
+@attribute [Authorize]
+@inherits AppComponentBase
+@inject TheaterService Theaters
+@inject TheaterAccess Access
+@inject BillingService Billing
+
+<PageTitle>Billing · Manage · Drive-In Online</PageTitle>
+
+@if (theater is null)
+{
+    <Alerts Error="@Error" />
+    @if (Error is null) { <MudProgressCircular Indeterminate Size="Size.Small" aria-label="Loading billing" /> }
+}
+else
+{
+    <ManageHeader Theater="theater" Title="Billing" Current="billing" />
+
+    <Alerts Error="@Error" Success="@Success" />
+
+    @if (billing is not null)
+    {
+        var sub = billing.Subscription;
+        <section class="manage-section">
+            <MudText Typo="Typo.h5">Plan</MudText>
+            @if (sub is null)
+            {
+                <MudText Typo="Typo.body2" Class="muted">
+                    @(theater.IsDemo
+                        ? "Your theater is in demo mode, which is free. Billing starts when it goes live."
+                        : "This theater isn't being billed.")
+                </MudText>
+            }
+            else
+            {
+                var screens = theater.Screens.Count;
+                <MudPaper Outlined Class="pa-3">
+                    <div class="d-flex flex-wrap align-center gap-2 mb-1">
+                        <MudText><strong>@sub.Plan plan</strong></MudText>
+                        @if (sub.IsActive)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Class="my-0">Active</MudChip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="my-0">Cancelled</MudChip>
+                        }
+                    </div>
+                    <MudText Typo="Typo.body2">
+                        @screens screen@(screens == 1 ? "" : "s") × @Money.Format(sub.PricePerScreenPerMonth) = @Money.Format(screens * sub.PricePerScreenPerMonth) a month,
+                        billed in advance for each calendar month your season is open (@Seasons.Describe(theater)).
+                    </MudText>
+                    <MudText Typo="Typo.body2" Class="muted">
+                        Since @sub.StartedOn.ToString("MMM d, yyyy")@(sub.EndsAfterMonth is DateOnly end ? $" · cancelled; {end:MMMM yyyy} is the last month billed" : "").
+                        Invoices go to <strong>@billing.BillTo</strong>.
+                    </MudText>
+                </MudPaper>
+            }
+        </section>
+
+        @if (canView)
+        {
+            <section class="manage-section">
+                <MudText Typo="Typo.h5">Invoices</MudText>
+                @if (billing.Invoices.Count == 0)
+                {
+                    <MudText Class="muted">No invoices yet.</MudText>
+                }
+                else
+                {
+                    var owed = billing.Invoices.Where(i => i.Status == InvoiceStatus.Issued).Sum(i => i.Balance);
+                    @if (owed > 0)
+                    {
+                        <MudText Typo="Typo.body2" Class="mb-2"><strong>@Money.Format(owed)</strong> is due.</MudText>
+                    }
+                    <MudSimpleTable Dense Hover Outlined Class="manage-table">
+                        <thead><tr><th>Invoice</th><th>Period</th><th>Status</th><th class="text-end">Total</th><th class="text-end">Balance</th><th>Due</th></tr></thead>
+                        <tbody>
+                            @foreach (var i in billing.Invoices)
+                            {
+                                <tr @key="i.Id">
+                                    <td><MudLink Href="@($"manage/{Id}/billing/invoices/{i.Id}")">@i.DisplayNumber</MudLink></td>
+                                    <td>@i.PeriodMonth.ToString("MMM yyyy")</td>
+                                    <td><InvoiceStatusChip Invoice="i" Today="billing.Today" /></td>
+                                    <td class="text-end">@Money.Format(i.Total)</td>
+                                    <td class="text-end">@(i.Status == InvoiceStatus.Issued ? Money.Format(i.Balance) : "")</td>
+                                    <td>@(i.Status == InvoiceStatus.Issued ? i.DueOn?.ToString("MMM d, yyyy") : "")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
+                <MudText Typo="Typo.body2" Class="muted mt-2">
+                    To pay, reply to an invoice email for payment details, and quote the invoice number. Each payment we receive is emailed a receipt.
+                </MudText>
+            </section>
+        }
+
+        @if (canManage && sub is not null)
+        {
+            <section class="manage-section">
+                <MudText Typo="Typo.h5">Billing email</MudText>
+                <MudText Typo="Typo.body2" Class="muted mb-2">Where invoices and receipts are sent. Leave it blank to use the owner's email.</MudText>
+                <div class="d-flex flex-wrap gap-2 align-items-start">
+                    <MudTextField T="string" @bind-Value="billingEmail" InputType="InputType.Email" Label="Billing email" Placeholder="@(theater.Owner?.Email)"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="256" Class="field-grow" />
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-1" OnClick="SaveEmailAsync">Save</MudButton>
+                </div>
+            </section>
+
+            @if (sub.IsActive)
+            {
+                <section class="manage-section">
+                    <MudText Typo="Typo.h5">Cancel subscription</MudText>
+                    <MudText Typo="Typo.body2" Class="muted mb-2">
+                        This month is the last one billed (months are billed in advance, and there are no refunds). Invoices already sent are still due.
+                        To stop selling tickets or take your theater down as well, contact us.
+                    </MudText>
+                    @if (confirmCancel)
+                    {
+                        <MudButton Variant="Variant.Filled" Color="Color.Error" OnClick="CancelAsync">Yes, cancel the subscription</MudButton>
+                        <MudButton Variant="Variant.Text" OnClick="() => confirmCancel = false">Keep it</MudButton>
+                    }
+                    else
+                    {
+                        <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="() => confirmCancel = true">Cancel subscription…</MudButton>
+                    }
+                </section>
+            }
+        }
+    }
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private Theater? theater;
+    private IReadOnlySet<string> permissions = new HashSet<string>();
+    private TheaterBilling? billing;
+    private string? billingEmail;
+    private bool confirmCancel;
+
+    private bool canView => permissions.Contains(TheaterPermissions.ViewBilling);
+    private bool canManage => permissions.Contains(TheaterPermissions.ManageBilling);
+
+    protected override async Task LoadAsync()
+    {
+        theater = await Theaters.GetForManageAsync(User, Id);
+        permissions = await Access.GetPermissionsAsync(User, theater);
+        billing = await Billing.GetTheaterBillingAsync(User, Id);
+        billingEmail = billing.Subscription?.BillingEmail;
+    }
+
+    private Task SaveEmailAsync() => RunAsync(async () =>
+    {
+        await Billing.UpdateBillingEmailAsync(User, Id, billingEmail);
+        billing = await Billing.GetTheaterBillingAsync(User, Id);
+    }, "Saved.");
+
+    private Task CancelAsync() => RunAsync(async () =>
+    {
+        await Billing.CancelAsync(User, Id);
+        confirmCancel = false;
+        billing = await Billing.GetTheaterBillingAsync(User, Id);
+    }, "Your subscription is cancelled. We've emailed a confirmation.");
+}

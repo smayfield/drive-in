@@ -1,0 +1,168 @@
+@page "/admin/billing/invoices/{Id:int}"
+@attribute [Authorize(Policy = Policies.Admin)]
+@inherits AppComponentBase
+@inject BillingService Billing
+@inject IJSRuntime JS
+
+<PageTitle>@Title · Admin · Drive-In Online</PageTitle>
+
+<AdminHeader Title="@Title" Current="billing" Parent="@(("admin/billing", "Invoices"))" />
+
+<Alerts Error="@Error" Success="@Success" />
+
+@if (invoice is not null)
+{
+    <div class="d-flex flex-wrap gap-2 mb-3 no-print">
+        @if (invoice.Status == InvoiceStatus.Draft)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="busy" OnClick="IssueAsync">Issue and email</MudButton>
+        }
+        @if (invoice.Status is InvoiceStatus.Issued or InvoiceStatus.Paid)
+        {
+            <MudButton Variant="Variant.Outlined" Disabled="busy" OnClick="ResendAsync">@(invoice.Status == InvoiceStatus.Paid ? "Resend receipt" : "Resend invoice")</MudButton>
+        }
+        @if (invoice.Status is InvoiceStatus.Draft or InvoiceStatus.Issued && invoice.Payments.Count == 0)
+        {
+            <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="() => voiding = !voiding">Void…</MudButton>
+        }
+        <MudButton Variant="Variant.Text" OnClick="PrintAsync">Print</MudButton>
+        @if (invoice.TheaterId is int theaterId)
+        {
+            <MudButton Variant="Variant.Text" Href="@($"admin/theaters/{theaterId}")">Theater</MudButton>
+        }
+    </div>
+
+    @if (voiding)
+    {
+        <MudPaper Outlined Class="pa-3 mb-3 no-print" Style="border-color: var(--mud-palette-error)">
+            <MudText Typo="Typo.body2" Class="mb-2">
+                Voiding cancels the invoice. @(invoice.Status == InvoiceStatus.Issued ? "The theater is emailed that it doesn't need to pay it, with your note." : "It was never sent, so nobody is told.")
+                The month can then be drafted again.
+            </MudText>
+            <div class="d-flex flex-wrap gap-2 align-items-start">
+                <MudTextField T="string" @bind-Value="voidReason" Placeholder="Reason (optional)" Variant="Variant.Outlined" Margin="Margin.Dense"
+                              MaxLength="500" Class="field-grow" aria-label="Reason for voiding" />
+                <MudButton Variant="Variant.Filled" Color="Color.Error" Class="mt-1" Disabled="busy" OnClick="VoidAsync">Void invoice</MudButton>
+            </div>
+        </MudPaper>
+    }
+
+    @if (invoice.Status == InvoiceStatus.Issued)
+    {
+        <section class="manage-section no-print">
+            <MudText Typo="Typo.h5">Record a payment</MudText>
+            <MudText Typo="Typo.body2" Class="muted mb-2">Enter money received for this invoice. The theater is emailed a receipt; the invoice is marked paid once nothing is owed.</MudText>
+            <div class="d-flex flex-wrap gap-2 align-items-start">
+                <MudNumericField T="decimal" @bind-Value="payAmount" Label="Amount" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0.01m" Max="@invoice.Balance"
+                                 Adornment="Adornment.Start" AdornmentText="$" Format="0.00" Class="report-date" />
+                <MudSelect T="PaymentMethod" @bind-Value="payMethod" Label="Method" Variant="Variant.Outlined" Margin="Margin.Dense" Dense Class="report-date">
+                    @foreach (var m in Enum.GetValues<PaymentMethod>())
+                    {
+                        <MudSelectItem T="PaymentMethod" Value="m">@PaymentMethods.Describe(m)</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudTextField T="string" @bind-Value="payReference" Label="Reference (check no.)" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="100" Class="field-grow" />
+                <MudDatePicker @bind-Date="payDate" Label="Received" Variant="Variant.Outlined" Margin="Margin.Dense" Editable Class="report-date" />
+                <MudButton Variant="Variant.Filled" Color="Color.Success" Class="mt-1" Disabled="busy" OnClick="RecordPaymentAsync">Record payment</MudButton>
+            </div>
+        </section>
+    }
+
+    <InvoiceView Invoice="invoice" Today="Billing.Today" LineActions="@(invoice.Status == InvoiceStatus.Draft ? RemoveButton : null)" />
+
+    @if (invoice.Status == InvoiceStatus.Draft)
+    {
+        <section class="manage-section no-print">
+            <MudText Typo="Typo.h5">Add a line</MudText>
+            <MudText Typo="Typo.body2" Class="muted mb-2">A credit or other adjustment. Enter a negative price for a credit. The total can't be below $0 when issued.</MudText>
+            <div class="d-flex flex-wrap gap-2 align-items-start">
+                <MudTextField T="string" @bind-Value="lineDescription" Label="Description" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="200" Class="field-grow" />
+                <MudNumericField T="int" @bind-Value="lineQuantity" Label="Qty" Variant="Variant.Outlined" Margin="Margin.Dense" Min="1" Max="BillingService.MaxLineQuantity" Class="report-date" />
+                <MudNumericField T="decimal" @bind-Value="linePrice" Label="Price each" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                 Adornment="Adornment.Start" AdornmentText="$" Format="0.00" Class="report-date" />
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-1" Disabled="busy" OnClick="AddLineAsync">Add line</MudButton>
+            </div>
+        </section>
+    }
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private Invoice? invoice;
+    private bool busy;
+    private bool voiding;
+    private string? voidReason;
+    private decimal payAmount;
+    private PaymentMethod payMethod = PaymentMethod.Check;
+    private string? payReference;
+    private DateTime? payDate;
+    private string lineDescription = "";
+    private int lineQuantity = 1;
+    private decimal linePrice;
+
+    private string Title => invoice is null ? "Invoice" : $"{invoice.DisplayNumber} · {invoice.TheaterName}";
+
+    private RenderFragment<InvoiceLine> RemoveButton => line =>
+        @<MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" aria-label="@($"Remove {line.Description}")" OnClick="() => RemoveLineAsync(line.Id)" />;
+
+    protected override async Task LoadAsync()
+    {
+        invoice = await Billing.GetInvoiceForAdminAsync(User, Id);
+        payAmount = invoice.Balance;
+        payDate = Billing.Today.ToDateTime(TimeOnly.MinValue);
+    }
+
+    private async Task Act(Func<Task> action, string? success = null)
+    {
+        busy = true;
+        await RunAsync(async () =>
+        {
+            try
+            {
+                await action();
+            }
+            finally
+            {
+                // Also after a partial success (issued or paid, but the email failed).
+                await LoadAsync();
+            }
+        }, success);
+        busy = false;
+    }
+
+    private Task IssueAsync() => Act(async () =>
+    {
+        var result = await Billing.IssueAsync(User, [Id], BaseUri);
+        if (result.NotEmailed > 0)
+            throw new AppValidationException("Issued, but the email couldn't be sent. Check the address and use Resend.");
+    }, "Issued and emailed.");
+
+    private Task ResendAsync() => Act(() => Billing.ResendAsync(User, Id, BaseUri), "Sent.");
+
+    private Task VoidAsync() => Act(async () =>
+    {
+        await Billing.VoidAsync(User, Id, voidReason);
+        voiding = false;
+    }, "Voided.");
+
+    private Task RecordPaymentAsync() => Act(async () =>
+    {
+        if (payDate is not DateTime date)
+            throw new AppValidationException("Enter the date the payment was received.");
+        var emailed = await Billing.RecordPaymentAsync(User, Id, new PaymentInput(payAmount, payMethod, payReference, DateOnly.FromDateTime(date)), BaseUri);
+        payReference = null;
+        if (!emailed)
+            throw new AppValidationException("The payment is recorded, but the receipt couldn't be emailed. Use Resend once it's paid, or email it yourself.");
+    }, "Payment recorded and receipt emailed.");
+
+    private Task AddLineAsync() => Act(async () =>
+    {
+        await Billing.AddLineAsync(User, Id, lineDescription, lineQuantity, linePrice);
+        (lineDescription, lineQuantity, linePrice) = ("", 1, 0m);
+    });
+
+    private Task RemoveLineAsync(int lineId) => Act(() => Billing.RemoveLineAsync(User, Id, lineId));
+
+    private async Task PrintAsync() => await JS.InvokeVoidAsync("print");
+}

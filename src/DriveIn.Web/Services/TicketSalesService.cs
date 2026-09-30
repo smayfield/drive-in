@@ -571,8 +571,7 @@ public sealed partial class TicketSalesService(
     private static AppValidationException Taken(string label) =>
         new($"Sorry, someone else just took spot {label}. Please choose another spot.");
 
-    private static bool IsUniqueViolation(DbUpdateException ex) =>
-        ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation };
+    private static bool IsUniqueViolation(DbUpdateException ex) => DbErrors.IsUniqueViolation(ex);
 
     // A gate code not used by another of the theater's tickets for a showing that hasn't ended. There are ~700,000
     // codes, so a clash is rare; a gate lookup still copes with duplicates by listing every match.
