@@ -244,7 +244,8 @@ public class OnboardingTests
         var sales = app.Get<TicketSalesService>();
         var option = (await sales.GetShowingAsync(me, showing.Id)).Prices.Options[0];
         var hold = await sales.HoldAsync(me, showing.Id, 1, 1);
-        await sales.PurchaseAsync(me, hold.TicketId, new PurchaseInput(option.Id, [], new CardInput("O", "4242424242424242", 12, 2030, "123")), TestApp.BaseUri);
+        var test = await sales.PurchaseAsync(me, hold.TicketId, new PurchaseInput(option.Id, [], new CardInput("O", "4242424242424242", 12, 2030, "123")), TestApp.BaseUri);
+        await sales.MoveAsync(me, test.Code, 1, 2, VehicleSize.Standard); // its move goes with it
         var onboarding = app.Get<OnboardingService>();
         await onboarding.RequestGoLiveAsync(me, theater.Id, acceptBilling: true, TestApp.BaseUri);
 
@@ -257,6 +258,7 @@ public class OnboardingTests
             Assert.Equal((TheaterMode.Live, (DateTimeOffset?)app.Time.GetUtcNow(), (DateTimeOffset?)null), (live.Mode, live.LiveSince, live.GoLiveRequestedAt));
             Assert.Empty(db.Tickets);
             Assert.Empty(db.TicketAddOns);
+            Assert.Empty(db.TicketMoves);
         }
         Assert.Contains(app.Email.Sent, m => m.To == "owner@example.com" && m.Subject.Contains("is live"));
         Assert.Empty(await onboarding.ListGoLiveRequestsAsync(admin));

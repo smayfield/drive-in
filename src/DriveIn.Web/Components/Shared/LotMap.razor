@@ -40,8 +40,10 @@
                     @foreach (var spot in row.Spots)
                     {
                         var cx = spot.X + SpotWidth / 2;
+                        var markY = spot.Y + SpotDepth - LargeMarkInset;
+                        var large = sizeLimits.Contains(field.Screen.Id) && field.Screen.AllowsLarge(spot.Row, spot.Number);
                         var status = SpotStatus?.Invoke(spot.Row, spot.Number);
-                        var title = status is null ? $"Spot {spot.Label}" : $"Spot {spot.Label}: {status.Value.Label}";
+                        var title = $"Spot {spot.Label}{(large ? " (large vehicles OK)" : "")}{(status is null ? "" : $": {status.Value.Label}")}";
                         @if (OnSpotClick.HasDelegate && status is { Clickable: true })
                         {
                             <g class="lot-spot-group lot-clickable @status.Value.CssClass" role="button" tabindex="0" aria-label="@title"
@@ -50,6 +52,7 @@
                                 <title>@title</title>
                                 <rect class="lot-spot" x="@N(spot.X)" y="@N(spot.Y)" width="@N(SpotWidth)" height="@N(SpotDepth)" rx="4" />
                                 <text class="lot-spot-label" x="@N(cx)" y="@N(labelY)" transform="@placed.Upright(cx, labelY)">@spot.Label</text>
+                                @if (large) { <g><text class="lot-large-mark" x="@N(cx)" y="@N(markY)" transform="@placed.Upright(cx, markY)">L</text></g> }
                             </g>
                         }
                         else
@@ -58,6 +61,7 @@
                                 <title>@title</title>
                                 <rect class="lot-spot" x="@N(spot.X)" y="@N(spot.Y)" width="@N(SpotWidth)" height="@N(SpotDepth)" rx="4" />
                                 <text class="lot-spot-label" x="@N(cx)" y="@N(labelY)" transform="@placed.Upright(cx, labelY)">@spot.Label</text>
+                                @if (large) { <g><text class="lot-large-mark" x="@N(cx)" y="@N(markY)" transform="@placed.Upright(cx, markY)">L</text></g> }
                             </g>
                         }
                     }
@@ -82,8 +86,12 @@
 
     private const double NameY = NameHeight / 2 + 1;
     private const double EmptyY = NameHeight + ScreenThickness + ScreenToFirstRow / 2 + 2;
+    private const double LargeMarkInset = 7;
 
     private LotPlan plan = default!;
+
+    // Screens whose spots aren't all alike: only these get the "L" on spots that take large vehicles.
+    private HashSet<int> sizeLimits = [];
 
     private string AriaLabel => Theater
         ? $"Lot map: {Screens.Count} screen{(Screens.Count == 1 ? "" : "s")}, {Screens.Sum(s => s.SpotCount)} spots"
@@ -92,6 +100,9 @@
     private Task OnSpotKeyAsync(KeyboardEventArgs e, LotSpot spot) =>
         e.Key is "Enter" or " " ? OnSpotClick.InvokeAsync(spot) : Task.CompletedTask;
 
-    protected override void OnParametersSet() =>
+    protected override void OnParametersSet()
+    {
         plan = Theater || Screens.Count == 0 ? ForTheater(Screens) : ForScreen(Screens[0]);
+        sizeLimits = Screens.Where(s => s.HasSizeLimits).Select(s => s.Id).ToHashSet();
+    }
 }

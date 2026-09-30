@@ -50,6 +50,7 @@ else
             <Aside>
                 <span class="stub-note">Spot</span>
                 <span class="ticket-spot">@t.Ticket.SpotLabel</span>
+                @if (t.Ticket.VehicleSize == VehicleSize.Large) { <span class="stub-note">Large vehicle</span> }
                 <span class="stub-note">Gate code <strong class="font-monospace">@t.Ticket.ShortCode</strong></span>
                 <MudButton Href="@($"tickets/{t.Code}")" Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small">Show ticket</MudButton>
             </Aside>

@@ -62,7 +62,12 @@ else
                     {
                         <MudGrid Spacing="3">
                             <MudItem xs="12" xl="7">
-                                <SeatMap Screen="screen" Availability="availability" CanPick="!busy" OnPick="PickSpot" MineLabel="Chosen" />
+                                @if (screen.HasSizeLimits)
+                                {
+                                    <VehiclePicker Value="vehicle" ValueChanged="SetVehicle" Disabled="busy" Label="The guest is driving a" Hint="@null" />
+                                }
+                                <SeatMap Screen="screen" Availability="availability" CanPick="!busy" OnPick="PickSpot" MineLabel="Chosen"
+                                         Vehicle="vehicle" Current="@(pickedLabel is null ? null : (pickedRow, pickedSpot))" />
                             </MudItem>
                             <MudItem xs="12" xl="5">
                                 @if (pickedLabel is null)
@@ -209,6 +214,7 @@ else
     private int screenShowingId;
     private int pickedRow, pickedSpot;
     private string? pickedLabel;
+    private VehicleSize vehicle;
     private string guestName = "", guestEmail = "", reason = "";
     private TicketView? issued;
 
@@ -264,6 +270,13 @@ else
         pickedLabel = SpotLabels.Spot(screen!.LabelScheme, spot.Row, spot.Number);
     }
 
+    private void SetVehicle(VehicleSize size)
+    {
+        vehicle = size;
+        if (pickedLabel is not null && !screen!.Fits(pickedRow, pickedSpot, size))
+            ClearPick();
+    }
+
     private void ClearPick()
     {
         pickedLabel = null;
@@ -272,7 +285,7 @@ else
 
     private Task OfferAsync() => Do(async () =>
     {
-        var result = await Sales.OfferFreeAdmissionAsync(User, screenShowingId, pickedRow, pickedSpot, guestName, guestEmail, reason, BaseUri);
+        var result = await Sales.OfferFreeAdmissionAsync(User, screenShowingId, pickedRow, pickedSpot, guestName, guestEmail, reason, BaseUri, vehicle);
         var name = guestName.Trim();
         issued = result;
         ClearPick();

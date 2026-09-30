@@ -177,6 +177,8 @@ public sealed partial class OnboardingService(
         var tests = await db.Tickets.Include(t => t.AddOns)
             .Where(t => t.IsTest && t.Showtime!.Screen!.TheaterId == theaterId).ToListAsync();
         db.TicketAddOns.RemoveRange(tests.SelectMany(t => t.AddOns));
+        var testIds = tests.Select(t => t.Id).ToList();
+        db.TicketMoves.RemoveRange(await db.TicketMoves.Where(m => testIds.Contains(m.TicketId)).ToListAsync());
         db.Tickets.RemoveRange(tests);
         db.CompEvents.RemoveRange(await db.CompEvents.Where(e => e.IsTest && e.TheaterId == theaterId).ToListAsync());
         db.GiftCards.RemoveRange(await db.GiftCards.Include(g => g.Transactions).Where(g => g.IsTest && g.TheaterId == theaterId).ToListAsync());

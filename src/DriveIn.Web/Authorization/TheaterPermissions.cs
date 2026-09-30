@@ -20,6 +20,7 @@ public static class TheaterPermissions
     public const string ManageRoles = "roles.manage";
     public const string AdmitGuests = "tickets.admit";
     public const string SellAtGate = "tickets.sell";
+    public const string MoveTickets = "tickets.move";
     public const string OfferFreeAdmission = "comps.offer";
     public const string ApproveFreeAdmission = "comps.approve";
     public const string ViewFreeAdmission = "comps.view";
@@ -38,6 +39,7 @@ public static class TheaterPermissions
         new(ManageRoles, "Staff", "Manage roles", "Create, edit and delete roles and assign them to employees. Only actions you have yourself can be granted."),
         new(AdmitGuests, "Tickets", "Admit guests", "Check tickets at the gate (scan the QR code or enter the 4-character gate code) and let the car in."),
         new(SellAtGate, "Tickets", "Sell tickets at the gate", "Sell tickets to cars at the gate: choose a showing and spot, take payment and let the car in."),
+        new(MoveTickets, "Tickets", "Move tickets", "Move a sold ticket to another available spot at the same showing, e.g. when the car is too large for its spot. Works before or after the car is checked in."),
         new(OfferFreeAdmission, "Tickets", "Offer free admission", "Reserve a spot at a showing, free of charge, for a guest such as a friend or family member (when the theater allows free admission). If the theater requires approval, this requests it instead."),
         new(ApproveFreeAdmission, "Tickets", "Approve free admission", "Approve or deny requests for free admission, and withdraw free tickets. Your own free admission never needs approval."),
         new(ViewFreeAdmission, "Tickets", "View free admission log", "See every free admission offered, requested, approved, denied or withdrawn, and who gave it."),
@@ -59,8 +61,8 @@ public static class DefaultTheaterRoles
             TheaterPermissions.All.Select(p => p.Key).ToArray()),
         ("Operations", "Keeps the theater's details, screens and schedule up to date.",
             [TheaterPermissions.EditProfile, TheaterPermissions.ManageScreens, TheaterPermissions.ManageSchedule]),
-        ("Ticketing", "Gate and box office staff: sells tickets at the gate, checks tickets and admits guests.",
-            [TheaterPermissions.AdmitGuests, TheaterPermissions.SellAtGate]),
+        ("Ticketing", "Gate and box office staff: sells tickets at the gate, checks tickets, admits guests and moves cars to other spots.",
+            [TheaterPermissions.AdmitGuests, TheaterPermissions.SellAtGate, TheaterPermissions.MoveTickets]),
         ("Concessions", "Snack bar staff. Concessions actions will be added here as concessions features ship.",
             []),
     ];

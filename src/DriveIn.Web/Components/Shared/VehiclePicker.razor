@@ -1,0 +1,23 @@
+@* What the guest is driving. Only asked on screens where some spots are for standard vehicles only (Screen.HasSizeLimits). *@
+
+<fieldset class="border-0 p-0 mb-2">
+    <legend class="mud-typography mud-typography-subtitle2">@Label</legend>
+    <MudRadioGroup T="VehicleSize" Value="Value" ValueChanged="ValueChanged" Disabled="Disabled">
+        @foreach (var size in Enum.GetValues<VehicleSize>())
+        {
+            <MudRadio Value="@size" Color="Color.Primary" Dense>@VehicleSizes.Describe(size)</MudRadio>
+        }
+    </MudRadioGroup>
+    @if (Hint is not null)
+    {
+        <MudText Typo="Typo.caption" Class="muted d-block">@Hint</MudText>
+    }
+</fieldset>
+
+@code {
+    [Parameter] public VehicleSize Value { get; set; }
+    [Parameter] public EventCallback<VehicleSize> ValueChanged { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public string Label { get; set; } = "What are you driving?";
+    [Parameter] public string? Hint { get; set; } = "Large vehicles park in the spots marked L so they don't block the view of cars behind them.";
+}

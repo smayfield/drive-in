@@ -32,7 +32,7 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 - **Anti-escalation** (`Guard.RequireWithinAuthority`): a non-owner can only create/edit/delete/assign/remove roles, or delete
   employees, whose permissions are a subset of their own.
 - Default roles for a *new* theater (`DefaultTheaterRoles`): Manager (all), Operations (`theater.edit`, `screens.manage`,
-  `schedule.manage`), Ticketing (`tickets.admit`, `tickets.sell`), Concessions (none). Changing defaults doesn't touch existing
+  `schedule.manage`), Ticketing (`tickets.admit`, `tickets.sell`, `tickets.move`), Concessions (none). Changing defaults doesn't touch existing
   theaters; that needs a data migration.
 
 | Key | Name | Gates |
@@ -47,6 +47,7 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 | `roles.manage` | Manage roles | Role CRUD and assignment |
 | `tickets.admit` | Admit guests | Gate check-in |
 | `tickets.sell` | Sell tickets at the gate | Gate sales, gift-card redemption at the gate |
+| `tickets.move` | Move tickets | Move a sold ticket to another available spot at the same showing (gate) |
 | `comps.offer` | Offer free admission | Give or request a free ticket |
 | `comps.approve` | Approve free admission | Approve/deny requests, withdraw free tickets |
 | `comps.view` | View free admission log | `comp_events` log |
@@ -60,9 +61,9 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   publicly must respect `CanBrowse` / `IsPublic`.
 - Self-serve sign-up at `/get-started` (`OnboardingService`): any non-employee signed-in account; name, slug, location, time zone,
   1 to 4 screens; must accept Terms (version + time stored on the theater); max `Plans:MaxTheatersPerOwner` (3) per account.
-  Seeds default roles, screens of 8 rows x 15 spots, and sample prices.
+  Seeds default roles, screens of 8 rows x 15 spots (rows 5 to 8 marked for large vehicles), and sample prices.
 - Go-live: owner or admin requests (agreeing to Standard-plan billing); admins are emailed; admin activates or declines with a
-  note at `/admin/theaters`. Activation sets Live and deletes test tickets, `comp_events` and gift cards. Admin-created theaters
+  note at `/admin/theaters`. Activation sets Live and deletes test tickets (with their `ticket_moves`), `comp_events` and gift cards. Admin-created theaters
   start Live.
 - Billing estimate on the manage page: per screen per calendar month the season touches (every month if no season). No billing
   processor; billing is external.
@@ -73,13 +74,13 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 |---|---|
 | `/manage` | Theaters the user owns or works at |
 | `/manage/{id}` | Overview: profile, time zone, season, logo, free-admission settings, setup checklist, plan panel |
-| `/manage/{id}/screens/{screenId}` | Screen name, spot layout |
+| `/manage/{id}/screens/{screenId}` | Screen name, spot layout, large-vehicle spots |
 | `/manage/{id}/lot` | Lot map |
 | `/manage/{id}/schedule` | Films and showings |
 | `/manage/{id}/pricing` | Price schedules, add-ons |
 | `/manage/{id}/employees` | Employees and invitations |
 | `/manage/{id}/roles` | Role editor (lists the permission catalog automatically) |
-| `/manage/{id}/gate` | Check-in and gate sales |
+| `/manage/{id}/gate` | Check-in, gate sales, moving tickets |
 | `/manage/{id}/comps` | Free admission |
 | `/manage/{id}/giftcards` | Gift cards |
 
@@ -92,6 +93,15 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   nearest the screen first, each with its own spot count, centered. Label schemes per screen: row letter + spot number (`B7`),
   row number + spot letter (`2G`), single number (`207`). Spots numbered left to right facing the screen. A screen with sales can't
   be deleted, and can't drop or relabel spots sold for upcoming showings.
+- **Vehicle sizes:** two, `VehicleSize.Standard` (cars, small SUVs, minivans) and `Large` (full-size SUVs, pickups, vans), so tall
+  vehicles park where they don't block the view. Each screen marks which spots take large vehicles (`Screen.LargeSpots`, an
+  `integer[]` of spot keys `row * 100 + spot`); a large vehicle may only have a marked spot, a standard one may have any. The
+  screen editor (`screens.manage`) marks a whole row by checkbox, single spots by clicking the preview, or presets (back half of
+  rows, all, none); **Fill** marks the back half, and new rows added behind a fully marked row are marked. Marks must be inside the
+  layout; saving without marks keeps the current ones minus spots the layout drops. A spot a Large ticket holds for an upcoming
+  showing can't be unmarked. New sample layouts, and existing screens at migration, have the back half of their rows marked
+  (`Screen.BackHalfLarge`: rows after `rowCount / 2`). Maps show an **L** on marked spots when a screen has any unmarked ones
+  (`Screen.HasSizeLimits`); buyers are only asked their vehicle on such screens.
 - **Lot map:** screens 1 and 2 face each other; 3 and 4 face each other at 90 degrees; drawn around the central building.
 - **Films** (`films`): title, rating, runtime, year, genres, director, cast, description. Poster (`film_posters`): JPG/GIF/PNG, max
   2 MB, served at `/films/{id}/poster` to users who can browse the theater. No external movie database. A film with sales can't be deleted.
@@ -113,6 +123,9 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 - **Hold:** choosing a spot sets the ticket `Held` until `Ticket.HoldMinutes` (10) while the buyer picks option/add-ons and pays.
   First to hold wins; others get an error to pick again. A buyer holds one spot at a time (a new hold releases the old one).
   Re-holding your own spot doesn't extend it. `HoldExpiryService` releases expired holds every 10 seconds.
+- **Vehicle:** on screens with size limits the buyer says what they're driving before picking; with Large, spots not marked L
+  can't be picked (map and service both check). The choice is locked while holding (choose a different spot to change it) and is
+  stored on the ticket (`Ticket.VehicleSize`), shown on the receipt, ticket page, My tickets and at the gate.
 - **Live maps:** holds/releases/sales are published through in-process `SpotEvents` to open maps. Single-server only; multiple
   servers would need a shared bus (e.g. Postgres LISTEN/NOTIFY).
 - **Payment** (`IPaymentProcessor`, `Payments.cs`): credit card only. `Payments:Provider=Dummy` approves everything without
@@ -133,13 +146,20 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   yesterday on and lists duplicates if a gate code collides.
 - **Sell** (`tickets.sell`): choose one of today's showings (selling continues after start, until end), a spot on the live map
   (held like online), ticket option and add-ons, then charge. Card-present (`PaymentRequest.Card` null); the ticket has no buyer
-  account, `SoldById` is the attendant, and the car is checked in on sale. Competes with online buyers for the same spots.
+  account, `SoldById` is the attendant, and the car is checked in on sale. Competes with online buyers for the same spots. The
+  attendant picks the car's vehicle size, with the same large-spot rule as online.
+- **Move** (`tickets.move`, `TicketSalesService.Moves.cs`): from a looked-up ticket, choose the car's vehicle size and a new spot on
+  the live map, e.g. a front-row ticket bought for a car when the guest arrives in a large SUV. Works before or after check-in,
+  until the showing ends; same showing only. The new spot must be available right now (not sold, held, paying or pending; an
+  expired hold is fine) and fit the vehicle. The ticket keeps its codes, payment and check-in; spot, label and vehicle change.
+  Each move is a `ticket_moves` row (from/to spot, label and vehicle, who, when). Moving alone lets staff look tickets up at the
+  gate but not check them in. Manager and Ticketing roles get `tickets.move` by default (a migration added it to existing ones).
 
 ## 7. Free admission (`TicketSalesService.Comps.cs`, `/manage/{id}/comps`)
 
 - Off by default. Theater settings (Overview, `theater.edit`): enabled, require approval, require reason, optional max per
   showing, optional max per employee per showing.
-- `comps.offer`: reserve a spot for a named guest (and optional email) at $0; with approval required, creates a `Pending` ticket
+- `comps.offer`: reserve a spot for a named guest (and optional email, and their vehicle size) at $0; with approval required, creates a `Pending` ticket
   that holds the spot with no expiry. `comps.approve`: approve (becomes sold) or deny; withdraw unused free tickets; approvers'
   own offers skip approval. `comps.view`: the log.
 - A free ticket is a normal sold ticket: `Ticket.IsComp`, $0, no buyer account, `SoldById` = giver, QR + gate code, checked in

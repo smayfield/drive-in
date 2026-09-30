@@ -23,7 +23,7 @@ public enum SpotState
     Mine,  // held by the viewer
 }
 
-public sealed record HoldView(int TicketId, int Row, int Spot, string SpotLabel, DateTimeOffset HeldUntil);
+public sealed record HoldView(int TicketId, int Row, int Spot, string SpotLabel, DateTimeOffset HeldUntil, VehicleSize VehicleSize);
 
 // Spots that aren't listed are available.
 public sealed record SpotAvailability(IReadOnlyDictionary<(int Row, int Spot), SpotState> Spots, HoldView? MyHold)
@@ -42,8 +42,10 @@ public sealed record TicketView(Ticket Ticket, Theater Theater, ShowtimeView Sho
     public string Code => Ticket.Code!;
 }
 
-// A ticket looked up by its code, as the viewer may see it: its buyer, or gate staff who can admit it.
-public sealed record TicketLookup(TicketView View, bool IsBuyer, bool CanAdmit, string? AdmitProblem);
+// A ticket looked up by its code, as the viewer may see it: its buyer, or gate staff who can admit or move it.
+// MoveProblem says why it can't be moved now (e.g. the showing has ended); an admitted ticket can still be moved.
+public sealed record TicketLookup(TicketView View, bool IsBuyer, bool CanAdmit, string? AdmitProblem,
+    bool CanMove = false, string? MoveProblem = null);
 
 // Online ticket sales. Buyers are any signed-in user: they pick a showing and a spot on its screen, hold the spot for
 // Ticket.HoldMinutes while they pay, and get an emailed receipt whose QR code is checked at the gate. Admitting
@@ -52,6 +54,7 @@ public sealed record TicketLookup(TicketView View, bool IsBuyer, bool CanAdmit, 
 public sealed partial class TicketSalesService(
     IDbContextFactory<ApplicationDbContext> dbFactory,
     IAuthorizationService auth,
+    TheaterAccess access,
     IPaymentProcessor payments,
     DummyPaymentProcessor testPayments,
     IAppEmailSender email,
@@ -123,7 +126,7 @@ public sealed partial class TicketSalesService(
                 : t.Status == TicketStatus.Held && t.UserId == userId ? SpotState.Mine : SpotState.Held;
             spots[(t.Row, t.Spot)] = state;
             if (t.Status == TicketStatus.Held && t.UserId == userId)
-                mine = new HoldView(t.Id, t.Row, t.Spot, t.SpotLabel, t.HeldUntil!.Value);
+                mine = ToHold(t);
         }
         return new SpotAvailability(spots, mine);
     }
@@ -131,23 +134,24 @@ public sealed partial class TicketSalesService(
     // --- Buying ---
 
     // Holds a spot for the user while they pay; the first to hold a spot gets it. Holding another spot lets go of
-    // any spot the user already holds, so one person can't tie up several at once.
-    public async Task<HoldView> HoldAsync(ClaimsPrincipal user, int showtimeId, int row, int spot)
+    // any spot the user already holds, so one person can't tie up several at once. A large vehicle can only hold a
+    // spot marked for large vehicles.
+    public async Task<HoldView> HoldAsync(ClaimsPrincipal user, int showtimeId, int row, int spot, VehicleSize vehicle = VehicleSize.Standard)
     {
         var userId = Guard.RequireUserId(user);
         await using (var db = await dbFactory.CreateDbContextAsync())
             if (!TheaterService.CanBrowse(user, await TheaterOfShowtimeAsync(db, showtimeId)))
                 throw new NotFoundException("Showing not found.");
-        return await HoldAsync(userId, showtimeId, row, spot, atGate: false);
+        return await HoldAsync(userId, showtimeId, row, spot, vehicle, atGate: false);
     }
 
-    private async Task<HoldView> HoldAsync(string userId, int showtimeId, int row, int spot, bool atGate)
+    private async Task<HoldView> HoldAsync(string userId, int showtimeId, int row, int spot, VehicleSize vehicle, bool atGate)
     {
         for (var attempt = 1; ; attempt++)
         {
             try
             {
-                return await TryHoldAsync(userId, showtimeId, row, spot, atGate);
+                return await TryHoldAsync(userId, showtimeId, row, spot, vehicle, atGate);
             }
             catch (DbUpdateConcurrencyException) when (attempt < 3)
             {
@@ -156,7 +160,7 @@ public sealed partial class TicketSalesService(
         }
     }
 
-    private async Task<HoldView> TryHoldAsync(string userId, int showtimeId, int row, int spot, bool atGate)
+    private async Task<HoldView> TryHoldAsync(string userId, int showtimeId, int row, int spot, VehicleSize vehicle, bool atGate)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var showtime = await db.Showtimes.AsNoTracking().Include(s => s.Screen!.Theater)
@@ -165,15 +169,21 @@ public sealed partial class TicketSalesService(
             throw new NotFoundException("Showing not found.");
         if (NotOnSaleReason(showtime, await LoadPricesAsync(db, showtime), atGate) is string reason)
             throw new AppValidationException(reason);
-        var screen = showtime.Screen;
-        if (row < 1 || row > screen.RowSpots.Count || spot < 1 || spot > screen.RowSpots[row - 1])
-            throw new NotFoundException("That spot isn't on this screen.");
-        var label = SpotLabels.Spot(screen.LabelScheme, row, spot);
+        var label = CheckSpot(showtime.Screen, row, spot, vehicle);
         var now = time.GetUtcNow();
 
         var existing = await db.Tickets.FirstOrDefaultAsync(t => t.ShowtimeId == showtimeId && t.Row == row && t.Spot == spot);
         if (existing is { Status: TicketStatus.Held } && existing.UserId == userId && existing.HeldUntil > now)
-            return ToHold(existing); // already theirs; holding it again doesn't extend the hold
+        {
+            // Already theirs; holding it again doesn't extend the hold, but does record a change of vehicle.
+            if (existing.VehicleSize != vehicle)
+            {
+                existing.VehicleSize = vehicle;
+                existing.Stamp = Guid.NewGuid();
+                await db.SaveChangesAsync(); // DbUpdateConcurrencyException (it just expired): retried by HoldAsync
+            }
+            return ToHold(existing);
+        }
         if (existing is not null && !(existing.Status == TicketStatus.Held && existing.HeldUntil <= now))
             throw Taken(label);
 
@@ -184,7 +194,7 @@ public sealed partial class TicketSalesService(
         var released = await db.Tickets.Where(t => t.UserId == userId && t.Status == TicketStatus.Held).ToListAsync();
         var ticket = new Ticket
         {
-            ShowtimeId = showtimeId, Row = row, Spot = spot, SpotLabel = label, UserId = userId,
+            ShowtimeId = showtimeId, Row = row, Spot = spot, SpotLabel = label, VehicleSize = vehicle, UserId = userId,
             Status = TicketStatus.Held, HeldUntil = now.AddMinutes(Ticket.HoldMinutes), CreatedAt = now,
         };
         await using (var tx = await db.Database.BeginTransactionAsync())
@@ -518,7 +528,22 @@ public sealed partial class TicketSalesService(
             ticket.AdmittedAt is DateTimeOffset at ? TheaterTime.ToLocal(theater, at) : null);
     }
 
-    private static HoldView ToHold(Ticket t) => new(t.Id, t.Row, t.Spot, t.SpotLabel, t.HeldUntil!.Value);
+    private static HoldView ToHold(Ticket t) => new(t.Id, t.Row, t.Spot, t.SpotLabel, t.HeldUntil!.Value, t.VehicleSize);
+
+    // The spot's label, if it's on the screen and fits the vehicle.
+    private static string CheckSpot(Screen screen, int row, int spot, VehicleSize vehicle)
+    {
+        if (!Enum.IsDefined(vehicle))
+            throw new AppValidationException("Choose what you're driving.");
+        if (!screen.Contains(row, spot))
+            throw new NotFoundException("That spot isn't on this screen.");
+        var label = SpotLabels.Spot(screen.LabelScheme, row, spot);
+        if (!screen.Fits(row, spot, vehicle))
+            throw new AppValidationException(screen.LargeSpots.Count == 0
+                ? $"Spot {label} is for cars and other standard vehicles, and this screen has no spots for large vehicles."
+                : $"Spot {label} is for cars and other standard vehicles. Large vehicles park in the spots marked L, so they don't block the view.");
+        return label;
+    }
 
     private static async Task BackToHeldAsync(ApplicationDbContext db, Ticket ticket)
     {

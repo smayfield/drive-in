@@ -23,6 +23,9 @@ public class Ticket
     [MaxLength(10)]
     public string SpotLabel { get; set; } = "";
 
+    // What the guest is driving; a Large vehicle may only have a spot marked for large vehicles (Screen.LargeSpots).
+    public VehicleSize VehicleSize { get; set; }
+
     // The buyer. Null once their account is deleted; the sale is kept.
     public string? UserId { get; set; }
     public ApplicationUser? User { get; set; }
