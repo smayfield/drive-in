@@ -275,9 +275,11 @@ else
             row.SetAllLarge(large);
     }
 
+    // The tooltip and aria label describe the spot's state; the caption above the map says clicking toggles it. (LotMap
+    // already adds "large vehicles OK" to marked spots' titles when the screen has unmarked ones.)
     private LotSpotStatus? MarkStatus(int row, int spot) => draft.Rows[row - 1].Large.Contains(spot)
-        ? new("spot-marked", "click to mark for cars only", true)
-        : new("", "cars only; click to mark for large vehicles", true);
+        ? new("spot-marked", "marked for large vehicles", true)
+        : new("", "standard vehicles only", true);
 
     private void ToggleLarge(LotSpot spot)
     {
