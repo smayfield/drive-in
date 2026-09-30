@@ -7,63 +7,54 @@
 
 <PageTitle>@Title · Admin · Drive-In Online</PageTitle>
 
-<p><a href="admin/theaters">&larr; Theaters</a></p>
-<h1>@Title</h1>
+<AdminHeader Title="@Title" Current="theaters" Parent="@(("admin/theaters", "Theaters"))" />
 
 <Alerts Error="@Error" Success="@Success" />
 
 @if (loaded)
 {
-    <EditForm Model="model" OnValidSubmit="SaveAsync" class="mb-5">
+    <EditForm Model="model" OnValidSubmit="SaveAsync" class="manage-section">
         <DataAnnotationsValidator />
-        <div class="row g-3 mb-3">
-            <div class="col-md-6">
-                <label class="form-label" for="slug">Slug (public URL)</label>
-                <div class="input-group">
-                    <span class="input-group-text">/theaters/</span>
-                    <InputText id="slug" class="form-control" @bind-Value="model.Slug" />
-                </div>
-                <ValidationMessage For="() => model.Slug" />
-            </div>
-            <div class="col-md-6 d-flex align-items-end">
-                <div class="form-check">
-                    <InputCheckbox id="active" class="form-check-input" @bind-Value="model.IsActive" />
-                    <label class="form-check-label" for="active">Active (listed for users)</label>
-                </div>
-            </div>
-        </div>
+        <MudGrid Spacing="2" Class="mb-2">
+            <MudItem xs="12" md="6">
+                <MudTextField T="string" @bind-Value="model.Slug" For="() => model.Slug" Label="Slug (public URL)" Variant="Variant.Outlined" Margin="Margin.Dense"
+                              Adornment="Adornment.Start" AdornmentText="/theaters/" />
+            </MudItem>
+            <MudItem xs="12" md="6" Class="d-flex align-items-center">
+                <MudCheckBox T="bool" @bind-Value="model.IsActive" Color="Color.Primary">Active (listed for users)</MudCheckBox>
+            </MudItem>
+        </MudGrid>
         <TheaterProfileFields Model="model" />
-        <button type="submit" class="btn btn-primary mt-3">@(Id is null ? "Create theater" : "Save")</button>
-        @if (Id is not null)
-        {
-            <a class="btn btn-outline-secondary mt-3 ms-2" href="manage/@Id">Screens &amp; employees</a>
-        }
+        <div class="d-flex flex-wrap gap-2 mt-3">
+            <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary">@(Id is null ? "Create theater" : "Save")</MudButton>
+            @if (Id is not null)
+            {
+                <MudButton Href="@($"manage/{Id}")" Variant="Variant.Outlined">Screens &amp; employees</MudButton>
+            }
+        </div>
     </EditForm>
 
     @if (Id is not null)
     {
-        <section class="mb-4">
-            <h2 class="h4">Owner</h2>
-            <p>Current owner: <strong>@(ownerEmail ?? "none")</strong></p>
-            <p class="text-muted small">
+        <section class="manage-section">
+            <MudText Typo="Typo.h5">Owner</MudText>
+            <MudText>Current owner: <strong>@(ownerEmail ?? "none")</strong></MudText>
+            <MudText Typo="Typo.body2" Class="muted mb-2">
                 Enter an email to assign a new owner. If they already have an account they become the owner right away;
                 otherwise they're emailed an invitation. Employee accounts can't own theaters.
-            </p>
-            <form class="row g-2" @onsubmit="AssignOwnerAsync">
-                <div class="col-sm-8 col-md-6">
-                    <input type="email" class="form-control" placeholder="owner@example.com" @bind="ownerInviteEmail" required />
-                </div>
-                <div class="col-auto">
-                    <button type="submit" class="btn btn-primary">Assign owner</button>
-                </div>
+            </MudText>
+            <form class="d-flex flex-wrap gap-2 align-items-start" @onsubmit="AssignOwnerAsync">
+                <MudTextField T="string" @bind-Value="ownerInviteEmail" InputType="InputType.Email" Label="Email" Placeholder="owner@example.com"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Required Class="field-grow" />
+                <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" Class="mt-1">Assign owner</MudButton>
             </form>
         </section>
 
         @if (pending.Count > 0)
         {
-            <section>
-                <h2 class="h5">Pending invitations</h2>
-                <table class="table align-middle">
+            <section class="manage-section">
+                <MudText Typo="Typo.h5">Pending invitations</MudText>
+                <MudSimpleTable Dense Hover Outlined Class="manage-table">
                     <thead><tr><th>Email</th><th>Type</th><th>Expires</th><th></th></tr></thead>
                     <tbody>
                         @foreach (var i in pending)
@@ -72,14 +63,14 @@
                                 <td>@i.Email</td>
                                 <td>@i.Kind</td>
                                 <td>@(i.ExpiresAt <= DateTimeOffset.UtcNow ? "Expired" : i.ExpiresAt.ToLocalTime().ToString("MMM d, yyyy"))</td>
-                                <td class="text-end">
-                                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => ResendAsync(i)">Resend</button>
-                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => RevokeAsync(i)">Revoke</button>
+                                <td class="text-end text-nowrap">
+                                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => ResendAsync(i)">Resend</MudButton>
+                                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="() => RevokeAsync(i)">Revoke</MudButton>
                                 </td>
                             </tr>
                         }
                     </tbody>
-                </table>
+                </MudSimpleTable>
             </section>
         }
     }
