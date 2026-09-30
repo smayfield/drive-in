@@ -20,7 +20,8 @@ public sealed record GiftCardPurchaseResult(GiftCard Card, bool BuyerEmailed, bo
 // What a shopper is told about a gift card they've presented: enough to know what's left, not the code back.
 public sealed record GiftCardBalance(string Last4, decimal Balance);
 
-public sealed record MyGiftCard(GiftCard Card, string TheaterName, string TheaterSlug, DateTime PurchasedLocal);
+// Received: sent to the user by someone else, rather than bought by them.
+public sealed record MyGiftCard(GiftCard Card, string TheaterName, string TheaterSlug, DateTime PurchasedLocal, bool Received);
 
 public sealed record GiftCardRow(int Id, string Last4, DateTime PurchasedLocal, string? PurchaserEmail, string? RecipientName,
     decimal InitialAmount, decimal Balance, bool IsTest);
@@ -28,7 +29,8 @@ public sealed record GiftCardRow(int Id, string Last4, DateTime PurchasedLocal, 
 public sealed record GiftCardSummary(List<GiftCardRow> Rows, int Count, decimal TotalSold, decimal Outstanding);
 
 // Gift cards. A theater turns them on (ManageGiftCards); any signed-in user who can browse it buys one online with a
-// card, and the code is emailed. Presenting the code as payment, online or at the gate (which needs SellAtGate as
+// card, and the code is emailed. A card is a bearer instrument: anyone holding the code (the buyer, the recipient, or
+// whoever they pass it to) can spend it, and nothing checks who bought it. Presenting the code as payment, online or at the gate (which needs SellAtGate as
 // selling always does), takes the card's balance off the ticket's total and keeps what's left for next time. A card is
 // only good at the theater that sold it. Staff with ViewGiftCards see the sales, never the codes.
 public sealed partial class TicketSalesService
@@ -114,14 +116,20 @@ public sealed partial class TicketSalesService
         return new GiftCardPurchaseResult(giftCard, buyerEmailed, recipientEmailed);
     }
 
-    // The gift cards the user bought, newest first, so a lost email isn't a lost card.
+    // The gift cards the user bought, and those sent to their (confirmed) email address, newest first, so a lost email
+    // isn't a lost card for the buyer or the recipient.
     public async Task<List<MyGiftCard>> ListMyGiftCardsAsync(ClaimsPrincipal user)
     {
         var userId = Guard.RequireUserId(user);
         await using var db = await dbFactory.CreateDbContextAsync();
-        var cards = await db.GiftCards.AsNoTracking().Include(g => g.Theater).Where(g => g.PurchaserId == userId)
+        var email = await db.Users.AsNoTracking().Where(u => u.Id == userId && u.EmailConfirmed)
+            .Select(u => u.Email).FirstOrDefaultAsync();
+        var lowered = email?.Trim().ToLowerInvariant();
+        var cards = await db.GiftCards.AsNoTracking().Include(g => g.Theater)
+            .Where(g => g.PurchaserId == userId || (lowered != null && g.RecipientEmail != null && g.RecipientEmail.ToLower() == lowered))
             .OrderByDescending(g => g.PurchasedAt).ToListAsync();
-        return cards.Select(g => new MyGiftCard(g, g.Theater!.Name, g.Theater.Slug, TheaterTime.ToLocal(g.Theater, g.PurchasedAt))).ToList();
+        return cards.Select(g => new MyGiftCard(g, g.Theater!.Name, g.Theater.Slug, TheaterTime.ToLocal(g.Theater, g.PurchasedAt),
+            Received: g.PurchaserId != userId)).ToList();
     }
 
     // --- Spending ---

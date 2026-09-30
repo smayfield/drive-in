@@ -31,6 +31,7 @@ public sealed record GiftCardEmail(string Subject, string Html)
             <p style="text-align: center; margin: 0 0 4px; font-size: 14px">Gift card code</p>
             <p style="text-align: center; margin: 0 0 16px; font-size: 24px; font-weight: bold; letter-spacing: 3px; font-family: Menlo, Consolas, monospace">{E(GiftCardCodes.Format(card.Code))}</p>
             <p style="font-size: 14px">Enter the code when paying for tickets at <a href="{E(link)}">{E(theater.Name)}</a>, or show it at the gate. It pays toward the ticket, and whatever is left stays on the card for next time.</p>
+            {(forRecipient ? $"""<p style="font-size: 14px">It's yours to use: you don't need the buyer's account. Sign in with this email address and it's listed under My tickets too.</p>""" : "")}
             <p style="font-size: 13px; color: #555">Good only at {E(theater.Name)}. It doesn't expire, can't be exchanged for cash and can't be refunded. Anyone with the code can spend it, so keep it safe.</p>
             </div>
             """);

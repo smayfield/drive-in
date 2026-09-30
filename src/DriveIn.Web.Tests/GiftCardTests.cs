@@ -335,6 +335,64 @@ public class GiftCardTests
         Assert.Equal(50m, (await ReloadAsync(s, moonCard.Id)).Balance);
     }
 
+    // --- Anyone with the code can spend it ---
+
+    [Fact]
+    public async Task The_recipient_spends_a_gift_card_on_their_own_account()
+    {
+        await using var s = await SetUpWithGiftCardsAsync();
+        var buyer = await BuyerAsync(s.App);
+        var card = await BuyCardAsync(s, buyer, 50m, recipientEmail: "Sam@Example.com");
+        var recipient = await BuyerAsync(s.App, "sam@example.com");
+        s.App.Payments.Charges.Clear();
+
+        Assert.Contains("you don't need the buyer's account", s.App.Email.Sent.Single(m => m.To == "Sam@Example.com").Body);
+        var theirs = Assert.Single(await s.Sales.ListMyGiftCardsAsync(recipient));
+        Assert.Equal((card.Code, true), (theirs.Card.Code, theirs.Received));
+        Assert.False(Assert.Single(await s.Sales.ListMyGiftCardsAsync(buyer)).Received);
+
+        var ticket = await BuyTicketAsync(s, recipient, s.CarLoad, theirs.Card.Code);
+
+        Assert.Empty(s.App.Payments.Charges);
+        Assert.Equal(25m, ticket.GiftCardAmount);
+        Assert.Equal(25m, (await ReloadAsync(s, card.Id)).Balance);
+        await using var db = s.App.Db();
+        Assert.Equal(recipient.FindFirstValue(ClaimTypes.NameIdentifier), (await db.Tickets.SingleAsync()).UserId);
+    }
+
+    [Fact]
+    public async Task A_gift_card_passed_on_to_anyone_can_be_spent_online_and_at_the_gate()
+    {
+        await using var s = await SetUpWithGiftCardsAsync();
+        s.App.Time.SetUtcNow(ShowDayAfternoon);
+        var card = await BuyCardAsync(s, await BuyerAsync(s.App), 40m); // no recipient named
+        var stranger = await BuyerAsync(s.App, "friend-of-a-friend@example.com");
+
+        Assert.Empty(await s.Sales.ListMyGiftCardsAsync(stranger)); // not theirs to look up, but theirs to spend
+        Assert.Equal(40m, (await s.Sales.CheckGiftCardAsync(stranger, s.Showing.Id, card.Code)).Balance);
+        await BuyTicketAsync(s, stranger, s.Single, card.Code);
+        var attendant = await EmployeeAsync(s, SellAtGate);
+        var hold = await s.Sales.HoldAtGateAsync(attendant, s.Showing.Id, 1, 2);
+        await s.Sales.SellAtGateAsync(attendant, hold.TicketId, s.CarLoad.Id, [], card.Code);
+
+        Assert.Equal(5m, (await ReloadAsync(s, card.Id)).Balance); // $40 - $10 - $25
+    }
+
+    [Fact]
+    public async Task Cards_sent_to_an_unconfirmed_address_are_not_listed_for_it()
+    {
+        await using var s = await SetUpWithGiftCardsAsync();
+        await BuyCardAsync(s, await BuyerAsync(s.App), 20m, recipientEmail: "sam@example.com");
+        var user = await s.App.CreateUserAsync("sam@example.com");
+        await using (var db = s.App.Db())
+        {
+            (await db.Users.SingleAsync(u => u.Id == user.Id)).EmailConfirmed = false;
+            await db.SaveChangesAsync();
+        }
+
+        Assert.Empty(await s.Sales.ListMyGiftCardsAsync(Principals.For(user)));
+    }
+
     [Fact]
     public async Task Checking_a_gift_card_shows_its_balance_without_spending_it()
     {
