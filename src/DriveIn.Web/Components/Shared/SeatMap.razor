@@ -8,7 +8,10 @@
     <span class="spot-mine">@MineLabel</span>
     @if (Screen.HasSizeLimits)
     {
-        <span class="spot-large">Large vehicles OK</span>
+        @if (Screen.LargeSpots.Count > 0)
+        {
+            <span class="spot-large">Large vehicles OK</span>
+        }
         @if (Vehicle == VehicleSize.Large)
         {
             <span class="spot-unfit">Cars only</span>
