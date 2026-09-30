@@ -20,7 +20,8 @@ public sealed record GiftCardPurchaseResult(GiftCard Card, bool BuyerEmailed, bo
 // What a shopper is told about a gift card they've presented: enough to know what's left, not the code back.
 public sealed record GiftCardBalance(string Last4, decimal Balance);
 
-public sealed record MyGiftCard(GiftCard Card, string TheaterName, string TheaterSlug, DateTime PurchasedLocal);
+// Received: sent to the user by someone else, rather than bought by them.
+public sealed record MyGiftCard(GiftCard Card, string TheaterName, string TheaterSlug, DateTime PurchasedLocal, bool Received);
 
 public sealed record GiftCardRow(int Id, string Last4, DateTime PurchasedLocal, string? PurchaserEmail, string? RecipientName,
     decimal InitialAmount, decimal Balance, bool IsTest);
@@ -28,7 +29,8 @@ public sealed record GiftCardRow(int Id, string Last4, DateTime PurchasedLocal, 
 public sealed record GiftCardSummary(List<GiftCardRow> Rows, int Count, decimal TotalSold, decimal Outstanding);
 
 // Gift cards. A theater turns them on (ManageGiftCards); any signed-in user who can browse it buys one online with a
-// card, and the code is emailed. Presenting the code as payment, online or at the gate (which needs SellAtGate as
+// card, and the code is emailed. A card is a bearer instrument: anyone holding the code (the buyer, the recipient, or
+// whoever they pass it to) can spend it, and nothing checks who bought it. Presenting the code as payment, online or at the gate (which needs SellAtGate as
 // selling always does), takes the card's balance off the ticket's total and keeps what's left for next time. A card is
 // only good at the theater that sold it. Staff with ViewGiftCards see the sales, never the codes.
 public sealed partial class TicketSalesService
@@ -96,16 +98,26 @@ public sealed partial class TicketSalesService
             Kind = GiftCardTransactionKind.Purchase, Amount = amount, BalanceAfter = amount, At = now,
         });
         db.GiftCards.Add(giftCard);
-        try
+        for (var attempt = 1; ; attempt++)
         {
-            await db.SaveChangesAsync();
-        }
-        catch (Exception ex)
-        {
-            // The card has been charged, so leave a trail for support to issue it by hand.
-            logger.LogError(ex, "Charged {Amount} for a gift card at theater {TheaterId} but couldn't save it (payment {Reference})",
-                amount, theater.Id, result.Reference);
-            throw;
+            try
+            {
+                await db.SaveChangesAsync();
+                break;
+            }
+            catch (DbUpdateException ex) when (IsGiftCardCodeClash(ex) && attempt < 5)
+            {
+                // Another card took this code between the check and the save. The buyer has paid, so pick another
+                // rather than fail; the unique index means two cards can never share a code.
+                giftCard.Code = await NewGiftCardCodeAsync(db);
+            }
+            catch (Exception ex)
+            {
+                // The card has been charged, so leave a trail for support to issue it by hand.
+                logger.LogError(ex, "Charged {Amount} for a gift card at theater {TheaterId} but couldn't save it (payment {Reference})",
+                    amount, theater.Id, result.Reference);
+                throw;
+            }
         }
 
         var buyerEmailed = await TrySendGiftCardAsync(buyerEmail, giftCard, theater, baseUri, buyer?.DisplayName, forRecipient: false);
@@ -114,14 +126,20 @@ public sealed partial class TicketSalesService
         return new GiftCardPurchaseResult(giftCard, buyerEmailed, recipientEmailed);
     }
 
-    // The gift cards the user bought, newest first, so a lost email isn't a lost card.
+    // The gift cards the user bought, and those sent to their (confirmed) email address, newest first, so a lost email
+    // isn't a lost card for the buyer or the recipient.
     public async Task<List<MyGiftCard>> ListMyGiftCardsAsync(ClaimsPrincipal user)
     {
         var userId = Guard.RequireUserId(user);
         await using var db = await dbFactory.CreateDbContextAsync();
-        var cards = await db.GiftCards.AsNoTracking().Include(g => g.Theater).Where(g => g.PurchaserId == userId)
+        var email = await db.Users.AsNoTracking().Where(u => u.Id == userId && u.EmailConfirmed)
+            .Select(u => u.Email).FirstOrDefaultAsync();
+        var lowered = email is null ? null : Guard.NormalizeEmail(email);
+        var cards = await db.GiftCards.AsNoTracking().Include(g => g.Theater)
+            .Where(g => g.PurchaserId == userId || (lowered != null && g.RecipientEmail != null && g.RecipientEmail.ToLower() == lowered))
             .OrderByDescending(g => g.PurchasedAt).ToListAsync();
-        return cards.Select(g => new MyGiftCard(g, g.Theater!.Name, g.Theater.Slug, TheaterTime.ToLocal(g.Theater, g.PurchasedAt))).ToList();
+        return cards.Select(g => new MyGiftCard(g, g.Theater!.Name, g.Theater.Slug, TheaterTime.ToLocal(g.Theater, g.PurchasedAt),
+            Received: g.PurchaserId != userId)).ToList();
     }
 
     // --- Spending ---
@@ -246,16 +264,23 @@ public sealed partial class TicketSalesService
 
     private static string? Clean(string? text) => string.IsNullOrWhiteSpace(text) ? null : text.Trim();
 
-    private static async Task<string> NewGiftCardCodeAsync(ApplicationDbContext db)
+    // Makes the codes for new gift cards; tests swap it to force a clash.
+    internal Func<string> NewGiftCardCode { get; set; } = GiftCardCodes.New;
+
+    private async Task<string> NewGiftCardCodeAsync(ApplicationDbContext db)
     {
         for (var attempt = 0; ; attempt++)
         {
-            var code = GiftCardCodes.New();
-            // ~78 random bits: a clash is not going to happen, but the unique index is the real guard.
+            var code = NewGiftCardCode();
+            // ~78 random bits: a clash is not going to happen, but the unique index on the code is the real
+            // guard, and PurchaseGiftCardAsync retries the save with a new code if it trips.
             if (attempt >= 5 || !await db.GiftCards.AnyAsync(g => g.Code == code))
                 return code;
         }
     }
+
+    // The code is the only unique column this save can clash on.
+    private static bool IsGiftCardCodeClash(DbUpdateException ex) => IsUniqueViolation(ex);
 
     private async Task<bool> TrySendGiftCardAsync(string to, GiftCard card, Theater theater, string baseUri, string? fromName, bool forRecipient)
     {

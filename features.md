@@ -176,7 +176,12 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   default (migration added to existing Managers).
 - Purchase at `/theaters/{slug}/giftcards`: any user who can browse the theater, $5 to $500, by card. A 16-character code
   (about 78 random bits) is emailed to the buyer and an optional recipient. Staff see only the last four characters.
-- Redemption: at online checkout, or at the gate (needs `tickets.sell`). Must match a card sold by that theater (a wrong code and
+  Codes are unique across all theaters (unique index on `gift_cards.code`); a new code is checked against existing ones, and
+  if the save still clashes (charged by then) it retries with a fresh code rather than failing the paid purchase.
+- My tickets lists the user's gift cards with their codes: ones they bought, and ones sent to their confirmed email address
+  (recipient email compared case-insensitively), marked as a gift.
+- Redemption: a bearer instrument, so anyone with the code can spend it (buyer, recipient, or whoever it's passed on to); the
+  purchaser is never checked. At online checkout, or at the gate (needs `tickets.sell`). Must match a card sold by that theater (a wrong code and
   another theater's code give the same error). One card per ticket. It pays first up to its balance; the card/terminal is charged
   the remainder; no charge if fully covered. Remaining balance stays on the card. No expiry, refund or cash-out.
 - Integrity: the balance is debited in the same save that moves the ticket to `Paying`, guarded by a concurrency stamp and a DB

@@ -78,7 +78,7 @@ else
     <MudText Typo="Typo.h4" Class="mt-6 mb-2">My gift cards</MudText>
     <MudPaper Outlined>
         <MudSimpleTable Dense Style="box-shadow: none; background: transparent">
-            <thead><tr><th>Theater</th><th>Code</th><th>Bought</th><th class="text-end">Value</th><th class="text-end">Balance</th></tr></thead>
+            <thead><tr><th>Theater</th><th>Code</th><th>Bought</th><th>From</th><th class="text-end">Value</th><th class="text-end">Balance</th></tr></thead>
             <tbody>
                 @foreach (var g in giftCards)
                 {
@@ -86,6 +86,7 @@ else
                         <td><MudLink Href="@($"theaters/{g.TheaterSlug}")">@g.TheaterName</MudLink>@(g.Card.IsTest ? " (test)" : "")</td>
                         <td class="font-monospace">@GiftCardCodes.Format(g.Card.Code)</td>
                         <td>@g.PurchasedLocal.ToString("MMM d, yyyy")</td>
+                        <td>@(g.Received ? "A gift to you" : "You")</td>
                         <td class="text-end">@Money.Format(g.Card.InitialAmount)</td>
                         <td class="text-end">@Money.Format(g.Card.Balance)</td>
                     </tr>
