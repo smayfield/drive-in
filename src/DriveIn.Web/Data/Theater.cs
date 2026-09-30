@@ -35,6 +35,14 @@ public class Theater
     public bool IsInSeason(DateOnly date) =>
         (SeasonOpensOn is not DateOnly opens || date >= opens) && (SeasonClosesOn is not DateOnly closes || date <= closes);
 
+    // Free admission: whether employees with the permission may reserve free spots for guests, and the rules. Saved
+    // separately from the profile (TheaterService.UpdateFreeAdmissionSettingsAsync).
+    public bool FreeAdmissionEnabled { get; set; }
+    public bool FreeAdmissionRequiresApproval { get; set; } = true;
+    public bool FreeAdmissionRequiresReason { get; set; } = true;
+    [Range(1, 10000)] public int? FreeAdmissionMaxPerShowing { get; set; }
+    [Range(1, 10000)] public int? FreeAdmissionMaxPerEmployeePerShowing { get; set; }
+
     // Admin switch: an inactive theater is hidden and sells nothing, whatever its mode.
     public bool IsActive { get; set; } = true;
 

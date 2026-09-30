@@ -20,6 +20,9 @@ public static class TheaterPermissions
     public const string ManageRoles = "roles.manage";
     public const string AdmitGuests = "tickets.admit";
     public const string SellAtGate = "tickets.sell";
+    public const string OfferFreeAdmission = "comps.offer";
+    public const string ApproveFreeAdmission = "comps.approve";
+    public const string ViewFreeAdmission = "comps.view";
 
     public static readonly IReadOnlyList<TheaterPermission> All =
     [
@@ -33,6 +36,9 @@ public static class TheaterPermissions
         new(ManageRoles, "Staff", "Manage roles", "Create, edit and delete roles and assign them to employees. Only actions you have yourself can be granted."),
         new(AdmitGuests, "Tickets", "Admit guests", "Check tickets at the gate (scan the QR code or enter the 4-character gate code) and let the car in."),
         new(SellAtGate, "Tickets", "Sell tickets at the gate", "Sell tickets to cars at the gate: choose a showing and spot, take payment and let the car in."),
+        new(OfferFreeAdmission, "Tickets", "Offer free admission", "Reserve a spot at a showing, free of charge, for a guest such as a friend or family member (when the theater allows free admission). If the theater requires approval, this requests it instead."),
+        new(ApproveFreeAdmission, "Tickets", "Approve free admission", "Approve or deny requests for free admission, and withdraw free tickets. Your own free admission never needs approval."),
+        new(ViewFreeAdmission, "Tickets", "View free admission log", "See every free admission offered, requested, approved, denied or withdrawn, and who gave it."),
     ];
 
     public static readonly IReadOnlySet<string> AllKeys = All.Select(p => p.Key).ToHashSet();

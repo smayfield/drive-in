@@ -118,7 +118,8 @@ public sealed partial class TicketSalesService(
         HoldView? mine = null;
         foreach (var t in tickets)
         {
-            var state = t.Status == TicketStatus.Sold ? SpotState.Sold : t.UserId == userId ? SpotState.Mine : SpotState.Held;
+            var state = t.Status == TicketStatus.Sold ? SpotState.Sold
+                : t.Status == TicketStatus.Held && t.UserId == userId ? SpotState.Mine : SpotState.Held;
             spots[(t.Row, t.Spot)] = state;
             if (t.Status == TicketStatus.Held && t.UserId == userId)
                 mine = new HoldView(t.Id, t.Row, t.Spot, t.SpotLabel, t.HeldUntil!.Value);

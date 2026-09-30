@@ -178,6 +178,7 @@ public sealed partial class OnboardingService(
             .Where(t => t.IsTest && t.Showtime!.Screen!.TheaterId == theaterId).ToListAsync();
         db.TicketAddOns.RemoveRange(tests.SelectMany(t => t.AddOns));
         db.Tickets.RemoveRange(tests);
+        db.CompEvents.RemoveRange(await db.CompEvents.Where(e => e.IsTest && e.TheaterId == theaterId).ToListAsync());
         theater.Mode = TheaterMode.Live;
         theater.LiveSince = time.GetUtcNow();
         theater.GoLiveRequestedAt = null;

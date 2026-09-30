@@ -85,6 +85,25 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
         return theater;
     }
 
+    // Free admission rules for the theater. Requires EditProfile.
+    public async Task UpdateFreeAdmissionSettingsAsync(ClaimsPrincipal user, int theaterId, bool enabled, bool requiresApproval,
+        bool requiresReason, int? maxPerShowing, int? maxPerEmployeePerShowing)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var theater = await db.Theaters.FirstOrDefaultAsync(t => t.Id == theaterId)
+            ?? throw new NotFoundException("Theater not found.");
+        await auth.RequireAsync(user, theater, TheaterPermissions.EditProfile);
+        if (maxPerShowing is < 1 || maxPerEmployeePerShowing is < 1)
+            throw new AppValidationException("Limits must be at least 1, or left blank for no limit.");
+        theater.FreeAdmissionEnabled = enabled;
+        theater.FreeAdmissionRequiresApproval = requiresApproval;
+        theater.FreeAdmissionRequiresReason = requiresReason;
+        theater.FreeAdmissionMaxPerShowing = maxPerShowing;
+        theater.FreeAdmissionMaxPerEmployeePerShowing = maxPerEmployeePerShowing;
+        theater.UpdatedAt = time.GetUtcNow();
+        await db.SaveChangesAsync();
+    }
+
     // Requires EditProfile; slug, active flag and owner are admin-only.
     public async Task UpdateProfileAsync(ClaimsPrincipal user, Theater input)
     {

@@ -134,6 +134,27 @@ else
                 <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" Class="mt-3">Save profile</MudButton>
             </EditForm>
         </section>
+
+        <section class="manage-section">
+            <MudText Typo="Typo.h5">Free admission</MudText>
+            <MudPaper Outlined Class="pa-3">
+                <MudText Typo="Typo.body2" Class="muted mb-2">
+                    Let employees reserve free spots for guests such as friends and family. Which employees can is set by roles
+                    (Offer / Approve / View free admission), and every one is logged for managers.
+                </MudText>
+                <MudSwitch T="bool" @bind-Value="freeEnabled" Color="Color.Primary" Label="Allow free admission" />
+                @if (freeEnabled)
+                {
+                    <MudSwitch T="bool" @bind-Value="freeApproval" Color="Color.Primary" Label="Require approval before the guest's ticket is issued" />
+                    <MudSwitch T="bool" @bind-Value="freeReason" Color="Color.Primary" Label="Require a reason" />
+                    <div class="d-flex flex-wrap gap-3 mt-2">
+                        <MudNumericField T="int?" @bind-Value="freeMaxShowing" Min="1" Label="Max per showing (blank = no limit)" Variant="Variant.Outlined" Margin="Margin.Dense" Class="field-grow" />
+                        <MudNumericField T="int?" @bind-Value="freeMaxEmployee" Min="1" Label="Max per employee per showing (blank = no limit)" Variant="Variant.Outlined" Margin="Margin.Dense" Class="field-grow" />
+                    </div>
+                }
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-3" OnClick="SaveFreeAdmissionAsync">Save free admission settings</MudButton>
+            </MudPaper>
+        </section>
     }
 }
 
@@ -145,6 +166,8 @@ else
     private IReadOnlySet<string> permissions = new HashSet<string>();
     private string newScreenName = "";
     private int? confirmDeleteId;
+    private bool freeEnabled, freeApproval = true, freeReason = true;
+    private int? freeMaxShowing, freeMaxEmployee;
 
     // UI only; every action is re-checked by the service.
     private bool Can(string permission) => permissions.Contains(permission);
@@ -154,8 +177,16 @@ else
     {
         theater = await Theaters.GetForManageAsync(User, Id);
         profile = theater.CopyForEdit();
+        (freeEnabled, freeApproval, freeReason) = (theater.FreeAdmissionEnabled, theater.FreeAdmissionRequiresApproval, theater.FreeAdmissionRequiresReason);
+        (freeMaxShowing, freeMaxEmployee) = (theater.FreeAdmissionMaxPerShowing, theater.FreeAdmissionMaxPerEmployeePerShowing);
         permissions = await Access.GetPermissionsAsync(User, theater);
     }
+
+    private Task SaveFreeAdmissionAsync() => RunAsync(async () =>
+    {
+        await Theaters.UpdateFreeAdmissionSettingsAsync(User, Id, freeEnabled, freeApproval, freeReason, freeMaxShowing, freeMaxEmployee);
+        theater = await Theaters.GetForManageAsync(User, Id);
+    }, "Free admission settings saved.");
 
     private async Task ReloadPlanAsync()
     {

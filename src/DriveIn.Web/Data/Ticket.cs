@@ -78,6 +78,12 @@ public class Ticket
     public string? SoldById { get; set; }
     public ApplicationUser? SoldBy { get; set; }
 
+    // Free admission (a "comp") given by an employee to a guest: a sold ticket at no charge, with no buyer account.
+    // SoldById is the employee who gave it. See TicketSalesService.Comps.
+    public bool IsComp { get; set; }
+    [MaxLength(100)] public string? GuestName { get; set; }
+    [MaxLength(500)] public string? CompReason { get; set; }
+
     // Set when gate staff let the car in; a ticket admits once.
     public DateTimeOffset? AdmittedAt { get; set; }
 }
@@ -89,6 +95,9 @@ public enum TicketStatus
     // Being charged. Deliberately never swept: if the server dies mid-charge we can't tell whether the card was
     // charged, so the spot stays off sale until someone checks with the processor rather than risk selling it twice.
     Paying,
+    // A free-admission request waiting for approval. Holds the spot with no expiry (never swept) until it is
+    // approved (becomes Sold) or denied (deleted).
+    Pending,
     Sold,
 }
 

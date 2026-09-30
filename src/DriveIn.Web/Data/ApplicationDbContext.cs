@@ -18,6 +18,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<AddOn> AddOns => Set<AddOn>();
     public DbSet<Ticket> Tickets => Set<Ticket>();
     public DbSet<TicketAddOn> TicketAddOns => Set<TicketAddOn>();
+    public DbSet<CompEvent> CompEvents => Set<CompEvent>();
     public DbSet<Invitation> Invitations => Set<Invitation>();
     public DbSet<TheaterRole> TheaterRoles => Set<TheaterRole>();
     public DbSet<TheaterRolePermission> TheaterRolePermissions => Set<TheaterRolePermission>();
@@ -179,6 +180,16 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .WithMany()
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<CompEvent>(e =>
+        {
+            e.Property(x => x.Action).HasConversion<string>().HasMaxLength(20);
+            e.HasIndex(x => new { x.TheaterId, x.At });
+            e.HasOne(x => x.Theater)
+                .WithMany()
+                .HasForeignKey(x => x.TheaterId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         builder.Entity<TicketAddOn>(a =>

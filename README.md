@@ -34,7 +34,7 @@ Docker on one EC2 server. The setup mirrors LegoList.
 - **Employees** are separate accounts bound to one theater, created only by invitation from its
   owner or anyone with "Invite employees". What they can do is set by **roles**.
 - **Roles** are defined per theater by its owner (Manage → Roles). A role is a named set of actions
-  (edit profile, manage screens, manage schedule, manage pricing, view/invite/manage employees, manage roles, admit guests, sell tickets at the gate). Employees can have several
+  (edit profile, manage screens, manage schedule, manage pricing, view/invite/manage employees, manage roles, admit guests, sell tickets at the gate, offer / approve / view free admission). Employees can have several
   roles and get the union of their actions; new employees have none, so they can't do anything until
   assigned a role. New theaters start with Manager (everything), Operations, Ticketing (admit guests, sell at the gate) and Concessions,
   which owners can change or delete. Someone with "Manage roles" can only grant, change or remove
@@ -114,6 +114,18 @@ invitee sets a password or continues with Google using the invited address.
 - **All sales are final**: there are no refunds or cancellations, including for weather. Sold tickets are records,
   so a showing with sales can't be removed or moved to another screen, a film or screen with sales can't be
   deleted, and a screen can't drop or relabel spots sold for upcoming showings.
+- **Free admission** (Manage → Free admission): employees reserve a spot for a named guest (a friend or family
+  member) at no charge. A theater turns it on under Overview → Free admission, and sets whether it **needs approval**,
+  whether a **reason** is required, and optional caps per showing and per employee per showing (off by default). Three
+  actions govern it: *Offer free admission* (reserve a spot, or request one when approval is required), *Approve free
+  admission* (approve/deny requests, withdraw unused free tickets; approvers' own offers skip approval) and *View free
+  admission log*. Only the Manager role gets them by default (a migration adds them to existing Managers).
+  - A free ticket is a normal sold ticket (`Ticket.IsComp`, $0, no buyer account, `SoldById` = the giver) with a QR
+    code and gate code, optionally emailed to the guest, and checked in at the gate like any other. A request waiting
+    for approval is a `Pending` ticket: it holds the spot with no expiry until approved (becomes sold) or denied.
+  - Everything (requested, given, approved, denied, withdrawn) is written to `comp_events`, with the people, showing
+    and spot copied in so the log outlives deleted tickets and accounts. Demo theaters' test entries are cleared on
+    go-live along with their test tickets.
 
 ## Marketing site and onboarding
 
