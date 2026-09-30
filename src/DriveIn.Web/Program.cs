@@ -145,6 +145,7 @@ else
     builder.Services.AddSingleton<IPaymentProcessor, UnavailablePaymentProcessor>();
 builder.Services.AddSingleton<SpotEvents>();
 builder.Services.AddScoped<TicketSalesService>();
+builder.Services.AddScoped<ReportService>();
 builder.Services.AddHostedService<HoldExpiryService>();
 
 var app = builder.Build();
@@ -197,6 +198,42 @@ app.MapGet("/films/{filmId:int}/poster", async (int filmId, HttpContext http, Sc
     http.Response.Headers.XContentTypeOptions = "nosniff";
     http.Response.Headers.CacheControl = "private, max-age=86400";
     return Results.File(poster.Data, poster.ContentType);
+}).RequireAuthorization();
+
+// A report as CSV, for whoever may view the theater's reports (the service checks). ?from=&to= are yyyy-MM-dd dates.
+app.MapGet("/manage/{theaterId:int}/reports/{kind}.csv", async (int theaterId, string kind, string? from, string? to,
+    HttpContext http, ReportService reports, TheaterService theaters) =>
+{
+    if (!ReportCsv.Kinds.Contains(kind))
+        return Results.NotFound();
+    if (!DateOnly.TryParseExact(from, "yyyy-MM-dd", out var fromDate) || !DateOnly.TryParseExact(to, "yyyy-MM-dd", out var toDate))
+        return Results.BadRequest("Give from and to dates as yyyy-MM-dd.");
+    try
+    {
+        string csv;
+        if (kind == "giftcards")
+            csv = ReportCsv.GiftCards(await reports.GetGiftCardReportAsync(http.User, theaterId, fromDate, toDate));
+        else
+        {
+            var report = await reports.GetSalesReportAsync(http.User, theaterId, fromDate, toDate);
+            csv = kind switch { "days" => ReportCsv.Days(report), "films" => ReportCsv.Films(report), _ => ReportCsv.Showings(report) };
+        }
+        var slug = (await theaters.GetForManageAsync(http.User, theaterId)).Slug;
+        http.Response.Headers.CacheControl = "no-store";
+        return Results.File(ReportCsv.ToBytes(csv), "text/csv; charset=utf-8", $"{slug}-{kind}-{from}-{to}.csv");
+    }
+    catch (AccessDeniedException)
+    {
+        return Results.Forbid();
+    }
+    catch (NotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (AppValidationException ex)
+    {
+        return Results.BadRequest(ex.Message);
+    }
 }).RequireAuthorization();
 
 await DbSeeder.SeedAsync(app.Services);

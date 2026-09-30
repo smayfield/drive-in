@@ -94,6 +94,7 @@ public sealed class TestApp : IAsyncDisposable
         services.AddScoped<OnboardingService>();
         services.AddSingleton(Events);
         services.AddScoped<TicketSalesService>();
+        services.AddScoped<ReportService>();
         Services = services.BuildServiceProvider();
         DbSeeder.SeedAsync(Services).GetAwaiter().GetResult();
     }

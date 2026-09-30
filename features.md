@@ -53,6 +53,7 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 | `comps.view` | View free admission log | `comp_events` log |
 | `giftcards.manage` | Manage gift cards | Turn gift-card sales on/off |
 | `giftcards.view` | View gift cards | Sales, balances, amount owed (last four chars of code only) |
+| `reports.view` | View reports | Sales, attendance and gift card reports, CSV downloads |
 
 ## 3. Theater modes and sign-up
 
@@ -83,6 +84,7 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 | `/manage/{id}/gate` | Check-in, gate sales, moving tickets |
 | `/manage/{id}/comps` | Free admission |
 | `/manage/{id}/giftcards` | Gift cards |
+| `/manage/{id}/reports` | Sales, attendance and gift card reports |
 
 - **Profile:** name, unique slug (public URL), address/contact, description, IANA time zone. Times are entered/shown in that zone,
   stored in UTC.
@@ -181,21 +183,38 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   check `0 <= balance <= initial_amount`. A declined card restores the balance (`Restore` transaction). Every change is a row in
   `gift_card_transactions`. Turning sales off leaves existing cards spendable.
 
-## 9. Admin (`Policies.Admin`)
+## 9. Reports (`ReportService`, `/manage/{id}/reports`)
+
+- Needs `reports.view`. Manager gets it by default; a migration added it to existing Managers.
+- A date range in the theater's local dates, both ends included, at most `ReportService.MaxDays` (366). Presets: today, last
+  7 days, this month (the default, to date), last month, this season (when it has an opening date), this year.
+- **Tickets** count by the showing's start date, sold tickets only (not Held, Paying or Pending). Cars include free tickets.
+  Totals, by channel (online, at the gate, free admission), paid by card vs gift card, per day, per showing (capacity from the
+  screen's *current* layout, occupancy, admitted, no-shows once the showing has ended), per film (a double feature counts
+  toward each of its films, so film rows don't add up), ticket options (paid tickets) and add-ons (count and total effect).
+  Attendance % = admitted / cars, over ended showings only. Demo theaters show a "test sales" notice.
+- **Gift cards**, from `gift_card_transactions` by when they happened: owed at the start of the range, sold, spent (redemptions
+  net of restores), owed at the end; start + sold − spent = end. Plus every card with a balance right now, oldest first:
+  last four, bought, buyer, recipient, value, balance, last used. Codes are never shown.
+- **CSV** at `/manage/{id}/reports/{showings|days|films|giftcards}.csv?from=yyyy-MM-dd&to=yyyy-MM-dd` (signed in; the service
+  checks `reports.view`, 403 otherwise): UTF-8 with BOM, RFC 4180 quoting, invariant numbers, and text starting with
+  `= + - @` (or tab/CR) prefixed with `'` so spreadsheets don't run it as a formula (`ReportCsv`).
+
+## 10. Admin (`Policies.Admin`)
 
 - `/admin/theaters`, `/admin/theaters/new`, `/admin/theaters/{id}`: list, create (owner by email: immediate if the account exists,
   else invitation), edit, review go-live requests (activate or decline with note).
 - `/admin/users` (`UserAdminService`): list; create a confirmed account (optionally admin) that is emailed a link to set a
   password; make/remove admin (not on self); delete (not self). The seeded admin regains admin at sign-in.
 
-## 10. Static and marketing pages
+## 11. Static and marketing pages
 
 - `[ExcludeFromInteractiveRouting]` static SSR with plain CSS (`static.css`, `marketing.css`): `/`, `/features`, `/pricing`,
   `/faq`, `/legal`, `/legal/terms`, `/legal/privacy`, `/legal/license`, `/invite/{token}`, `/Error`, `/not-found`, account pages.
 - Config: `Plans:PricePerScreenPerMonth`, `Company:*` (legal name, mailing address, governing state, contact email, effective date).
   Unset values render as placeholders; legal pages show a "draft, not in effect" banner until `Company:LegalName` is set.
 
-## 11. UI and platform
+## 12. UI and platform
 
 - Blazor Web App, interactive server by default (`Routes`); MudBlazor for interactive pages in `AppLayout`; no Bootstrap.
 - Light/dark follow OS via `wwwroot/theme.js` (`data-theme`, `di-scheme` cookie so the server prerenders the right palette);
@@ -207,9 +226,9 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 - Deploy: merge to `main` runs tests, builds ARM64 images, runs an EF migration bundle, then deploys via SSM; Caddy fronts the app.
   Nightly `pg_dump` (30 days) plus daily EBS snapshots (7).
 
-## 12. Not built
+## 13. Not built
 
 - A real payment processor (production can't sell until `Payments:Provider` is set to one).
-- Concessions ordering, sales/attendance reporting, announcements (the Concessions role has no permissions yet).
+- Concessions ordering, announcements (the Concessions role has no permissions yet).
 - Automated billing.
 - Multi-server deployment (in-process `SpotEvents`).

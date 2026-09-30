@@ -1,0 +1,364 @@
+@page "/manage/{Id:int}/reports"
+@attribute [Authorize]
+@inherits AppComponentBase
+@inject TheaterService Theaters
+@inject TheaterAccess Access
+@inject ReportService Reports
+@inject TimeProvider Time
+
+<PageTitle>Reports · Manage · Drive-In Online</PageTitle>
+
+@if (theater is null)
+{
+    <Alerts Error="@Error" />
+    @if (Error is null) { <MudProgressCircular Indeterminate Size="Size.Small" aria-label="Loading reports" /> }
+}
+else
+{
+    <ManageHeader Theater="theater" Title="Reports" Current="reports" />
+
+    <div class="d-flex flex-wrap align-center gap-2 mb-2">
+        <MudDatePicker @bind-Date="fromValue" Label="From" Variant="Variant.Outlined" Margin="Margin.Dense" Editable Class="report-date" />
+        <MudDatePicker @bind-Date="toValue" Label="To" Variant="Variant.Outlined" Margin="Margin.Dense" Editable Class="report-date" />
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ShowChosenAsync" Disabled="busy">Show</MudButton>
+    </div>
+    <div class="d-flex flex-wrap gap-1 mb-3">
+        @foreach (var preset in Presets())
+        {
+            var p = preset;
+            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="() => PresetAsync(p.From, p.To)" Disabled="busy">@p.Name</MudButton>
+        }
+    </div>
+
+    <Alerts Error="@Error" Success="@Success" />
+
+    @if (theater.IsDemo)
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-3">This theater is in demo mode: these figures are test sales, and they're deleted when it goes live.</MudAlert>
+    }
+
+    @if (sales is not null && giftCards is not null)
+    {
+        var t = sales.Totals;
+        <MudText Typo="Typo.body2" Class="muted mb-2">
+            @(Range(sales.From, sales.To)). Tickets count by the showing's date and include sold tickets only; gift cards by when they were bought or spent.
+        </MudText>
+
+        <div class="report-tiles mb-4">
+            <MudPaper Outlined Class="report-tile">
+                <span class="report-tile-label">Cars</span>
+                <span class="report-tile-value">@t.Cars</span>
+                <span class="muted small">@t.Showings showing@(t.Showings == 1 ? "" : "s")@(t.Free > 0 ? $" · {t.Free} free" : "")</span>
+            </MudPaper>
+            <MudPaper Outlined Class="report-tile">
+                <span class="report-tile-label">Attendance</span>
+                <span class="report-tile-value">@(t.AttendanceRate?.ToString("P0") ?? "–")</span>
+                <span class="muted small">@t.AdmittedAtEnded of @t.CarsAtEnded admitted at ended showings</span>
+            </MudPaper>
+            <MudPaper Outlined Class="report-tile">
+                <span class="report-tile-label">Ticket sales</span>
+                <span class="report-tile-value">@Money.Format(t.Gross)</span>
+                <span class="muted small">@Money.Format(t.CardPaid) card · @Money.Format(t.GiftCardPaid) gift card</span>
+            </MudPaper>
+            <MudPaper Outlined Class="report-tile">
+                <span class="report-tile-label">Gift cards sold</span>
+                <span class="report-tile-value">@Money.Format(giftCards.SoldAmount)</span>
+                <span class="muted small">@giftCards.SoldCount card@(giftCards.SoldCount == 1 ? "" : "s")</span>
+            </MudPaper>
+            <MudPaper Outlined Class="report-tile">
+                <span class="report-tile-label">Owed on gift cards</span>
+                <span class="report-tile-value">@Money.Format(giftCards.OutstandingTotal)</span>
+                <span class="muted small">today, on @giftCards.Outstanding.Count card@(giftCards.Outstanding.Count == 1 ? "" : "s")</span>
+            </MudPaper>
+        </div>
+
+        <section class="manage-section">
+            <MudText Typo="Typo.h5">By channel and payment</MudText>
+            <MudGrid Spacing="3">
+                <MudItem xs="12" md="6">
+                    <MudSimpleTable Dense Outlined Class="manage-table">
+                        <thead><tr><th>Sold</th><th class="text-end">Cars</th><th class="text-end">Gross</th></tr></thead>
+                        <tbody>
+                            @foreach (var c in sales.Channels)
+                            {
+                                <tr><td>@c.Name</td><td class="text-end">@c.Count</td><td class="text-end">@Money.Format(c.Amount)</td></tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudSimpleTable Dense Outlined Class="manage-table">
+                        <thead><tr><th>Paid by</th><th class="text-end">Amount</th></tr></thead>
+                        <tbody>
+                            <tr><td>Card</td><td class="text-end">@Money.Format(t.CardPaid)</td></tr>
+                            <tr><td>Gift card</td><td class="text-end">@Money.Format(t.GiftCardPaid)</td></tr>
+                            <tr><th>Total</th><th class="text-end">@Money.Format(t.Gross)</th></tr>
+                        </tbody>
+                    </MudSimpleTable>
+                </MudItem>
+            </MudGrid>
+        </section>
+
+        <section class="manage-section">
+            <div class="d-flex justify-content-between align-items-baseline gap-2">
+                <MudText Typo="Typo.h5">By day</MudText>
+                <a href="@CsvHref("days")" download data-enhance-nav="false">Download CSV</a>
+            </div>
+            @if (sales.Days.Count == 0)
+            {
+                <MudText Class="muted">No showings in these dates.</MudText>
+            }
+            else
+            {
+                <MudSimpleTable Dense Outlined Class="manage-table">
+                    <thead><tr><th>Date</th><th class="text-end">Showings</th><th class="text-end">Cars</th><th class="text-end">Admitted</th><th class="text-end">Gross</th></tr></thead>
+                    <tbody>
+                        @foreach (var d in sales.Days)
+                        {
+                            <tr @key="d.Date">
+                                <td>@d.Date.ToString("ddd MMM d, yyyy")</td>
+                                <td class="text-end">@d.Showings</td>
+                                <td class="text-end">@d.Cars</td>
+                                <td class="text-end">@d.Admitted</td>
+                                <td class="text-end">@Money.Format(d.Gross)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            }
+        </section>
+
+        <section class="manage-section">
+            <div class="d-flex justify-content-between align-items-baseline gap-2">
+                <MudText Typo="Typo.h5">By showing</MudText>
+                <a href="@CsvHref("showings")" download data-enhance-nav="false">Download CSV</a>
+            </div>
+            @if (sales.Showings.Count == 0)
+            {
+                <MudText Class="muted">No showings in these dates.</MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Class="muted mb-1">Capacity is the screen's current layout. No-shows are counted once a showing has ended.</MudText>
+                <MudSimpleTable Dense Outlined Class="manage-table">
+                    <thead>
+                        <tr>
+                            <th>Starts</th><th>Screen</th><th>Films</th><th class="text-end">Cars</th><th class="text-end">Full</th>
+                            <th class="text-end">Free</th><th class="text-end">Admitted</th><th class="text-end">No-shows</th>
+                            <th class="text-end">Gross</th><th class="text-end">Gift card</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var s in sales.Showings)
+                        {
+                            <tr @key="s.ShowtimeId">
+                                <td>@s.StartsLocal.ToString("ddd MMM d, h:mm tt")</td>
+                                <td>@s.Screen</td>
+                                <td>@s.Films</td>
+                                <td class="text-end">@s.Cars of @s.Capacity</td>
+                                <td class="text-end">@(s.Occupancy?.ToString("P0") ?? "–")</td>
+                                <td class="text-end">@s.Free</td>
+                                <td class="text-end">@s.Admitted</td>
+                                <td class="text-end">@(s.NoShows?.ToString() ?? "–")</td>
+                                <td class="text-end">@Money.Format(s.Gross)</td>
+                                <td class="text-end">@Money.Format(s.GiftCardPaid)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            }
+        </section>
+
+        <section class="manage-section">
+            <div class="d-flex justify-content-between align-items-baseline gap-2">
+                <MudText Typo="Typo.h5">By film</MudText>
+                <a href="@CsvHref("films")" download data-enhance-nav="false">Download CSV</a>
+            </div>
+            @if (sales.Films.Count == 0)
+            {
+                <MudText Class="muted">No showings in these dates.</MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Class="muted mb-1">A double feature counts toward each of its films, so these don't add up to the totals.</MudText>
+                <MudSimpleTable Dense Outlined Class="manage-table">
+                    <thead><tr><th>Film</th><th class="text-end">Showings</th><th class="text-end">Cars</th><th class="text-end">Admitted</th><th class="text-end">Gross</th></tr></thead>
+                    <tbody>
+                        @foreach (var f in sales.Films)
+                        {
+                            <tr @key="f.FilmId">
+                                <td>@f.Title</td>
+                                <td class="text-end">@f.Showings</td>
+                                <td class="text-end">@f.Cars</td>
+                                <td class="text-end">@f.Admitted</td>
+                                <td class="text-end">@Money.Format(f.Gross)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            }
+        </section>
+
+        @if (sales.Options.Count > 0 || sales.AddOns.Count > 0)
+        {
+            <section class="manage-section">
+                <MudText Typo="Typo.h5">Ticket options and add-ons</MudText>
+                <MudGrid Spacing="3">
+                    <MudItem xs="12" md="6">
+                        <MudSimpleTable Dense Outlined Class="manage-table">
+                            <thead><tr><th>Option</th><th class="text-end">Sold</th><th class="text-end">Amount</th></tr></thead>
+                            <tbody>
+                                @foreach (var o in sales.Options)
+                                {
+                                    <tr><td>@o.Name</td><td class="text-end">@o.Count</td><td class="text-end">@Money.Format(o.Amount)</td></tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    </MudItem>
+                    @if (sales.AddOns.Count > 0)
+                    {
+                        <MudItem xs="12" md="6">
+                            <MudSimpleTable Dense Outlined Class="manage-table">
+                                <thead><tr><th>Add-on</th><th class="text-end">Applied</th><th class="text-end">Effect</th></tr></thead>
+                                <tbody>
+                                    @foreach (var a in sales.AddOns)
+                                    {
+                                        <tr><td>@a.Name</td><td class="text-end">@a.Count</td><td class="text-end">@Money.Format(a.Amount)</td></tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        </MudItem>
+                    }
+                </MudGrid>
+            </section>
+        }
+
+        <section class="manage-section">
+            <div class="d-flex justify-content-between align-items-baseline gap-2">
+                <MudText Typo="Typo.h5">Gift cards</MudText>
+                <a href="@CsvHref("giftcards")" download data-enhance-nav="false">Download outstanding cards (CSV)</a>
+            </div>
+            <MudSimpleTable Dense Outlined Class="manage-table mb-3 report-ledger">
+                <tbody>
+                    <tr><td>Owed on @sales.From.ToString("MMM d, yyyy") (start of day)</td><td class="text-end">@Money.Format(giftCards.OwedAtStart)</td></tr>
+                    <tr><td>+ Sold (@giftCards.SoldCount)</td><td class="text-end">@Money.Format(giftCards.SoldAmount)</td></tr>
+                    <tr><td>− Spent on tickets</td><td class="text-end">@Money.Format(giftCards.Redeemed)</td></tr>
+                    <tr><th>Owed on @sales.To.ToString("MMM d, yyyy") (end of day)</th><th class="text-end">@Money.Format(giftCards.OwedAtEnd)</th></tr>
+                </tbody>
+            </MudSimpleTable>
+
+            <MudText Typo="Typo.h6" Class="mb-1">Cards with a balance today</MudText>
+            @if (giftCards.Outstanding.Count == 0)
+            {
+                <MudText Class="muted">Every card sold has been spent.</MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Class="muted mb-1">
+                    @giftCards.Outstanding.Count card@(giftCards.Outstanding.Count == 1 ? "" : "s") · @Money.Format(giftCards.OutstandingTotal) not yet spent. Oldest first.
+                </MudText>
+                <MudSimpleTable Dense Outlined Class="manage-table">
+                    <thead><tr><th>Card</th><th>Bought</th><th>Bought by</th><th>For</th><th class="text-end">Value</th><th class="text-end">Balance</th><th>Last used</th></tr></thead>
+                    <tbody>
+                        @foreach (var c in giftCards.Outstanding)
+                        {
+                            <tr @key="c.Id">
+                                <td class="font-monospace">…@c.Last4</td>
+                                <td>@c.PurchasedLocal.ToString("MMM d, yyyy")@(c.IsTest ? " (test)" : "")</td>
+                                <td>@c.PurchaserEmail</td>
+                                <td>@c.RecipientName</td>
+                                <td class="text-end">@Money.Format(c.InitialAmount)</td>
+                                <td class="text-end">@Money.Format(c.Balance)</td>
+                                <td>@(c.LastUsedLocal?.ToString("MMM d, yyyy") ?? "Never")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            }
+        </section>
+    }
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private sealed record Preset(string Name, DateOnly From, DateOnly To);
+
+    private Theater? theater;
+    private DateTime? fromValue;
+    private DateTime? toValue;
+    private SalesReport? sales;
+    private GiftCardReport? giftCards;
+    private bool busy;
+
+    private DateOnly Today => DateOnly.FromDateTime(TheaterTime.ToLocal(theater!, Time.GetUtcNow()));
+
+    protected override async Task LoadAsync()
+    {
+        sales = null;
+        giftCards = null;
+        theater = await Theaters.GetForManageAsync(User, Id);
+        var permissions = await Access.GetPermissionsAsync(User, theater);
+        if (!permissions.Contains(TheaterPermissions.ViewReports))
+            throw new AccessDeniedException();
+        // This month so far.
+        var today = Today;
+        await ShowAsync(new DateOnly(today.Year, today.Month, 1), today);
+    }
+
+    private IEnumerable<Preset> Presets()
+    {
+        var today = Today;
+        var monthStart = new DateOnly(today.Year, today.Month, 1);
+        yield return new("Today", today, today);
+        yield return new("Last 7 days", today.AddDays(-6), today);
+        yield return new("This month", monthStart, today);
+        yield return new("Last month", monthStart.AddMonths(-1), monthStart.AddDays(-1));
+        if (theater!.SeasonOpensOn is DateOnly opens && opens <= today)
+        {
+            var closes = theater.SeasonClosesOn is DateOnly c && c < today ? c : today;
+            if (closes.DayNumber - opens.DayNumber < ReportService.MaxDays)
+                yield return new("This season", opens, closes);
+        }
+        yield return new("This year", new DateOnly(today.Year, 1, 1), today);
+    }
+
+    private Task PresetAsync(DateOnly from, DateOnly to) => RunAsync(() => ShowAsync(from, to));
+
+    private Task ShowChosenAsync() => RunAsync(async () =>
+    {
+        if (fromValue is not DateTime from || toValue is not DateTime to)
+            throw new AppValidationException("Choose both dates.");
+        await ShowAsync(DateOnly.FromDateTime(from), DateOnly.FromDateTime(to));
+    });
+
+    private async Task ShowAsync(DateOnly from, DateOnly to)
+    {
+        busy = true;
+        try
+        {
+            fromValue = from.ToDateTime(TimeOnly.MinValue);
+            toValue = to.ToDateTime(TimeOnly.MinValue);
+            var salesReport = await Reports.GetSalesReportAsync(User, Id, from, to);
+            var giftCardReport = await Reports.GetGiftCardReportAsync(User, Id, from, to);
+            (sales, giftCards) = (salesReport, giftCardReport);
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    // Only rendered once a report is showing: the download is for the dates on screen. Relative to <base href="/">
+    // (App.razor), like every manage link, so it resolves from the site root, not this page.
+    private string CsvHref(string kind)
+    {
+        var report = sales ?? throw new InvalidOperationException("No report is showing.");
+        return $"manage/{Id}/reports/{kind}.csv?from={Iso(report.From)}&to={Iso(report.To)}";
+    }
+
+    private static string Iso(DateOnly date) => date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+
+    private static string Range(DateOnly from, DateOnly to) =>
+        from == to ? from.ToString("dddd, MMM d, yyyy") : $"{from:MMM d, yyyy} to {to:MMM d, yyyy}";
+}

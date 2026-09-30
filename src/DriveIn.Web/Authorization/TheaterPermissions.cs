@@ -26,6 +26,7 @@ public static class TheaterPermissions
     public const string ViewFreeAdmission = "comps.view";
     public const string ManageGiftCards = "giftcards.manage";
     public const string ViewGiftCards = "giftcards.view";
+    public const string ViewReports = "reports.view";
 
     public static readonly IReadOnlyList<TheaterPermission> All =
     [
@@ -45,6 +46,7 @@ public static class TheaterPermissions
         new(ViewFreeAdmission, "Tickets", "View free admission log", "See every free admission offered, requested, approved, denied or withdrawn, and who gave it."),
         new(ManageGiftCards, "Tickets", "Manage gift cards", "Turn gift card sales on or off for the theater. Redeeming a gift card at the gate needs \"Sell tickets at the gate\"."),
         new(ViewGiftCards, "Tickets", "View gift cards", "See the gift cards sold, who bought each, and what balance is left (codes are shown as their last four characters only)."),
+        new(ViewReports, "Reports", "View reports", "See ticket sales, attendance and gift card reports (sold, redeemed and still owed) for any dates, and download them as CSV."),
     ];
 
     public static readonly IReadOnlySet<string> AllKeys = All.Select(p => p.Key).ToHashSet();
