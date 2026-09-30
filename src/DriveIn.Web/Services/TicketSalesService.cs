@@ -31,7 +31,8 @@ public sealed record SpotAvailability(IReadOnlyDictionary<(int Row, int Spot), S
     public SpotState this[int row, int spot] => Spots.GetValueOrDefault((row, spot), SpotState.Available);
 }
 
-public sealed record PurchaseInput(int PriceOptionId, IReadOnlyList<int> AddOnIds, CardInput? Card);
+// GiftCardCode: a gift card to spend toward the total first; the card is charged only for what's left.
+public sealed record PurchaseInput(int PriceOptionId, IReadOnlyList<int> AddOnIds, CardInput? Card, string? GiftCardCode = null);
 
 public sealed record PurchaseResult(string Code, bool ReceiptSent);
 
@@ -236,16 +237,17 @@ public sealed partial class TicketSalesService(
     {
         var userId = Guard.RequireUserId(user);
         await using var db = await dbFactory.CreateDbContextAsync();
-        var ticket = await SellHeldAsync(db, userId, ticketId, input.PriceOptionId, input.AddOnIds, input.Card, atGate: false);
+        var ticket = await SellHeldAsync(db, userId, ticketId, input.PriceOptionId, input.AddOnIds, input.Card, input.GiftCardCode, atGate: false);
         var sent = await TrySendReceiptAsync(await LoadViewAsync(db, ticket.Id), baseUri);
         return new PurchaseResult(ticket.Code!, sent);
     }
 
     // Charges for a spot the seller holds (the buyer online; the employee at the gate) and sells it. Online, the
     // buyer's typed card is charged and the ticket is theirs. At the gate the charge is card-present (the processor's
-    // terminal), the ticket has no buyer account, and the car is admitted as it's sold.
+    // terminal), the ticket has no buyer account, and the car is admitted as it's sold. A gift card (of the theater's)
+    // pays first, and only the rest is charged to the card; if that charge fails the gift card is made whole again.
     private async Task<Ticket> SellHeldAsync(ApplicationDbContext db, string userId, int ticketId, int priceOptionId,
-        IReadOnlyList<int> addOnIds, CardInput? typedCard, bool atGate)
+        IReadOnlyList<int> addOnIds, CardInput? typedCard, string? giftCardCode, bool atGate)
     {
         var ticket = await db.Tickets.Include(t => t.Showtime!.Screen!.Theater)
             .FirstOrDefaultAsync(t => t.Id == ticketId && t.UserId == userId);
@@ -267,23 +269,33 @@ public sealed partial class TicketSalesService(
         if (addOns.Count != ids.Count)
             throw new AppValidationException("One of the add-ons chosen is no longer offered. Check the choices and try again.");
         var quote = TicketQuote.For(option, addOns);
+        var gift = quote.Total > 0 && !string.IsNullOrWhiteSpace(giftCardCode) ? await FindGiftCardAsync(db, theater.Id, giftCardCode, forUpdate: true) : null;
+        var giftAmount = gift is null ? 0m : Math.Min(gift.Balance, quote.Total);
+        var cardAmount = quote.Total - giftAmount;
         CardInput? card = null;
         string? buyerEmail = null;
         if (!atGate)
         {
-            card = quote.Total > 0 ? Cards.Validate(typedCard, now) : null;
+            card = cardAmount > 0 ? Cards.Validate(typedCard, now) : null;
             buyerEmail = (await db.Users.Where(u => u.Id == userId).Select(u => u.Email).FirstOrDefaultAsync())?.Trim();
             if (string.IsNullOrEmpty(buyerEmail))
                 throw new AppValidationException("Your account needs an email address to receive tickets.");
         }
         var shortCode = await NewShortCodeAsync(db, theater.Id, now);
 
-        // Paying: the hold can no longer expire out from under the charge.
+        // Paying: the hold can no longer expire out from under the charge. The gift card's share comes off its balance in
+        // the same save, so a balance can't be spent twice; a concurrent spend makes this fail rather than overdraw it.
         ticket.Status = TicketStatus.Paying;
         ticket.Stamp = Guid.NewGuid();
+        if (gift is not null)
+            SpendGiftCard(db, gift, ticket, giftAmount, now);
         try
         {
             await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException ex) when (gift is not null && ex.Entries.Any(e => e.Entity is GiftCard))
+        {
+            throw new AppValidationException("The gift card's balance just changed (it may have been used elsewhere). Check it and try again.");
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -293,19 +305,19 @@ public sealed partial class TicketSalesService(
         PaymentResult result;
         try
         {
-            result = quote.Total == 0
+            result = cardAmount == 0
                 ? new PaymentResult(true, null)
-                : await ProcessorFor(theater).ChargeAsync(new PaymentRequest(quote.Total,
+                : await ProcessorFor(theater).ChargeAsync(new PaymentRequest(cardAmount,
                     $"{theater.Name}: {ScheduleService.ToView(theater, await WithFeaturesAsync(db, showtime)).Title}, spot {ticket.SpotLabel}", card));
         }
         catch
         {
-            await BackToHeldAsync(db, ticket);
+            await AbortPaymentAsync(db, ticket, gift, giftAmount);
             throw;
         }
         if (!result.Approved)
         {
-            await BackToHeldAsync(db, ticket);
+            await AbortPaymentAsync(db, ticket, gift, giftAmount);
             throw new AppValidationException(atGate
                 ? $"The card was declined: {result.DeclineReason ?? "declined"}. Try another card."
                 : $"Your payment wasn't approved: {result.DeclineReason ?? "declined"}. Check your card details or try another card.");

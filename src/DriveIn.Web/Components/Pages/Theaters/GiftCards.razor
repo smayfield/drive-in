@@ -1,0 +1,117 @@
+@page "/theaters/{Slug}/giftcards"
+@attribute [Authorize]
+@inherits AppComponentBase
+@inject TicketSalesService Sales
+
+<PageTitle>Gift cards · @(offer?.Theater.Name ?? "Theater") · Drive-In Online</PageTitle>
+
+<MudLink Href="@($"theaters/{Slug}")" Class="d-inline-block mb-3">&larr; @(offer?.Theater.Name ?? "Theater")</MudLink>
+
+@if (offer is null)
+{
+    <Alerts Error="@Error" />
+    @if (Error is null) { <MudProgressCircular Indeterminate Size="Size.Small" aria-label="Loading gift cards" /> }
+}
+else
+{
+    <MudText Typo="Typo.h3" Component="h1" Class="mb-1">Gift cards</MudText>
+    <MudText Class="muted mb-4">
+        Give someone a night at @offer.Theater.Name. A gift card pays toward tickets online or at the gate, and whatever
+        is left stays on the card for next time. It doesn't expire.
+    </MudText>
+
+    <Alerts Error="@Error" />
+    @if (!offer.Available)
+    {
+        <MudAlert Severity="Severity.Info">@offer.NotAvailableReason</MudAlert>
+    }
+    else if (bought is GiftCardPurchaseResult done)
+    {
+        <MudPaper Outlined Class="pa-4 mb-4" Style="border-color: var(--mud-palette-success); max-width: 32rem">
+            <MudText Typo="Typo.h5" Class="mb-1">Your gift card</MudText>
+            <MudText Class="muted">@(offer.Theater.IsDemo ? "Test gift card (demo theater): no money was charged. " : "")@Money.Format(done.Card.InitialAmount) at @offer.Theater.Name</MudText>
+            <div class="gate-code my-2" style="font-size: 1.4rem; letter-spacing: 0.1em">@GiftCardCodes.Format(done.Card.Code)</div>
+            <MudText Typo="Typo.body2" Class="muted mb-2">
+                Enter this code when paying for tickets, or show it at the gate. Anyone with the code can spend it, so keep it safe.
+                It's also under <MudLink Href="tickets">My tickets</MudLink>.
+            </MudText>
+            <MudText Typo="Typo.body2">
+                @(done.BuyerEmailed ? "We emailed it to you." : "We couldn't email it just now, so save this code.")
+                @if (done.RecipientEmailed is bool sent)
+                {
+                    @(sent ? " We also emailed it to the recipient." : " We couldn't email the recipient, so pass the code on yourself.")
+                }
+            </MudText>
+        </MudPaper>
+        <MudButton Variant="Variant.Outlined" OnClick="Another">Buy another</MudButton>
+    }
+    else
+    {
+        <MudPaper Outlined Class="pa-4" Style="max-width: 32rem">
+            <MudText Typo="Typo.h5" Class="mb-2">Amount</MudText>
+            <div class="d-flex flex-wrap gap-2 mb-2">
+                @foreach (var preset in Presets)
+                {
+                    var value = preset;
+                    <MudButton Variant="@(amount == value ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Disabled="@busy" OnClick="() => amount = value">@Money.Format(value)</MudButton>
+                }
+            </div>
+            <MudNumericField T="decimal" @bind-Value="amount" Min="GiftCard.MinAmount" Max="GiftCard.MaxAmount" Format="0.00" Label="Amount ($)"
+                             Variant="Variant.Outlined" Margin="Margin.Dense" HelperText="@($"{Money.Format(GiftCard.MinAmount)} to {Money.Format(GiftCard.MaxAmount)}")" Class="mb-3" />
+
+            <MudText Typo="Typo.h6" Class="mb-2">For someone else? (optional)</MudText>
+            <MudTextField T="string" @bind-Value="recipientName" Label="Recipient's name" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="100" Class="mb-2" />
+            <MudTextField T="string" @bind-Value="recipientEmail" Label="Recipient's email (we'll send them the card)" Variant="Variant.Outlined" Margin="Margin.Dense"
+                          MaxLength="256" InputType="InputType.Email" Class="mb-2" />
+            <MudTextField T="string" @bind-Value="message" Label="Message" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="500" Lines="2" Class="mb-3" />
+
+            <CardFields Form="card" />
+
+            <MudText Typo="Typo.body2" Class="muted mb-3">
+                The code is emailed to you (and the recipient, if you gave an address). It's good only at @offer.Theater.Name,
+                doesn't expire, and can't be refunded or exchanged for cash.
+            </MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@busy" OnClick="BuyAsync">
+                @(busy ? "Processing…" : $"Pay {Money.Format(amount)}")
+            </MudButton>
+        </MudPaper>
+    }
+}
+
+@code {
+    private static readonly decimal[] Presets = [25m, 50m, 100m];
+
+    [Parameter] public string Slug { get; set; } = "";
+
+    private GiftCardOffer? offer;
+    private GiftCardPurchaseResult? bought;
+    private bool busy;
+    private decimal amount = 50m;
+    private string recipientName = "", recipientEmail = "", message = "";
+    private readonly CardForm card = new();
+
+    protected override async Task LoadAsync() => offer = await Sales.GetGiftCardOfferAsync(User, Slug);
+
+    private Task BuyAsync() => RunAsync(async () =>
+    {
+        if (busy || offer is null)
+            return;
+        busy = true;
+        try
+        {
+            var input = new GiftCardPurchaseInput(amount, recipientName, recipientEmail, message, card.ToInput());
+            bought = await Sales.PurchaseGiftCardAsync(User, offer.Theater.Id, input, BaseUri);
+            card.Clear();
+        }
+        finally
+        {
+            busy = false;
+        }
+    });
+
+    private void Another()
+    {
+        bought = null;
+        recipientName = recipientEmail = message = "";
+    }
+}

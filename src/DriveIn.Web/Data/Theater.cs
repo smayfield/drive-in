@@ -43,6 +43,10 @@ public class Theater
     [Range(1, 10000)] public int? FreeAdmissionMaxPerShowing { get; set; }
     [Range(1, 10000)] public int? FreeAdmissionMaxPerEmployeePerShowing { get; set; }
 
+    // Whether the theater sells gift cards to the public (and so accepts them; cards already sold stay spendable if this
+    // is turned off). Saved separately from the profile (TheaterService.UpdateGiftCardSettingsAsync).
+    public bool GiftCardsEnabled { get; set; }
+
     // Admin switch: an inactive theater is hidden and sells nothing, whatever its mode.
     public bool IsActive { get; set; } = true;
 

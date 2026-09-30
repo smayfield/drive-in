@@ -69,6 +69,13 @@ public sealed record TicketReceipt(string Subject, string Html, IReadOnlyList<In
         html.Append($"""
               <tr><td style="padding: 6px 0; border-top: 1px solid #ccc"><strong>Total</strong></td>
                   <td style="text-align: right; border-top: 1px solid #ccc"><strong>{Money.Format(t.Total)}</strong></td></tr>
+            """);
+        if (t.GiftCardAmount > 0)
+            html.Append($"""
+              <tr><td style="padding: 4px 0">Gift card ending {E(t.GiftCardLast4)}</td><td style="text-align: right">{SignedMoney(-t.GiftCardAmount)}</td></tr>
+              <tr><td style="padding: 4px 0">Charged to card</td><td style="text-align: right">{Money.Format(t.CardAmount)}</td></tr>
+            """);
+        html.Append("""
             </table>
             <p style="font-size: 13px; color: #555">{E(t.IsComp ? $"Free admission for {t.GuestName}" : PaidWith(t))} · {(t.IsComp ? "Issued" : "Purchased")} {view.SoldLocal:MMM d, yyyy h:mm tt}</p>
             <p style="font-size: 13px; color: #555">
@@ -83,10 +90,18 @@ public sealed record TicketReceipt(string Subject, string Html, IReadOnlyList<In
             [new InlineImage(QrContentId, "ticket.png", "image/png", QrCodes.Png(link))]);
     }
 
-    public static string PaidWith(Ticket t) =>
-        t.Total == 0 ? "No payment needed"
-        : t.SoldAtGate ? "Paid by card at the gate"
-        : $"Paid with {t.CardBrand} ending {t.CardLast4}";
+    public static string PaidWith(Ticket t)
+    {
+        if (t.Total == 0)
+            return "No payment needed";
+        var card = t.SoldAtGate ? "card at the gate" : $"{t.CardBrand} ending {t.CardLast4}";
+        if (t.GiftCardAmount <= 0)
+            return t.SoldAtGate ? "Paid by card at the gate" : $"Paid with {card}";
+        var gift = $"gift card ending {t.GiftCardLast4}";
+        return t.CardAmount > 0
+            ? $"Paid with {gift} ({Money.Format(t.GiftCardAmount)}) and {card} ({Money.Format(t.CardAmount)})"
+            : $"Paid with {gift}";
+    }
 
     public static string SignedMoney(decimal amount) => amount < 0 ? "−" + Money.Format(-amount) : "+" + Money.Format(amount);
 

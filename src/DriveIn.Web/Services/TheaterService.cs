@@ -104,6 +104,18 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
         await db.SaveChangesAsync();
     }
 
+    // Turns gift card sales on or off. Cards already sold stay spendable either way. Requires ManageGiftCards.
+    public async Task UpdateGiftCardSettingsAsync(ClaimsPrincipal user, int theaterId, bool enabled)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var theater = await db.Theaters.FirstOrDefaultAsync(t => t.Id == theaterId)
+            ?? throw new NotFoundException("Theater not found.");
+        await auth.RequireAsync(user, theater, TheaterPermissions.ManageGiftCards);
+        theater.GiftCardsEnabled = enabled;
+        theater.UpdatedAt = time.GetUtcNow();
+        await db.SaveChangesAsync();
+    }
+
     // Requires EditProfile; slug, active flag and owner are admin-only.
     public async Task UpdateProfileAsync(ClaimsPrincipal user, Theater input)
     {

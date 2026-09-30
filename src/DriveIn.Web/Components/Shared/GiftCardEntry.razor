@@ -1,0 +1,45 @@
+@* Entering a gift card at checkout (online or at the gate): the code and an Apply button, then what the card covers.
+   The service takes the amount off the card and charges the rest; the numbers here are for the buyer to see first. *@
+
+<fieldset class="mb-3 border-0 p-0">
+    <legend class="mud-typography mud-typography-h6 mb-2">Gift card</legend>
+    @if (Balance is null)
+    {
+        <form class="d-flex gap-2 align-items-start" @onsubmit="OnApply">
+            <MudTextField T="string" Value="Code" ValueChanged="CodeChanged" Label="Gift card code (optional)" Variant="Variant.Outlined" Margin="Margin.Dense"
+                          MaxLength="24" autocomplete="off" Class="field-grow" Immediate />
+            <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Outlined" Color="Color.Primary" Disabled="@(Disabled || string.IsNullOrWhiteSpace(Code))">Apply</MudButton>
+        </form>
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Success" Dense Class="mb-1">
+            Gift card ending <span class="font-monospace">@Balance.Last4</span> has @Money.Format(Balance.Balance).
+            <MudButton Variant="Variant.Text" Size="Size.Small" Class="ms-1" OnClick="OnRemove">Remove</MudButton>
+        </MudAlert>
+        <MudText Typo="Typo.body2" Class="muted">
+            @if (Covers(Balance, Total) >= Total)
+            {
+                @($"Covers the whole {Money.Format(Total)}. {Money.Format(Balance.Balance - Total)} will be left on the card.")
+            }
+            else
+            {
+                @($"Takes {Money.Format(Covers(Balance, Total))} off; {Money.Format(Total - Covers(Balance, Total))} is left to pay by card. Nothing will be left on the gift card.")
+            }
+        </MudText>
+    }
+</fieldset>
+
+@code {
+    // Both bound by the parent (@bind-Code), so it can send the code with the purchase.
+    [Parameter] public string Code { get; set; } = "";
+    [Parameter] public EventCallback<string> CodeChanged { get; set; }
+    [Parameter] public GiftCardBalance? Balance { get; set; }
+    [Parameter] public decimal Total { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public EventCallback OnApply { get; set; }
+    [Parameter] public EventCallback OnRemove { get; set; }
+
+    // How much of a total a gift card pays: all of its balance, up to the total.
+    public static decimal Covers(GiftCardBalance? card, decimal total) => card is null ? 0m : Math.Min(card.Balance, total);
+}

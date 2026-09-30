@@ -164,7 +164,7 @@ public sealed partial class OnboardingService(
             .ToListAsync();
     }
 
-    // Takes the theater live: it's listed publicly and sells real tickets. Its demo test tickets are deleted.
+    // Takes the theater live: it's listed publicly and sells real tickets. Its demo test tickets and gift cards are deleted.
     public async Task ActivateAsync(ClaimsPrincipal user, int theaterId, string baseUri)
     {
         Guard.RequireAdmin(user);
@@ -179,6 +179,7 @@ public sealed partial class OnboardingService(
         db.TicketAddOns.RemoveRange(tests.SelectMany(t => t.AddOns));
         db.Tickets.RemoveRange(tests);
         db.CompEvents.RemoveRange(await db.CompEvents.Where(e => e.IsTest && e.TheaterId == theaterId).ToListAsync());
+        db.GiftCards.RemoveRange(await db.GiftCards.Include(g => g.Transactions).Where(g => g.IsTest && g.TheaterId == theaterId).ToListAsync());
         theater.Mode = TheaterMode.Live;
         theater.LiveSince = time.GetUtcNow();
         theater.GoLiveRequestedAt = null;

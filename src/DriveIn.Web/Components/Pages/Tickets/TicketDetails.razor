@@ -88,6 +88,11 @@ else
                         <tr><td>@a.Name</td><td class="text-end">@TicketReceipt.SignedMoney(a.Effect)</td></tr>
                     }
                     <tr class="fw-bold"><td>Total</td><td class="text-end">@Money.Format(t.Total)</td></tr>
+                    @if (t.GiftCardAmount > 0)
+                    {
+                        <tr><td>Gift card ending @t.GiftCardLast4</td><td class="text-end">@TicketReceipt.SignedMoney(-t.GiftCardAmount)</td></tr>
+                        <tr><td>Charged to card</td><td class="text-end">@Money.Format(t.CardAmount)</td></tr>
+                    }
                 </tbody>
             </MudSimpleTable>
             <MudText Typo="Typo.caption" Class="muted d-block text-start mb-3">

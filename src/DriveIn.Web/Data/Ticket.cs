@@ -61,6 +61,15 @@ public class Ticket
     [MaxLength(4)] public string? CardLast4 { get; set; }
     [MaxLength(100)] public string? PaymentReference { get; set; }
 
+    // Part of Total paid from a gift card (see GiftCard); the rest, CardAmount, went on the card. Set (with the gift
+    // card's balance reduced) when payment starts and undone if the card is declined.
+    public int? GiftCardId { get; set; }
+    public GiftCard? GiftCard { get; set; }
+    [MaxLength(4)] public string? GiftCardLast4 { get; set; }
+    public decimal GiftCardAmount { get; set; }
+
+    public decimal CardAmount => Total - GiftCardAmount;
+
     // Random and unguessable: the QR code on the receipt links to tickets/{Code}.
     [MaxLength(32)]
     public string? Code { get; set; }
