@@ -377,7 +377,7 @@ public sealed class BillingService(
             FillBillTo(invoice, sub, theater);
             var now = time.GetUtcNow();
             invoice.IssuedAt = now;
-            invoice.DueOn = Today.AddDays(Math.Max(0, billing.Value.PaymentTermsDays));
+            invoice.DueOn = DateOnly.FromDateTime(now.UtcDateTime).AddDays(Math.Max(0, billing.Value.PaymentTermsDays));
             invoice.Status = invoice.Total == 0 ? InvoiceStatus.Paid : InvoiceStatus.Issued;
             invoice.PaidAt = invoice.Total == 0 ? now : null;
             for (var attempt = 1; ; attempt++)
@@ -439,7 +439,8 @@ public sealed class BillingService(
             throw new AppValidationException("Enter the amount received in dollars and cents.");
         if (input.Amount > invoice.Balance)
             throw new AppValidationException($"That's more than the {Money.Format(invoice.Balance)} still owed.");
-        if (input.ReceivedOn > Today.AddDays(1))
+        // Billing dates are UTC dates; in the US the local date is never ahead of UTC's, so today is the latest real one.
+        if (input.ReceivedOn > Today)
             throw new AppValidationException("The date received can't be in the future.");
         var reference = string.IsNullOrWhiteSpace(input.Reference) ? null : input.Reference.Trim();
         if (reference?.Length > 100)

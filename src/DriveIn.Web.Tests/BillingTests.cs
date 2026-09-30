@@ -252,7 +252,7 @@ public class BillingTests
         await Assert.ThrowsAsync<AppValidationException>(() =>
             s.Billing.RecordPaymentAsync(s.Admin, draft.Id, new PaymentInput(49m, PaymentMethod.Check, null, Sep), TestApp.BaseUri));
         await Assert.ThrowsAsync<AppValidationException>(() =>
-            s.Billing.RecordPaymentAsync(s.Admin, draft.Id, new PaymentInput(1m, PaymentMethod.Check, null, Sep.AddDays(10)), TestApp.BaseUri));
+            s.Billing.RecordPaymentAsync(s.Admin, draft.Id, new PaymentInput(1m, PaymentMethod.Check, null, Sep.AddDays(1)), TestApp.BaseUri)); // tomorrow
         await Assert.ThrowsAsync<AppValidationException>(() => s.Billing.VoidAsync(s.Admin, draft.Id, null));
 
         await s.Billing.RecordPaymentAsync(s.Admin, draft.Id, new PaymentInput(48m, PaymentMethod.BankTransfer, null, Sep), TestApp.BaseUri);
