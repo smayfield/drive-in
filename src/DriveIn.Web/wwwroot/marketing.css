@@ -112,23 +112,57 @@ html { -webkit-text-size-adjust: 100%; }
     0 0 60px rgba(255, 77, 94, 0.35),
     inset 0 0 40px rgba(0, 0, 0, 0.6);
 }
-.marketing .marquee::before {
+/* The bulbs are four rails, each tiled from its own edge so every bulb is whole on all four sides. (One square-tiled
+   pattern under a ring mask cut the bulbs along the top and left edges, where they don't sit in the ring, and only
+   happened to line up along the bottom.) ::before draws the top and bottom rails; ::after the two sides, between them. */
+.marketing .marquee {
+  --bulb-band: 12px;
+  --bulb-dot: radial-gradient(circle, #ffd66b 0 3px, rgba(255, 214, 107, 0.18) 3.5px 5px, transparent 5.5px);
+}
+.marketing .marquee::before,
+.marketing .marquee::after {
   content: "";
   position: absolute;
-  inset: 8px;
-  border-radius: 12px;
-  padding: 8px;
-  background: radial-gradient(circle, var(--bulb) 0 3px, rgba(255, 214, 107, 0.18) 3.5px 5px, transparent 5.5px) 0 0 / var(--bulb-gap) var(--bulb-gap);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  animation: chase 0.9s linear infinite;
-  filter: drop-shadow(0 0 4px var(--bulb));
+  filter: drop-shadow(0 0 4px #ffd66b);
   pointer-events: none;
 }
+.marketing .marquee::before {
+  inset: 8px;
+  background:
+    var(--bulb-dot) 0 0 / var(--bulb-gap) var(--bulb-band) repeat-x,
+    var(--bulb-dot) 0 100% / var(--bulb-gap) var(--bulb-band) repeat-x;
+  animation: chase-x 0.9s linear infinite;
+}
+.marketing .marquee::after {
+  inset: calc(8px + var(--bulb-band)) 8px;
+  background:
+    var(--bulb-dot) 0 0 / var(--bulb-band) var(--bulb-gap) repeat-y,
+    var(--bulb-dot) 100% 0 / var(--bulb-band) var(--bulb-gap) repeat-y;
+  animation: chase-y 0.9s linear infinite;
+}
 
-@keyframes chase {
-  to { background-position: var(--bulb-gap) var(--bulb-gap); }
+/* Size each rail to a whole number of bulbs and center it, so no bulb is cut off at a corner. (round() is in current
+   browsers; without it the rails simply run edge to edge as above.) */
+@supports (width: round(down, 10px, 3px)) {
+  .marketing .marquee::before {
+    inset: 8px auto;
+    left: 50%;
+    width: round(down, calc(100% - 16px), var(--bulb-gap));
+    transform: translateX(-50%);
+  }
+  .marketing .marquee::after {
+    inset: auto 8px;
+    top: 50%;
+    height: round(down, calc(100% - 2 * (8px + var(--bulb-band))), var(--bulb-gap));
+    transform: translateY(-50%);
+  }
+}
+
+@keyframes chase-x {
+  to { background-position: var(--bulb-gap) 0, var(--bulb-gap) 100%; }
+}
+@keyframes chase-y {
+  to { background-position: 0 var(--bulb-gap), 100% var(--bulb-gap); }
 }
 
 .marketing .eyebrow {
