@@ -64,13 +64,13 @@ public sealed class BillingReportService(IDbContextFactory<ApplicationDbContext>
             .Where(i => i.Status == InvoiceStatus.Issued)
             .ToListAsync();
 
+        var billedByMonth = billed.GroupBy(i => i.PeriodMonth).ToDictionary(g => g.Key, g => (Count: g.Count(), Total: g.Sum(i => i.Total)));
+        var collectedByMonth = payments.GroupBy(p => BillingService.MonthOf(p.Payment.ReceivedOn)).ToDictionary(g => g.Key, g => g.Sum(p => p.Payment.Amount));
         var months = new List<BillingMonthRow>();
         for (var m = from; m < end; m = m.AddMonths(1))
         {
-            var month = m;
-            var invoiced = billed.Where(i => i.PeriodMonth == month).ToList();
-            months.Add(new BillingMonthRow(month, invoiced.Count, invoiced.Sum(i => i.Total),
-                payments.Where(p => BillingService.MonthOf(p.Payment.ReceivedOn) == month).Sum(p => p.Payment.Amount)));
+            var invoiced = billedByMonth.GetValueOrDefault(m);
+            months.Add(new BillingMonthRow(m, invoiced.Count, invoiced.Total, collectedByMonth.GetValueOrDefault(m)));
         }
 
         var theaters = billed.GroupBy(i => (i.TheaterId, i.TheaterName))

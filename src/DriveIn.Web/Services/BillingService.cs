@@ -222,18 +222,23 @@ public sealed class BillingService(
             .Include(s => s.Theater!).ThenInclude(t => t.Owner)
             .Where(s => (s.Status == SubscriptionStatus.Active || s.EndsAfterMonth != null) && (theaterId == null || s.TheaterId == theaterId))
             .ToListAsync();
+        // What's already invoiced for the months that could be drafted, in one query. A theater's local month can be a
+        // month behind or ahead of UTC's (never more), so starting two months back covers every "last month".
+        var subIds = subs.Select(s => s.Id).ToList();
+        var since = MonthOf(DateOnly.FromDateTime(now.UtcDateTime)).AddMonths(-2);
+        var invoiced = (await db.Invoices
+                .Where(i => i.SubscriptionId != null && subIds.Contains(i.SubscriptionId.Value) && i.PeriodMonth >= since && i.Status != InvoiceStatus.Void)
+                .Select(i => new { SubscriptionId = i.SubscriptionId!.Value, i.PeriodMonth })
+                .ToListAsync())
+            .Select(i => (i.SubscriptionId, i.PeriodMonth)).ToHashSet();
         var created = 0;
         foreach (var sub in subs)
         {
             var theater = sub.Theater!;
             var thisMonth = MonthOf(LocalToday(theater, now));
-            var lastMonth = thisMonth.AddMonths(-1);
-            var invoiced = await db.Invoices
-                .Where(i => i.SubscriptionId == sub.Id && i.PeriodMonth >= lastMonth && i.Status != InvoiceStatus.Void)
-                .Select(i => i.PeriodMonth).ToListAsync();
-            foreach (var month in new[] { lastMonth, thisMonth })
+            foreach (var month in new[] { thisMonth.AddMonths(-1), thisMonth })
             {
-                if (!IsBillable(sub, theater, month) || invoiced.Contains(month))
+                if (!IsBillable(sub, theater, month) || invoiced.Contains((sub.Id, month)))
                     continue;
                 var draft = NewDraft(sub, theater, month, now);
                 db.Invoices.Add(draft);
