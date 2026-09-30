@@ -258,13 +258,15 @@ public class ReportTests
             ["Smith, \"Pat\"", 12.5m, new DateTime(2026, 9, 5, 20, 0, 0)],
             ["=HYPERLINK(\"x\")", -2m, null],
             ["@sum", 3, new DateOnly(2026, 9, 5)],
+            ["  +1", 0, "\tplain"],
         ]);
 
         Assert.Equal(
             "Name,Amount,When\r\n" +
             "\"Smith, \"\"Pat\"\"\",12.50,2026-09-05 20:00\r\n" +
             "\"'=HYPERLINK(\"\"x\"\")\",-2.00,\r\n" +
-            "'@sum,3,2026-09-05\r\n",
+            "'@sum,3,2026-09-05\r\n" +
+            "'  +1,0,'\tplain\r\n",
             csv);
         Assert.Equal([0xEF, 0xBB, 0xBF], ReportCsv.ToBytes(csv)[..3]);
     }

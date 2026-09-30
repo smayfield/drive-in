@@ -60,5 +60,10 @@ public static class ReportCsv
         return text.IndexOfAny([',', '"', '\r', '\n']) >= 0 ? $"\"{text.Replace("\"", "\"\"")}\"" : text;
     }
 
-    private static string Neutralize(string s) => s.Length > 0 && "=+-@\t\r".Contains(s[0]) ? "'" + s : s;
+    // Spreadsheets skip leading whitespace before deciding a cell is a formula, so look past it.
+    private static string Neutralize(string s)
+    {
+        var first = s.TrimStart(' ', ' ');
+        return first.Length > 0 && "=+-@\t\r\n".Contains(first[0]) ? "'" + s : s;
+    }
 }
