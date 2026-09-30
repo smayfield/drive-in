@@ -34,7 +34,7 @@ Docker on one EC2 server. The setup mirrors LegoList.
 - **Employees** are separate accounts bound to one theater, created only by invitation from its
   owner or anyone with "Invite employees". What they can do is set by **roles**.
 - **Roles** are defined per theater by its owner (Manage → Roles). A role is a named set of actions
-  (edit profile, manage screens, manage schedule, manage pricing, view/invite/manage employees, manage roles, admit guests, sell tickets at the gate, offer / approve / view free admission). Employees can have several
+  (edit profile, manage screens, manage schedule, manage pricing, view/invite/manage employees, manage roles, admit guests, sell tickets at the gate, offer / approve / view free admission, manage / view gift cards). Employees can have several
   roles and get the union of their actions; new employees have none, so they can't do anything until
   assigned a role. New theaters start with Manager (everything), Operations, Ticketing (admit guests, sell at the gate) and Concessions,
   which owners can change or delete. Someone with "Manage roles" can only grant, change or remove
@@ -126,6 +126,19 @@ invitee sets a password or continues with Google using the invited address.
   - Everything (requested, given, approved, denied, withdrawn) is written to `comp_events`, with the people, showing
     and spot copied in so the log outlives deleted tickets and accounts. Demo theaters' test entries are cleared on
     go-live along with their test tickets.
+- **Gift cards** (Manage → Gift cards): a theater turns sales on there (*Manage gift cards*); *View gift cards* lists
+  sales, balances and the amount still owed (codes are never shown to staff, only the last four characters). Any
+  signed-in user who can browse the theater buys one at `/theaters/{slug}/giftcards` for $5 to $500 by card, and the
+  16-character code (about 78 random bits) is emailed to them and an optional recipient. Only Managers get the actions
+  by default (a migration adds them to existing Managers).
+  - Spending: enter the code at online checkout, or at the Gate (needs *Sell tickets at the gate*). The code must match
+    a card sold by **that theater**; a wrong code and another theater's code give the same error. One card per ticket.
+    It pays first (up to its balance) and the card or terminal is charged only for the rest; if nothing is left to
+    pay, no card is needed. What remains stays on the gift card. Cards have no expiry, and no refund or cash-out.
+  - The balance is taken off in the same save that moves the ticket to `Paying`, guarded by a concurrency stamp and a
+    DB check (`0 <= balance <= initial_amount`), so it can't be spent twice. If the card is then declined, the money
+    is put back (a `Restore` transaction). Every change is a row in `gift_card_transactions`. Turning sales off leaves
+    cards already sold spendable. Demo theaters' test cards are cleared on go-live with their test tickets.
 
 ## Marketing site and onboarding
 

@@ -1,0 +1,105 @@
+@page "/manage/{Id:int}/giftcards"
+@attribute [Authorize]
+@inherits AppComponentBase
+@inject TheaterService Theaters
+@inject TheaterAccess Access
+@inject TicketSalesService Sales
+
+<PageTitle>Gift cards · Manage · Drive-In Online</PageTitle>
+
+@if (theater is null)
+{
+    <Alerts Error="@Error" />
+    @if (Error is null) { <MudProgressCircular Indeterminate Size="Size.Small" aria-label="Loading gift cards" /> }
+}
+else
+{
+    <ManageHeader Theater="theater" Title="Gift cards" Current="giftcards" />
+
+    <Alerts Error="@Error" Success="@Success" />
+
+    <MudGrid Spacing="4">
+        @if (canManage)
+        {
+            <MudItem xs="12">
+                <MudPaper Outlined Class="pa-3">
+                    <MudText Typo="Typo.h5" Class="mb-1">Selling gift cards</MudText>
+                    <MudText Typo="Typo.body2" Class="muted mb-2">
+                        When on, signed-in visitors can buy a gift card for @Money.Format(GiftCard.MinAmount) to @Money.Format(GiftCard.MaxAmount) from your theater's
+                        page. The code is emailed to them and, if they like, a recipient. It pays toward tickets bought online or at the gate
+                        (the Gate page has a gift card box), and what's left stays on the card. Cards don't expire and can't be refunded.
+                        Turning this off stops new sales; cards already sold still work.
+                    </MudText>
+                    <MudSwitch T="bool" @bind-Value="enabled" Color="Color.Primary" Label="Sell gift cards" />
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-2" OnClick="SaveAsync">Save</MudButton>
+                </MudPaper>
+            </MudItem>
+        }
+
+        @if (summary is not null)
+        {
+            <MudItem xs="12">
+                <MudText Typo="Typo.h5" Class="mb-1">Gift cards sold</MudText>
+                <MudText Typo="Typo.body2" Class="muted mb-2">
+                    @summary.Count sold for @Money.Format(summary.TotalSold) · @Money.Format(summary.Outstanding) not yet spent.
+                    Codes aren't shown here; the buyer has them.
+                </MudText>
+                @if (summary.Rows.Count == 0)
+                {
+                    <MudText Class="muted">None sold yet.</MudText>
+                }
+                else
+                {
+                    <MudSimpleTable Dense Outlined Class="manage-table">
+                        <thead><tr><th>Bought</th><th>Card</th><th>Bought by</th><th>For</th><th class="text-end">Value</th><th class="text-end">Balance</th></tr></thead>
+                        <tbody>
+                            @foreach (var r in summary.Rows)
+                            {
+                                <tr @key="r.Id">
+                                    <td>@r.PurchasedLocal.ToString("MMM d, yyyy h:mm tt")@(r.IsTest ? " (test)" : "")</td>
+                                    <td class="font-monospace">…@r.Last4</td>
+                                    <td>@r.PurchaserEmail</td>
+                                    <td>@r.RecipientName</td>
+                                    <td class="text-end">@Money.Format(r.InitialAmount)</td>
+                                    <td class="text-end">@Money.Format(r.Balance)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                    @if (summary.Count > summary.Rows.Count)
+                    {
+                        <MudText Typo="Typo.caption" Class="muted d-block mt-1">Showing the latest @summary.Rows.Count of @summary.Count.</MudText>
+                    }
+                }
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private Theater? theater;
+    private IReadOnlySet<string> permissions = new HashSet<string>();
+    private GiftCardSummary? summary;
+    private bool enabled;
+
+    private bool canManage => permissions.Contains(TheaterPermissions.ManageGiftCards);
+    private bool canView => permissions.Contains(TheaterPermissions.ViewGiftCards);
+
+    protected override async Task LoadAsync()
+    {
+        theater = await Theaters.GetForManageAsync(User, Id);
+        permissions = await Access.GetPermissionsAsync(User, theater);
+        if (!canManage && !canView)
+            throw new AccessDeniedException();
+        enabled = theater.GiftCardsEnabled;
+        summary = canView ? await Sales.ListGiftCardsAsync(User, Id) : null;
+    }
+
+    private Task SaveAsync() => RunAsync(async () =>
+    {
+        await Theaters.UpdateGiftCardSettingsAsync(User, Id, enabled);
+        theater = await Theaters.GetForManageAsync(User, Id);
+    }, enabled ? "Gift card sales are on." : "Gift card sales are off. Cards already sold still work.");
+}

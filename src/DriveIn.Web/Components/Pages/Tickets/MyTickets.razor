@@ -7,7 +7,7 @@
 
 <MudText Typo="Typo.h3" Component="h1" Class="mb-4">My tickets</MudText>
 
-@if (tickets is null)
+@if (tickets is null || giftCards is null)
 {
     <MudProgressCircular Indeterminate Size="Size.Small" aria-label="Loading tickets" />
 }
@@ -72,10 +72,38 @@ else
     }
 }
 
+@if (giftCards is { Count: > 0 })
+{
+    <MudText Typo="Typo.h4" Class="mt-6 mb-2">My gift cards</MudText>
+    <MudPaper Outlined>
+        <MudSimpleTable Dense Style="box-shadow: none; background: transparent">
+            <thead><tr><th>Theater</th><th>Code</th><th>Bought</th><th class="text-end">Value</th><th class="text-end">Balance</th></tr></thead>
+            <tbody>
+                @foreach (var g in giftCards)
+                {
+                    <tr>
+                        <td><MudLink Href="@($"theaters/{g.TheaterSlug}")">@g.TheaterName</MudLink>@(g.Card.IsTest ? " (test)" : "")</td>
+                        <td class="font-monospace">@GiftCardCodes.Format(g.Card.Code)</td>
+                        <td>@g.PurchasedLocal.ToString("MMM d, yyyy")</td>
+                        <td class="text-end">@Money.Format(g.Card.InitialAmount)</td>
+                        <td class="text-end">@Money.Format(g.Card.Balance)</td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    </MudPaper>
+}
+
 @code {
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
 
     private List<TicketView>? tickets;
+    private List<MyGiftCard>? giftCards;
 
-    protected override async Task OnInitializedAsync() => tickets = await Sales.ListMyTicketsAsync((await AuthState).User);
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthState).User;
+        tickets = await Sales.ListMyTicketsAsync(user);
+        giftCards = await Sales.ListMyGiftCardsAsync(user);
+    }
 }

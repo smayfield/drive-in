@@ -58,15 +58,17 @@ public sealed partial class TicketSalesService
         return await HoldAsync(userId, showtimeId, row, spot, atGate: true);
     }
 
-    // Takes a card-present payment for the held spot, sells it and checks the car in.
-    public async Task<TicketView> SellAtGateAsync(ClaimsPrincipal user, int ticketId, int priceOptionId, IReadOnlyList<int> addOnIds)
+    // Takes a card-present payment for the held spot, sells it and checks the car in. With a gift card code (the
+    // theater's own), the card pays first and the terminal is charged only for the rest.
+    public async Task<TicketView> SellAtGateAsync(ClaimsPrincipal user, int ticketId, int priceOptionId, IReadOnlyList<int> addOnIds,
+        string? giftCardCode = null)
     {
         var userId = Guard.RequireUserId(user);
         await using var db = await dbFactory.CreateDbContextAsync();
         var showtimeId = await db.Tickets.Where(t => t.Id == ticketId && t.UserId == userId).Select(t => (int?)t.ShowtimeId)
             .FirstOrDefaultAsync() ?? throw new AppValidationException("The hold on this spot ran out. Choose a spot again.");
         await auth.RequireAsync(user, await TheaterOfShowtimeAsync(db, showtimeId), TheaterPermissions.SellAtGate);
-        var ticket = await SellHeldAsync(db, userId, ticketId, priceOptionId, addOnIds, typedCard: null, atGate: true);
+        var ticket = await SellHeldAsync(db, userId, ticketId, priceOptionId, addOnIds, typedCard: null, giftCardCode, atGate: true);
         return await LoadViewAsync(db, ticket.Id);
     }
 

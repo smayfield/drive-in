@@ -99,39 +99,14 @@ else
 
                     <TicketChoices Prices="sale.Prices" AddOns="sale.AddOns" @bind-OptionId="optionId" @bind-AddOnIds="addOnIds" />
 
-                    @if (Quote is TicketQuote quote && quote.Total > 0)
+                    @if (Quote is TicketQuote { Total: > 0 })
                     {
-                        <fieldset class="mb-3 border-0 p-0">
-                            <legend class="mud-typography mud-typography-h6 mb-2">Credit card</legend>
-                            <MudTextField T="string" @bind-Value="cardName" Label="Name on card" Variant="Variant.Outlined" Margin="Margin.Dense"
-                                          MaxLength="100" autocomplete="cc-name" Class="mb-2" />
-                            <MudTextField T="string" @bind-Value="cardNumber" Label="Card number" Variant="Variant.Outlined" Margin="Margin.Dense"
-                                          MaxLength="23" InputMode="InputMode.numeric" autocomplete="cc-number" Class="mb-2" />
-                            <MudGrid Spacing="2">
-                                <MudItem xs="4">
-                                    <MudSelect T="int" @bind-Value="expMonth" ToStringFunc="@(v => v == 0 ? "" : v.ToString("00"))" Label="Month" Variant="Variant.Outlined" Margin="Margin.Dense">
-                                        @for (var m = 1; m <= 12; m++)
-                                        {
-                                            var month = m; // a copy: the item's content is rendered later, after the loop variable has moved on
-                                            <MudSelectItem T="int" Value="@month">@month.ToString("00")</MudSelectItem>
-                                        }
-                                    </MudSelect>
-                                </MudItem>
-                                <MudItem xs="4">
-                                    <MudSelect T="int" @bind-Value="expYear" ToStringFunc="@(v => v == 0 ? "" : v.ToString())" Label="Year" Variant="Variant.Outlined" Margin="Margin.Dense">
-                                        @for (var y = ThisYear; y <= ThisYear + 15; y++)
-                                        {
-                                            var year = y;
-                                            <MudSelectItem T="int" Value="@year">@year</MudSelectItem>
-                                        }
-                                    </MudSelect>
-                                </MudItem>
-                                <MudItem xs="4">
-                                    <MudTextField T="string" @bind-Value="cvc" Label="Security code" Variant="Variant.Outlined" Margin="Margin.Dense"
-                                                  MaxLength="4" InputMode="InputMode.numeric" autocomplete="cc-csc" />
-                                </MudItem>
-                            </MudGrid>
-                        </fieldset>
+                        <GiftCardEntry @bind-Code="giftCode" Balance="gift" OnApply="ApplyGiftAsync" OnRemove="RemoveGift" Disabled="busy" Total="Quote.Total" />
+                    }
+
+                    @if (DueByCard > 0)
+                    {
+                        <CardFields Form="card" />
                     }
 
                     <MudText Typo="Typo.body2" Class="muted mb-3">
@@ -140,7 +115,7 @@ else
                     </MudText>
                     <div class="d-flex flex-wrap gap-2">
                         <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(busy || Quote is null)" OnClick="PayAsync">
-                            @(busy ? "Processing…" : Quote is { Total: > 0 } q ? $"Pay {Money.Format(q.Total)}" : "Get ticket")
+                            @(busy ? "Processing…" : Quote is { Total: > 0 } ? (DueByCard > 0 ? $"Pay {Money.Format(DueByCard)}" : "Pay with gift card") : "Get ticket")
                         </MudButton>
                         <MudButton Variant="Variant.Outlined" Color="Color.Default" Disabled="@busy" OnClick="ReleaseAsync">Choose a different spot</MudButton>
                     </div>
@@ -162,17 +137,17 @@ else
 
     private int optionId;
     private IReadOnlySet<int> addOnIds = new HashSet<int>();
-    private string cardName = "";
-    private string cardNumber = "";
-    private int expMonth;
-    private int expYear;
-    private string cvc = "";
+    private readonly CardForm card = new();
+    private string giftCode = "";
+    private GiftCardBalance? gift;
 
     private HoldView? Hold => availability?.MyHold;
-    private int ThisYear => Time.GetUtcNow().Year;
     private int AvailableCount => sale!.Screen.SpotCount - availability!.Spots.Count;
 
     private TicketQuote? Quote => sale is null ? null : TicketChoices.Quote(sale.Prices, sale.AddOns, optionId, addOnIds);
+
+    // What's left for the card after the gift card, if one is applied.
+    private decimal DueByCard => Quote is null ? 0m : Quote.Total - GiftCardEntry.Covers(gift, Quote.Total);
 
     private string Remaining
     {
@@ -227,17 +202,41 @@ else
         busy = true;
         try
         {
-            var card = new CardInput(cardName, cardNumber, expMonth, expYear, cvc);
-            var result = await Sales.PurchaseAsync(User, hold.TicketId, new PurchaseInput(optionId, addOnIds.ToList(), card), BaseUri);
-            cardNumber = cvc = "";
+            var input = new PurchaseInput(optionId, addOnIds.ToList(), card.ToInput(), gift is null ? null : giftCode);
+            var result = await Sales.PurchaseAsync(User, hold.TicketId, input, BaseUri);
+            card.Clear();
             Nav.NavigateTo($"tickets/{Uri.EscapeDataString(result.Code)}?new={(result.ReceiptSent ? "sent" : "unsent")}");
         }
         finally
         {
             busy = false;
             await RefreshAsync();
+            await RefreshGiftAsync();
         }
     });
+
+    private Task ApplyGiftAsync() => RunAsync(async () => gift = await Sales.CheckGiftCardAsync(User, ShowtimeId, giftCode));
+
+    private void RemoveGift()
+    {
+        gift = null;
+        giftCode = "";
+    }
+
+    // After a failed payment the card's balance may have changed (e.g. it was spent elsewhere): show what's there now.
+    private async Task RefreshGiftAsync()
+    {
+        if (gift is null)
+            return;
+        try
+        {
+            gift = await Sales.CheckGiftCardAsync(User, ShowtimeId, giftCode);
+        }
+        catch (AppValidationException)
+        {
+            gift = null; // used up, or no longer valid; the buyer can pay another way
+        }
+    }
 
     private async Task RefreshAsync()
     {

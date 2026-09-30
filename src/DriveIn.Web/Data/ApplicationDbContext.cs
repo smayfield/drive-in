@@ -19,6 +19,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<Ticket> Tickets => Set<Ticket>();
     public DbSet<TicketAddOn> TicketAddOns => Set<TicketAddOn>();
     public DbSet<CompEvent> CompEvents => Set<CompEvent>();
+    public DbSet<GiftCard> GiftCards => Set<GiftCard>();
+    public DbSet<GiftCardTransaction> GiftCardTransactions => Set<GiftCardTransaction>();
     public DbSet<Invitation> Invitations => Set<Invitation>();
     public DbSet<TheaterRole> TheaterRoles => Set<TheaterRole>();
     public DbSet<TheaterRolePermission> TheaterRolePermissions => Set<TheaterRolePermission>();
@@ -180,6 +182,42 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .WithMany()
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.SetNull);
+            t.Property(x => x.GiftCardAmount).HasPrecision(8, 2);
+            t.HasOne(x => x.GiftCard)
+                .WithMany()
+                .HasForeignKey(x => x.GiftCardId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<GiftCard>(g =>
+        {
+            g.HasIndex(x => x.Code).IsUnique();
+            g.HasIndex(x => x.TheaterId);
+            g.HasIndex(x => x.PurchaserId);
+            g.Property(x => x.InitialAmount).HasPrecision(8, 2);
+            g.Property(x => x.Balance).HasPrecision(8, 2);
+            g.Property(x => x.Stamp).IsConcurrencyToken();
+            g.ToTable(t => t.HasCheckConstraint("ck_gift_cards_balance", "balance >= 0 AND balance <= initial_amount"));
+            g.HasOne(x => x.Theater)
+                .WithMany()
+                .HasForeignKey(x => x.TheaterId)
+                .OnDelete(DeleteBehavior.Cascade);
+            g.HasOne(x => x.Purchaser)
+                .WithMany()
+                .HasForeignKey(x => x.PurchaserId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<GiftCardTransaction>(x =>
+        {
+            x.Property(y => y.Kind).HasConversion<string>().HasMaxLength(20);
+            x.Property(y => y.Amount).HasPrecision(8, 2);
+            x.Property(y => y.BalanceAfter).HasPrecision(8, 2);
+            x.HasIndex(y => y.GiftCardId);
+            x.HasOne(y => y.GiftCard)
+                .WithMany(g => g.Transactions)
+                .HasForeignKey(y => y.GiftCardId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         builder.Entity<CompEvent>(e =>

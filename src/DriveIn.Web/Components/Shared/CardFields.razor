@@ -1,0 +1,40 @@
+@* The credit card fields of an online checkout: ticket purchases and gift card purchases. *@
+@inject TimeProvider Time
+
+<fieldset class="mb-3 border-0 p-0">
+    <legend class="mud-typography mud-typography-h6 mb-2">Credit card</legend>
+    <MudTextField T="string" @bind-Value="Form.Name" Label="Name on card" Variant="Variant.Outlined" Margin="Margin.Dense"
+                  MaxLength="100" autocomplete="cc-name" Class="mb-2" />
+    <MudTextField T="string" @bind-Value="Form.Number" Label="Card number" Variant="Variant.Outlined" Margin="Margin.Dense"
+                  MaxLength="23" InputMode="InputMode.numeric" autocomplete="cc-number" Class="mb-2" />
+    <MudGrid Spacing="2">
+        <MudItem xs="4">
+            <MudSelect T="int" @bind-Value="Form.ExpiryMonth" ToStringFunc="@(v => v == 0 ? "" : v.ToString("00"))" Label="Month" Variant="Variant.Outlined" Margin="Margin.Dense">
+                @for (var m = 1; m <= 12; m++)
+                {
+                    var month = m; // a copy: the item's content is rendered later, after the loop variable has moved on
+                    <MudSelectItem T="int" Value="@month">@month.ToString("00")</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="4">
+            <MudSelect T="int" @bind-Value="Form.ExpiryYear" ToStringFunc="@(v => v == 0 ? "" : v.ToString())" Label="Year" Variant="Variant.Outlined" Margin="Margin.Dense">
+                @for (var y = ThisYear; y <= ThisYear + 15; y++)
+                {
+                    var year = y;
+                    <MudSelectItem T="int" Value="@year">@year</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="4">
+            <MudTextField T="string" @bind-Value="Form.Cvc" Label="Security code" Variant="Variant.Outlined" Margin="Margin.Dense"
+                          MaxLength="4" InputMode="InputMode.numeric" autocomplete="cc-csc" />
+        </MudItem>
+    </MudGrid>
+</fieldset>
+
+@code {
+    [Parameter, EditorRequired] public CardForm Form { get; set; } = default!;
+
+    private int ThisYear => Time.GetUtcNow().Year;
+}

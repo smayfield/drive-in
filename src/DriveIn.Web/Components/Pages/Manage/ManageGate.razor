@@ -122,14 +122,18 @@ else
                                         <MudChip T="string" Color="Color.Warning" role="timer" aria-live="off">held @Remaining</MudChip>
                                     </div>
                                     <TicketChoices Prices="sale.Prices" AddOns="sale.AddOns" @bind-OptionId="optionId" @bind-AddOnIds="addOnIds" />
+                                    @if (Quote is TicketQuote { Total: > 0 })
+                                    {
+                                        <GiftCardEntry @bind-Code="giftCode" Balance="gift" OnApply="ApplyGiftAsync" OnRemove="RemoveGift" Disabled="busy" Total="Quote.Total" />
+                                    }
                                     <div class="d-flex flex-wrap gap-2">
                                         <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Large" Disabled="@(busy || Quote is null)" OnClick="SellAsync">
-                                            @(busy ? "Processing…" : Quote is { Total: > 0 } q ? $"Charge card {Money.Format(q.Total)}" : "Sell (no charge)")
+                                            @(busy ? "Processing…" : Quote is { Total: > 0 } ? (DueByCard > 0 ? $"Charge card {Money.Format(DueByCard)}" : "Sell (gift card pays)") : "Sell (no charge)")
                                         </MudButton>
                                         <MudButton Variant="Variant.Outlined" Size="Size.Large" Disabled="@busy" OnClick="ReleaseAsync">Cancel</MudButton>
                                     </div>
                                     <MudText Typo="Typo.body2" Class="muted mt-2">
-                                        Take the card on the terminal. The car is checked in when the sale goes through. Sales are final.
+                                        @(DueByCard > 0 ? "Take the card on the terminal. " : "")The car is checked in when the sale goes through. Sales are final.
                                     </MudText>
                                 }
                                 else if (lastSale is TicketView sold)
@@ -137,7 +141,7 @@ else
                                     <MudAlert Severity="Severity.Success" Class="mb-2">
                                         <MudText Typo="Typo.h6">Sold and checked in</MudText>
                                         <div>Send the car to <strong>spot @sold.Ticket.SpotLabel</strong> on @sold.Showing.ScreenName.</div>
-                                        <div class="small">@Money.Format(sold.Ticket.Total) · gate code <span class="font-monospace">@sold.Ticket.ShortCode</span></div>
+                                        <div class="small">@Money.Format(sold.Ticket.Total) · @TicketReceipt.PaidWith(sold.Ticket) · gate code <span class="font-monospace">@sold.Ticket.ShortCode</span></div>
                                     </MudAlert>
                                     <MudText Typo="Typo.body2" Class="muted">Pick a green spot for the next car.</MudText>
                                 }
@@ -179,11 +183,16 @@ else
     private int optionId;
     private IReadOnlySet<int> addOnIds = new HashSet<int>();
     private TicketView? lastSale;
+    private string giftCode = "";
+    private GiftCardBalance? gift;
 
     private HoldView? Hold => availability?.MyHold;
     private DateTime NowLocal => TheaterTime.ToLocal(theater!, Time.GetUtcNow());
     private int AvailableCount => sale!.Screen.SpotCount - availability!.Spots.Count;
     private TicketQuote? Quote => sale is null ? null : TicketChoices.Quote(sale.Prices, sale.AddOns, optionId, addOnIds);
+
+    // What's left for the terminal after the gift card, if one is applied.
+    private decimal DueByCard => Quote is null ? 0m : Quote.Total - GiftCardEntry.Covers(gift, Quote.Total);
 
     private string Remaining
     {
@@ -272,6 +281,7 @@ else
     private Task SelectAsync(int showtimeId) => Run(Section.Sell, async () =>
     {
         lastSale = null;
+        RemoveGift();
         sale = await Sales.GetGateShowingAsync(User, showtimeId);
         availability = await Sales.GetAvailabilityAsync(User, showtimeId);
         optionId = sale.Prices.Options.FirstOrDefault()?.Id ?? 0;
@@ -295,6 +305,7 @@ else
     {
         if (Hold is HoldView hold)
             await Sales.ReleaseHoldAsync(User, hold.TicketId);
+        RemoveGift();
         await RefreshAsync();
     });
 
@@ -305,16 +316,41 @@ else
         busy = true;
         try
         {
-            lastSale = await Sales.SellAtGateAsync(User, hold.TicketId, optionId, addOnIds.ToList());
+            lastSale = await Sales.SellAtGateAsync(User, hold.TicketId, optionId, addOnIds.ToList(), gift is null ? null : giftCode);
             addOnIds = new HashSet<int>();
             optionId = sale!.Prices.Options.FirstOrDefault()?.Id ?? 0;
+            RemoveGift();
         }
         finally
         {
             busy = false;
             await RefreshAsync();
+            await RefreshGiftAsync();
         }
     });
+
+    private Task ApplyGiftAsync() => Run(Section.Sell, async () => gift = await Sales.CheckGiftCardAtGateAsync(User, sale!.Showing.Id, giftCode));
+
+    private void RemoveGift()
+    {
+        gift = null;
+        giftCode = "";
+    }
+
+    // After a failed sale the card's balance may have changed (e.g. it was spent elsewhere): show what's there now.
+    private async Task RefreshGiftAsync()
+    {
+        if (gift is null)
+            return;
+        try
+        {
+            gift = await Sales.CheckGiftCardAtGateAsync(User, sale!.Showing.Id, giftCode);
+        }
+        catch (AppValidationException)
+        {
+            gift = null;
+        }
+    }
 
     private async Task RefreshAsync()
     {
