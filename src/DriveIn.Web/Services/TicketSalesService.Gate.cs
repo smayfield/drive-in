@@ -84,8 +84,10 @@ public sealed partial class TicketSalesService
         var userId = Guard.RequireUserId(user);
         await using var db = await dbFactory.CreateDbContextAsync();
         var theater = await FindTheaterAsync(db, theaterId);
-        var canAdmit = await auth.HasAsync(user, theater, TheaterPermissions.AdmitGuests);
-        var canMove = await auth.HasAsync(user, theater, TheaterPermissions.MoveTickets);
+        // One permissions lookup for both (each auth check would query roles again), on every scan.
+        var permissions = await access.GetPermissionsAsync(user, theater);
+        var canAdmit = permissions.Contains(TheaterPermissions.AdmitGuests);
+        var canMove = permissions.Contains(TheaterPermissions.MoveTickets);
         if (!canAdmit && !canMove)
             throw new AccessDeniedException();
         var now = time.GetUtcNow();

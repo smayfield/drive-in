@@ -54,6 +54,7 @@ public sealed record TicketLookup(TicketView View, bool IsBuyer, bool CanAdmit, 
 public sealed partial class TicketSalesService(
     IDbContextFactory<ApplicationDbContext> dbFactory,
     IAuthorizationService auth,
+    TheaterAccess access,
     IPaymentProcessor payments,
     DummyPaymentProcessor testPayments,
     IAppEmailSender email,

@@ -26,10 +26,6 @@ internal static class Guard
             throw new AccessDeniedException();
     }
 
-    public static async Task<bool> HasAsync(this IAuthorizationService auth, ClaimsPrincipal user, Theater theater,
-        string permission) =>
-        (await auth.AuthorizeAsync(user, theater, new TheaterPermissionRequirement(permission))).Succeeded;
-
     // Admin, owner, or one of the theater's employees (regardless of roles).
     public static void RequireMember(ClaimsPrincipal user, Theater theater)
     {

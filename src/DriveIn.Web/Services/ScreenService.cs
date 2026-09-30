@@ -72,7 +72,7 @@ public sealed class ScreenService(IDbContextFactory<ApplicationDbContext> dbFact
         if (large.Any(k => !layout.Contains(Screen.FromKey(k).Row, Screen.FromKey(k).Spot)))
             throw new AppValidationException("A spot marked for large vehicles isn't in this layout.");
         // A large vehicle already ticketed for an upcoming showing keeps a spot it fits in.
-        var unfit = ticketed.Where(t => t.VehicleSize == VehicleSize.Large && !large.Contains(Screen.SpotKey(t.Row, t.Spot)))
+        var unfit = ticketed.Where(t => t.VehicleSize == VehicleSize.Large && large.BinarySearch(Screen.SpotKey(t.Row, t.Spot)) < 0)
             .Select(t => t.SpotLabel).Distinct().Order().ToList();
         if (unfit.Count > 0)
             throw new AppValidationException($"Large vehicles have tickets for upcoming showings in spots this would mark for standard vehicles only: " +
