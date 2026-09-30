@@ -29,6 +29,8 @@ public class Screen
 
     // Spots that take a large vehicle (full-size SUV, pickup, van), as SpotKey values; the rest are for standard
     // vehicles only, so tall vehicles park where they don't block the view. Standard vehicles may use any spot.
+    // Kept sorted and distinct (ScreenService, BackHalfLarge and the migration all write it that way), so AllowsLarge,
+    // which maps call for every spot, can binary search it.
     public List<int> LargeSpots { get; set; } = [];
 
     public List<Showtime> Showtimes { get; set; } = [];
@@ -40,7 +42,7 @@ public class Screen
 
     public bool Contains(int row, int spot) => row >= 1 && row <= RowSpots.Count && spot >= 1 && spot <= RowSpots[row - 1];
 
-    public bool AllowsLarge(int row, int spot) => LargeSpots.Contains(SpotKey(row, spot));
+    public bool AllowsLarge(int row, int spot) => LargeSpots.BinarySearch(SpotKey(row, spot)) >= 0;
 
     public bool Fits(int row, int spot, VehicleSize size) => size == VehicleSize.Standard || AllowsLarge(row, spot);
 

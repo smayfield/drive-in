@@ -15,6 +15,12 @@
         }
     }
 </div>
+@if (Vehicle == VehicleSize.Large && Screen.LargeSpots.Count == 0)
+{
+    <MudAlert Severity="Severity.Warning" Dense Class="mb-2">
+        This screen has no spots for large vehicles, so a large SUV, pickup or van can't park here.
+    </MudAlert>
+}
 <LotMap Screens="[Screen]" SpotStatus="StatusOf" OnSpotClick="OnPick" />
 
 @code {
