@@ -39,6 +39,7 @@ public sealed partial class OnboardingService(
     IOptions<CompanyOptions> company,
     BillingService billing,
     TimeProvider time,
+    IGeocoder geocoder,
     ILogger<OnboardingService> logger)
 {
     public const int MaxScreens = Screen.MaxPerTheater;
@@ -85,6 +86,7 @@ public sealed partial class OnboardingService(
         }, theater);
         if (!TheaterTime.IsValidZone(theater.TimeZone))
             throw new AppValidationException("Choose your theater's time zone.");
+        await TheaterService.LocateAsync(geocoder, theater, addressChanged: true, coordinatesEdited: false);
         TheaterService.AddStarterSetup(db, theater, now, input.Screens, samples: true);
         try
         {

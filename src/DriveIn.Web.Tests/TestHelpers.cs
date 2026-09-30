@@ -50,6 +50,7 @@ public sealed class TestApp : IAsyncDisposable
     public FakeEmailSender Email { get; } = new();
     public FakePaymentProcessor Payments { get; } = new();
     public SpotEvents Events { get; } = new();
+    public FakeGeocoder Geocoder { get; } = new();
     public FakeTimeProvider Time { get; } = new(new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero));
 
     public TestApp(string? adminEmail = null)
@@ -80,6 +81,7 @@ public sealed class TestApp : IAsyncDisposable
         services.AddSingleton<IAppEmailSender>(Email);
         services.AddSingleton<IEmailSender<ApplicationUser>, IdentityEmailSender>();
         services.AddSingleton<TimeProvider>(Time);
+        services.AddSingleton<IGeocoder>(Geocoder);
         services.AddScoped<TheaterService>();
         services.AddScoped<ScreenService>();
         services.AddScoped<ScheduleService>();
@@ -182,5 +184,18 @@ public sealed class FakePaymentProcessor : IPaymentProcessor
     {
         Charges.Add(request);
         return Task.FromResult(DeclineWith is null ? new PaymentResult(true, $"FAKE-{Charges.Count}") : PaymentResult.Declined(DeclineWith));
+    }
+}
+
+// Knows the places it's told about (by exact query); everything else isn't found. Records every lookup.
+public sealed class FakeGeocoder : IGeocoder
+{
+    public Dictionary<string, GeoPoint> Places { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public List<string> Queries { get; } = [];
+
+    public Task<GeoPoint?> GeocodeAsync(string query, CancellationToken ct = default)
+    {
+        Queries.Add(query);
+        return Task.FromResult(Places.GetValueOrDefault(query));
     }
 }
