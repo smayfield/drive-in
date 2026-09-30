@@ -24,7 +24,7 @@ else
             <img src="@f.PosterUrl" alt="Poster for @f.Title" width="80" height="120" style="object-fit: cover; border-radius: 4px" />
         }
         <div>
-            <MudText Typo="Typo.h3" Component="h1">@s.Title</MudText>
+            <MudText Typo="Typo.h3" HtmlTag="h1">@s.Title</MudText>
             <MudText Class="muted ">
                 @s.StartsLocal.ToString("dddd, MMMM d · h:mm tt") · @s.ScreenName · ends about @s.EndsLocal.ToString("h:mm tt")
                 @if (s.IsMultiFeature)

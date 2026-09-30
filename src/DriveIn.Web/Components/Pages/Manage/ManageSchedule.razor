@@ -285,9 +285,9 @@ else
                                 </MudGrid>
                                 <div class="d-flex flex-wrap align-items-center gap-2">
                                     <MudFileUpload T="IBrowserFile" Accept=".jpg,.jpeg,.png,.gif" FilesChanged="UploadPosterAsync">
-                                        <ActivatorContent>
-                                            <MudButton Size="Size.Small" Variant="Variant.Outlined">@(editingFilm.PosterUpdatedAt is null ? "Upload poster" : "Replace poster")</MudButton>
-                                        </ActivatorContent>
+                                        <CustomContent>
+                                            <MudButton OnClick="@context.OpenFilePickerAsync" Size="Size.Small" Variant="Variant.Outlined">@(editingFilm.PosterUpdatedAt is null ? "Upload poster" : "Replace poster")</MudButton>
+                                        </CustomContent>
                                     </MudFileUpload>
                                     @if (editingFilm.PosterUpdatedAt is not null)
                                     {
