@@ -224,11 +224,14 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
         db.Theaters.Add(theater);
         db.TheaterRoles.AddRange(DefaultTheaterRoles.CreateFor(theater, now));
         for (var i = 1; i <= screens; i++)
+        {
+            List<int> rows = samples ? Enumerable.Repeat(15, 8).ToList() : [];
             db.Screens.Add(new Screen
             {
                 Theater = theater, Name = $"Screen {i}", SortOrder = i - 1,
-                RowSpots = samples ? Enumerable.Repeat(15, 8).ToList() : [],
+                RowSpots = rows, LargeSpots = Screen.BackHalfLarge(rows),
             });
+        }
         db.PriceSchedules.Add(new PriceSchedule
         {
             Theater = theater, Name = PricingService.DefaultScheduleName, IsDefault = true,
@@ -276,6 +279,7 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
         db.TheaterRoles.RemoveRange(db.TheaterRoles.Where(r => r.TheaterId == id));
         db.Users.RemoveRange(theater.Employees);
         db.TicketAddOns.RemoveRange(db.TicketAddOns.Where(a => a.Ticket!.Showtime!.Screen!.TheaterId == id));
+        db.TicketMoves.RemoveRange(db.TicketMoves.Where(m => m.Ticket!.Showtime!.Screen!.TheaterId == id));
         db.Tickets.RemoveRange(db.Tickets.Where(t => t.Showtime!.Screen!.TheaterId == id));
         db.ShowtimeFeatures.RemoveRange(db.ShowtimeFeatures.Where(f => f.Showtime!.Screen!.TheaterId == id));
         db.Showtimes.RemoveRange(db.Showtimes.Where(s => s.Screen!.TheaterId == id));

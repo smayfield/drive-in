@@ -57,7 +57,12 @@ else
                 <MudText Typo="Typo.h4">@(Hold is null ? "Choose your spot" : $"Spot {Hold.SpotLabel}")</MudText>
                 <MudText Typo="Typo.body2" Class="muted ">@AvailableCount of @sale.Screen.SpotCount available</MudText>
             </div>
-            <SeatMap Screen="sale.Screen" Availability="availability" CanPick="sale.OnSale && !busy" OnPick="HoldAsync" />
+            @if (sale.Screen.HasSizeLimits)
+            {
+                <VehiclePicker Value="Vehicle" ValueChanged="v => vehicle = v" Disabled="@(Hold is not null || busy)"
+                               Hint="@(Hold is null ? "Large vehicles park in the spots marked L so they don't block the view of cars behind them." : "To change this, choose a different spot.")" />
+            }
+            <SeatMap Screen="sale.Screen" Availability="availability" CanPick="sale.OnSale && !busy" OnPick="HoldAsync" Vehicle="Vehicle" />
             <MudText Typo="Typo.caption" Class="muted d-block mt-2">
                 The screen is at the top; the first row is nearest it. Spots update live as others buy.
                 Spots on hold come back if the buyer doesn't finish within @Ticket.HoldMinutes minutes.
@@ -95,7 +100,10 @@ else
                         <MudText Typo="Typo.h5">Spot @Hold.SpotLabel is yours for</MudText>
                         <MudChip T="string" Color="Color.Warning" Size="Size.Medium" role="timer" aria-live="off">@Remaining</MudChip>
                     </div>
-                    <MudText Typo="Typo.body2" Class="muted mb-3">Finish before the timer runs out or the spot goes back on sale.</MudText>
+                    <MudText Typo="Typo.body2" Class="muted mb-3">
+                        @if (sale.Screen.HasSizeLimits) { @($"For a {VehicleSizes.Describe(Hold.VehicleSize).ToLowerInvariant()}. ") }
+                        Finish before the timer runs out or the spot goes back on sale.
+                    </MudText>
 
                     <TicketChoices Prices="sale.Prices" AddOns="sale.AddOns" @bind-OptionId="optionId" @bind-AddOnIds="addOnIds" />
 
@@ -142,6 +150,9 @@ else
     private GiftCardBalance? gift;
 
     private HoldView? Hold => availability?.MyHold;
+    private VehicleSize vehicle;
+    // While holding, the vehicle is the one the hold is for.
+    private VehicleSize Vehicle => Hold?.VehicleSize ?? vehicle;
     private int AvailableCount => sale!.Screen.SpotCount - availability!.Spots.Count;
 
     private TicketQuote? Quote => sale is null ? null : TicketChoices.Quote(sale.Prices, sale.AddOns, optionId, addOnIds);
@@ -178,7 +189,7 @@ else
         notice = null;
         try
         {
-            await Sales.HoldAsync(User, ShowtimeId, spot.Row, spot.Number);
+            await Sales.HoldAsync(User, ShowtimeId, spot.Row, spot.Number, Vehicle);
         }
         finally
         {
@@ -191,7 +202,10 @@ else
     {
         notice = null;
         if (Hold is HoldView hold)
+        {
+            vehicle = hold.VehicleSize;
             await Sales.ReleaseHoldAsync(User, hold.TicketId);
+        }
         await RefreshAsync();
     });
 

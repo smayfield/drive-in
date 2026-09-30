@@ -62,7 +62,7 @@ public sealed partial class TicketSalesService
     // Reserves a spot for a guest. With approval required (and the giver not able to approve) this is a request that
     // holds the spot until it's approved or denied and returns null; otherwise the guest's ticket is issued straight away.
     public async Task<TicketView?> OfferFreeAdmissionAsync(ClaimsPrincipal user, int showtimeId, int row, int spot,
-        string guestName, string? guestEmail, string? reason, string baseUri)
+        string guestName, string? guestEmail, string? reason, string baseUri, VehicleSize vehicle = VehicleSize.Standard)
     {
         var userId = Guard.RequireUserId(user);
         guestName = (guestName ?? "").Trim();
@@ -92,10 +92,7 @@ public sealed partial class TicketSalesService
                 throw new AppValidationException("Enter a reason for the free admission.");
             if (guestEmail is not null && (guestEmail.Length > 256 || !new EmailAddressAttribute().IsValid(guestEmail)))
                 throw new AppValidationException("That email address doesn't look right.");
-            var screen = showtime.Screen;
-            if (row < 1 || row > screen.RowSpots.Count || spot < 1 || spot > screen.RowSpots[row - 1])
-                throw new NotFoundException("That spot isn't on this screen.");
-            var label = SpotLabels.Spot(screen.LabelScheme, row, spot);
+            var label = CheckSpot(showtime.Screen, row, spot, vehicle);
 
             var comps = db.Tickets.Where(t => t.ShowtimeId == showtimeId && t.IsComp);
             if (theater.FreeAdmissionMaxPerShowing is int maxShowing && await comps.CountAsync() >= maxShowing)
@@ -113,7 +110,7 @@ public sealed partial class TicketSalesService
             pending = theater.FreeAdmissionRequiresApproval && !canApprove;
             ticket = new Ticket
             {
-                ShowtimeId = showtimeId, Row = row, Spot = spot, SpotLabel = label, CreatedAt = now,
+                ShowtimeId = showtimeId, Row = row, Spot = spot, SpotLabel = label, VehicleSize = vehicle, CreatedAt = now,
                 IsComp = true, GuestName = guestName, CompReason = reason, Email = guestEmail, SoldById = userId,
                 IsTest = theater.IsDemo, Status = TicketStatus.Pending,
             };

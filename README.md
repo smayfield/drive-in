@@ -36,9 +36,9 @@ For the full list of features and behaviors (rules, limits, routes, permission k
 - **Employees** are separate accounts bound to one theater, created only by invitation from its
   owner or anyone with "Invite employees". What they can do is set by **roles**.
 - **Roles** are defined per theater by its owner (Manage → Roles). A role is a named set of actions
-  (edit profile, manage screens, manage schedule, manage pricing, view/invite/manage employees, manage roles, admit guests, sell tickets at the gate, offer / approve / view free admission, manage / view gift cards). Employees can have several
+  (edit profile, manage screens, manage schedule, manage pricing, view/invite/manage employees, manage roles, admit guests, sell tickets at the gate, move tickets, offer / approve / view free admission, manage / view gift cards). Employees can have several
   roles and get the union of their actions; new employees have none, so they can't do anything until
-  assigned a role. New theaters start with Manager (everything), Operations, Ticketing (admit guests, sell at the gate) and Concessions,
+  assigned a role. New theaters start with Manager (everything), Operations, Ticketing (admit guests, sell at the gate, move tickets) and Concessions,
   which owners can change or delete. Someone with "Manage roles" can only grant, change or remove
   actions they hold themselves, and can't delete an employee who has more authority than they do.
 
@@ -52,6 +52,9 @@ invitee sets a password or continues with Google using the invited address.
   each with its own number of spots and centered on the screen. Spot labels follow one of three schemes
   chosen per screen: row letter + spot number (`B7`), row number + spot letter (`2G`), or one number
   (`207` = row 2, spot 7). Spots are numbered left to right as drivers face the screen.
+- **Large vehicles** (full-size SUVs, pickups, vans) may only park in spots the screen's page marks **L**, so they don't block the
+  view of the cars behind; cars can park anywhere. Buyers, gate staff and free-admission givers say what the guest is driving.
+  New sample layouts, and screens that existed when this shipped, have the back half of their rows marked.
 - The **lot map** (Manage → Lot map) draws every screen around the central concessions/restrooms/projection
   building: screens 1 and 2 face each other, screens 3 and 4 face each other at 90 degrees. Screen order
   on the theater page sets the positions.
@@ -113,6 +116,9 @@ invitee sets a password or continues with Google using the invited address.
     option and add-ons, and charge the card on the terminal. The charge is card-present (`PaymentRequest.Card` is
     null; the dummy processor approves it), the ticket has no buyer account (`SoldById` is the attendant), and the
     car is checked in as it's sold. Online buyers and the gate compete for the same spots; first to hold wins.
+  - **Move** ("Move tickets"): send a car to another spot at the same showing, e.g. a front-row ticket when the guest arrives
+    in a large SUV, at check-in or after the car is in. Only spots available right now that fit the vehicle; each move is logged
+    in `ticket_moves`.
 - **All sales are final**: there are no refunds or cancellations, including for weather. Sold tickets are records,
   so a showing with sales can't be removed or moved to another screen, a film or screen with sales can't be
   deleted, and a screen can't drop or relabel spots sold for upcoming showings.

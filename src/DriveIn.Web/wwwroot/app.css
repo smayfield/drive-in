@@ -196,6 +196,13 @@ h1:focus {
 .spot-sold .lot-spot-label { fill: #6c7293; }
 .spot-mine .lot-spot { fill: #ffd66b; stroke: #fff; stroke-width: 2.5; }
 .spot-mine .lot-spot-label { fill: #0a0d1f; font-weight: 700; }
+/* Spots that take large vehicles carry an "L"; with a large vehicle chosen, the others can't be picked. */
+.lot-large-mark { fill: #ffd66b; font-size: 8px; font-weight: 700; }
+.spot-mine .lot-large-mark { fill: #0a0d1f; }
+.spot-sold .lot-large-mark { fill: #6c7293; }
+.spot-unfit .lot-spot { fill: #262b4a; stroke: #3b4270; stroke-dasharray: 3 2; }
+.spot-unfit .lot-spot-label { fill: #7d86a8; }
+.spot-marked .lot-spot { fill: #2f4a7a; stroke: #ffd66b; stroke-width: 1.5; }
 
 .spot-legend { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; font-size: 0.875rem; }
 .spot-legend span::before {
@@ -206,6 +213,11 @@ h1:focus {
 .spot-legend .spot-held::before { background: #6b5a1e; border-color: #b39a3a; }
 .spot-legend .spot-sold::before { background: #2a2d40; border-color: #3b3f57; }
 .spot-legend .spot-mine::before { background: #ffd66b; border-color: #0a0d1f; }
+.spot-legend .spot-unfit::before { background: #262b4a; border: 1px dashed #3b4270; }
+.spot-legend .spot-large::before {
+    content: "L"; background: #1d2240; border-color: #1d2240; color: #ffd66b;
+    font-size: 0.65rem; font-weight: 700; text-align: center; line-height: 0.9rem;
+}
 
 .ticket-qr { width: 240px; max-width: 100%; height: auto; image-rendering: pixelated; }
 

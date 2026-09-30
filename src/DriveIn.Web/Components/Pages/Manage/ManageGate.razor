@@ -20,11 +20,11 @@ else
     <ManageHeader Theater="theater" Title="Gate" Current="gate" />
 
     <MudGrid Spacing="4">
-        @if (canAdmit)
+        @if (canAdmit || canMove)
         {
-            <MudItem xs="12" lg="@(canSell ? 4 : 8)">
+            <MudItem xs="12" lg="@(canSell ? (moving is null ? 4 : 6) : 8)">
                 <MudPaper Outlined Class="pa-3">
-                    <MudText Typo="Typo.h5" Class="mb-2">Check in</MudText>
+                    <MudText Typo="Typo.h5" Class="mb-2">@(canAdmit ? "Check in" : "Find a ticket")</MudText>
                     @* A plain input on purpose: handheld scanners type into it and press Enter, and it gets focus after each lookup. *@
                     <form class="d-flex gap-2 mb-2" @onsubmit="FindAsync">
                         <input @ref="codeInput" class="gate-input" autocomplete="off" autocapitalize="characters"
@@ -50,7 +50,13 @@ else
                             {
                                 <MudText Class="mb-2">@found.AdmitProblem</MudText>
                             }
-                            <div class="mb-1"><span class="gate-spot">Spot @t.SpotLabel</span> · @s.ScreenName</div>
+                            <div class="mb-1">
+                                <span class="gate-spot">Spot @t.SpotLabel</span> · @s.ScreenName
+                                @if (t.VehicleSize == VehicleSize.Large)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ms-1 my-0">Large vehicle</MudChip>
+                                }
+                            </div>
                             <div class="mb-1">@s.Title</div>
                             <div class="mb-1 small">@s.StartsLocal.ToString("ddd, MMM d · h:mm tt") · gate code <span class="font-monospace">@t.ShortCode</span></div>
                             <div class="mb-2 small muted">
@@ -65,9 +71,37 @@ else
                                 }
                                 @(t.IsTest ? " · test ticket" : "")
                             </div>
-                            @if (valid)
+                            @if (valid && found.CanAdmit)
                             {
                                 <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Large" FullWidth Disabled="@busy" OnClick="() => AdmitAsync(t.Code!)">Check in</MudButton>
+                            }
+                            @if (found.CanMove && found.MoveProblem is null)
+                            {
+                                @if (moving?.View.Ticket.Id == t.Id && moveAvailability is not null)
+                                {
+                                    var screen = t.Showtime!.Screen!;
+                                    <div class="mt-3">
+                                        <MudText Typo="Typo.h6" Class="mb-1">Move to another spot</MudText>
+                                        @if (screen.HasSizeLimits)
+                                        {
+                                            <VehiclePicker Value="moveVehicle" ValueChanged="SetMoveVehicle" Disabled="busy" Label="The car is a" Hint="@null" />
+                                        }
+                                        <SeatMap Screen="screen" Availability="moveAvailability" CanPick="!busy" OnPick="PickMoveTarget"
+                                                 MineLabel="This car" Vehicle="moveVehicle" Current="(t.Row, t.Spot)" />
+                                        <div class="d-flex flex-wrap gap-2 mt-2">
+                                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(busy || moveTarget is null)" OnClick="MoveAsync">
+                                                @(moveTarget is LotSpot to ? $"Move {t.SpotLabel} → {to.Label}" : "Pick a green spot")
+                                            </MudButton>
+                                            <MudButton Variant="Variant.Outlined" Disabled="@busy" OnClick="CancelMove">Cancel</MudButton>
+                                        </div>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" FullWidth Class="mt-2" Disabled="@busy" OnClick="() => StartMoveAsync(found)">
+                                        Move to another spot
+                                    </MudButton>
+                                }
                             }
                         </MudPaper>
                     }
@@ -77,7 +111,7 @@ else
 
         @if (canSell)
         {
-            <MudItem xs="12" lg="@(canAdmit ? 8 : 12)">
+            <MudItem xs="12" lg="@(canAdmit || canMove ? (moving is null ? 8 : 6) : 12)">
                 <MudPaper Outlined Class="pa-3">
                     <MudText Typo="Typo.h5" Class="mb-2">Sell a ticket</MudText>
                     @if (section == Section.Sell)
@@ -111,8 +145,13 @@ else
                         }
                         <MudGrid Spacing="3">
                             <MudItem xs="12" xl="7">
+                                @if (sale.Screen.HasSizeLimits)
+                                {
+                                    <VehiclePicker Value="SellVehicle" ValueChanged="v => sellVehicle = v" Disabled="@(busy || Hold is not null)"
+                                                   Label="The car is a" Hint="@null" />
+                                }
                                 <SeatMap Screen="sale.Screen" Availability="availability" CanPick="sale.OnSale && !busy && Hold is null"
-                                         OnPick="HoldAsync" MineLabel="This car" />
+                                         OnPick="HoldAsync" MineLabel="This car" Vehicle="SellVehicle" />
                             </MudItem>
                             <MudItem xs="12" xl="5">
                                 @if (Hold is HoldView hold)
@@ -166,6 +205,7 @@ else
     private Theater? theater;
     private bool canAdmit;
     private bool canSell;
+    private bool canMove;
     private bool busy;
     private Section section;
     private Timer? countdown;
@@ -176,6 +216,12 @@ else
     private string code = "";
     private List<TicketLookup> lookups = [];
 
+    // Move: the ticket being moved, the car it's for, and the spot picked for it.
+    private TicketLookup? moving;
+    private VehicleSize moveVehicle;
+    private SpotAvailability? moveAvailability;
+    private LotSpot? moveTarget;
+
     // Sell
     private List<GateShowing> showings = [];
     private ShowingForSale? sale;
@@ -185,8 +231,10 @@ else
     private TicketView? lastSale;
     private string giftCode = "";
     private GiftCardBalance? gift;
+    private VehicleSize sellVehicle;
 
     private HoldView? Hold => availability?.MyHold;
+    private VehicleSize SellVehicle => Hold?.VehicleSize ?? sellVehicle;
     private DateTime NowLocal => TheaterTime.ToLocal(theater!, Time.GetUtcNow());
     private int AvailableCount => sale!.Screen.SpotCount - availability!.Spots.Count;
     private TicketQuote? Quote => sale is null ? null : TicketChoices.Quote(sale.Prices, sale.AddOns, optionId, addOnIds);
@@ -215,16 +263,17 @@ else
         var permissions = await Access.GetPermissionsAsync(User, theater);
         canAdmit = permissions.Contains(TheaterPermissions.AdmitGuests);
         canSell = permissions.Contains(TheaterPermissions.SellAtGate);
-        if (!canAdmit && !canSell)
+        canMove = permissions.Contains(TheaterPermissions.MoveTickets);
+        if (!canAdmit && !canSell && !canMove)
             throw new AccessDeniedException();
         if (canSell)
             showings = await Sales.ListGateShowingsAsync(User, Id);
-        focusCode = canAdmit;
+        focusCode = canAdmit || canMove;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (focusCode && theater is not null && canAdmit)
+        if (focusCode && theater is not null && (canAdmit || canMove))
         {
             focusCode = false;
             try
@@ -243,6 +292,7 @@ else
     private Task FindAsync() => Run(Section.CheckIn, async () =>
     {
         lookups = [];
+        CancelMove();
         if (string.IsNullOrWhiteSpace(code))
             return;
         try
@@ -276,6 +326,56 @@ else
         }
     });
 
+    // --- Move ---
+
+    private Task StartMoveAsync(TicketLookup found) => Run(Section.CheckIn, async () =>
+    {
+        moving = found;
+        moveVehicle = found.View.Ticket.VehicleSize;
+        moveTarget = null;
+        moveAvailability = await Sales.GetAvailabilityAsync(User, found.View.Ticket.ShowtimeId);
+    });
+
+    private void CancelMove()
+    {
+        moving = null;
+        moveAvailability = null;
+        moveTarget = null;
+    }
+
+    private void SetMoveVehicle(VehicleSize size)
+    {
+        moveVehicle = size;
+        if (moveTarget is LotSpot to && !moving!.View.Ticket.Showtime!.Screen!.Fits(to.Row, to.Number, size))
+            moveTarget = null;
+    }
+
+    private void PickMoveTarget(LotSpot spot) => moveTarget = spot;
+
+    private Task MoveAsync() => Run(Section.CheckIn, async () =>
+    {
+        if (moving is not TicketLookup found || moveTarget is not LotSpot to || busy)
+            return;
+        busy = true;
+        try
+        {
+            var moved = await Sales.MoveAsync(User, found.View.Ticket.Code!, to.Row, to.Number, moveVehicle);
+            CancelMove();
+            lookups = await Sales.FindAtGateAsync(User, Id, moved.Code);
+            Success = $"Moved to spot {moved.Ticket.SpotLabel} on {moved.Showing.ScreenName}. Send the car there.";
+        }
+        catch (AppValidationException)
+        {
+            moveTarget = null;
+            moveAvailability = await Sales.GetAvailabilityAsync(User, found.View.Ticket.ShowtimeId);
+            throw;
+        }
+        finally
+        {
+            busy = false;
+        }
+    });
+
     // --- Sell ---
 
     private Task SelectAsync(int showtimeId) => Run(Section.Sell, async () =>
@@ -293,7 +393,7 @@ else
         lastSale = null;
         try
         {
-            await Sales.HoldAtGateAsync(User, sale!.Showing.Id, spot.Row, spot.Number);
+            await Sales.HoldAtGateAsync(User, sale!.Showing.Id, spot.Row, spot.Number, SellVehicle);
         }
         finally
         {
@@ -354,6 +454,13 @@ else
 
     private async Task RefreshAsync()
     {
+        if (moving is not null)
+        {
+            moveAvailability = await Sales.GetAvailabilityAsync(User, moving.View.Ticket.ShowtimeId);
+            // The spot picked for the move may have just been taken.
+            if (moveTarget is LotSpot to && moveAvailability[to.Row, to.Number] != SpotState.Available)
+                moveTarget = null;
+        }
         if (sale is not null)
             availability = await Sales.GetAvailabilityAsync(User, sale.Showing.Id);
         if (canSell)
@@ -369,7 +476,8 @@ else
 
     private void OnSpotsChanged(int showtimeId)
     {
-        if (sale?.Showing.Id != showtimeId && showings.All(g => g.Showing.Id != showtimeId))
+        if (sale?.Showing.Id != showtimeId && showings.All(g => g.Showing.Id != showtimeId)
+            && moving?.View.Ticket.ShowtimeId != showtimeId)
             return;
         _ = InvokeAsync(async () =>
         {

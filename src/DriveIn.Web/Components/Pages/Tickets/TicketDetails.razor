@@ -67,7 +67,11 @@ else
             <MudText><strong>@s.StartsLocal.ToString("dddd, MMMM d, yyyy · h:mm tt")</strong></MudText>
             <MudText>@s.ScreenName</MudText>
             <MudText Typo="Typo.caption" Class="muted d-block mt-2">Spot</MudText>
-            <div class="ticket-spot mb-3">@t.SpotLabel</div>
+            <div class="ticket-spot @(t.VehicleSize == VehicleSize.Large ? "mb-1" : "mb-3")">@t.SpotLabel</div>
+            @if (t.VehicleSize == VehicleSize.Large)
+            {
+                <MudText Typo="Typo.body2" Class="mb-3">For a large vehicle</MudText>
+            }
             @if (lookup.IsBuyer)
             {
                 <img class="ticket-qr mb-2" src="@qr" alt="Ticket QR code for the gate" />

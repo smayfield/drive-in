@@ -6,7 +6,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DriveIn.Web.Services;
 
-public sealed record ScreenLayoutInput(string Name, SpotLabelScheme LabelScheme, IReadOnlyList<int> RowSpots);
+// LargeSpots: the spots that take large vehicles, as Screen.SpotKey values. Null keeps the screen's current marks
+// (those outside the new layout are dropped).
+public sealed record ScreenLayoutInput(string Name, SpotLabelScheme LabelScheme, IReadOnlyList<int> RowSpots,
+    IReadOnlyCollection<int>? LargeSpots = null);
 
 // A theater's screens (1 to Screen.MaxPerTheater) and their spot layouts. Changes require ManageScreens.
 public sealed class ScreenService(IDbContextFactory<ApplicationDbContext> dbFactory, IAuthorizationService auth, TimeProvider time)
@@ -54,7 +57,7 @@ public sealed class ScreenService(IDbContextFactory<ApplicationDbContext> dbFact
         var now = time.GetUtcNow();
         var ticketed = await TicketRecords.Active(db, now)
             .Where(t => t.Showtime!.ScreenId == screenId && t.Showtime.EndsAt > now)
-            .Select(t => new { t.Row, t.Spot, t.SpotLabel })
+            .Select(t => new { t.Row, t.Spot, t.SpotLabel, t.VehicleSize })
             .ToListAsync();
         if (ticketed.Count > 0 && input.LabelScheme != screen.LabelScheme)
             throw new AppValidationException("Tickets are sold for upcoming showings on this screen, so its spot labels can't change until they've passed.");
@@ -63,9 +66,21 @@ public sealed class ScreenService(IDbContextFactory<ApplicationDbContext> dbFact
         if (removed.Count > 0)
             throw new AppValidationException($"Tickets are sold for upcoming showings in spots this layout removes: {string.Join(", ", removed.Take(10))}" +
                 $"{(removed.Count > 10 ? " …" : "")}. Keep those spots until the showings have passed.");
+        var layout = new Screen { RowSpots = input.RowSpots.ToList() };
+        var large = (input.LargeSpots ?? screen.LargeSpots.Where(k => layout.Contains(Screen.FromKey(k).Row, Screen.FromKey(k).Spot)).ToList())
+            .Distinct().Order().ToList();
+        if (large.Any(k => !layout.Contains(Screen.FromKey(k).Row, Screen.FromKey(k).Spot)))
+            throw new AppValidationException("A spot marked for large vehicles isn't in this layout.");
+        // A large vehicle already ticketed for an upcoming showing keeps a spot it fits in.
+        var unfit = ticketed.Where(t => t.VehicleSize == VehicleSize.Large && !large.Contains(Screen.SpotKey(t.Row, t.Spot)))
+            .Select(t => t.SpotLabel).Distinct().Order().ToList();
+        if (unfit.Count > 0)
+            throw new AppValidationException($"Large vehicles have tickets for upcoming showings in spots this would mark for standard vehicles only: " +
+                $"{string.Join(", ", unfit.Take(10))}{(unfit.Count > 10 ? " …" : "")}. Keep those spots marked until the showings have passed.");
         screen.Name = name;
         screen.LabelScheme = input.LabelScheme;
         screen.RowSpots = input.RowSpots.ToList();
+        screen.LargeSpots = large;
         await db.SaveChangesAsync();
     }
 

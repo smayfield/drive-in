@@ -1,10 +1,19 @@
-@* A showing's spots on its screen: available, on hold, sold, or held by the viewer. Available spots raise OnPick when CanPick. *@
+@* A showing's spots on its screen: available, on hold, sold, or held by the viewer. Available spots raise OnPick when CanPick.
+   With Vehicle = Large, spots not marked for large vehicles can't be picked. Current marks a sold ticket's spot (e.g. while moving it). *@
 
 <div class="spot-legend mb-2" aria-hidden="true">
     <span class="spot-available">Available</span>
     <span class="spot-held">On hold</span>
     <span class="spot-sold">Sold</span>
     <span class="spot-mine">@MineLabel</span>
+    @if (Screen.HasSizeLimits)
+    {
+        <span class="spot-large">Large vehicles OK</span>
+        @if (Vehicle == VehicleSize.Large)
+        {
+            <span class="spot-unfit">Cars only</span>
+        }
+    }
 </div>
 <LotMap Screens="[Screen]" SpotStatus="StatusOf" OnSpotClick="OnPick" />
 
@@ -14,12 +23,22 @@
     [Parameter] public bool CanPick { get; set; }
     [Parameter] public EventCallback<LotSpot> OnPick { get; set; }
     [Parameter] public string MineLabel { get; set; } = "Yours";
+    [Parameter] public VehicleSize Vehicle { get; set; }
+    [Parameter] public (int Row, int Spot)? Current { get; set; }
 
-    private LotSpotStatus? StatusOf(int row, int spot) => Availability[row, spot] switch
+    private LotSpotStatus? StatusOf(int row, int spot)
     {
-        SpotState.Mine => new("spot-mine", MineLabel.ToLowerInvariant(), false),
-        SpotState.Held => new("spot-held", "on hold for another buyer", false),
-        SpotState.Sold => new("spot-sold", "sold", false),
-        _ => new("spot-available", "available", CanPick),
-    };
+        if (Current == (row, spot))
+            return new("spot-mine", MineLabel.ToLowerInvariant(), false);
+        return Availability[row, spot] switch
+        {
+            // While moving a ticket, the viewer's own holds (e.g. a gate sale in progress) aren't this car.
+            SpotState.Mine when Current is not null => new("spot-held", "on hold", false),
+            SpotState.Mine => new("spot-mine", MineLabel.ToLowerInvariant(), false),
+            SpotState.Held => new("spot-held", "on hold for another buyer", false),
+            SpotState.Sold => new("spot-sold", "sold", false),
+            _ when !Screen.Fits(row, spot, Vehicle) => new("spot-unfit", "available, but not for large vehicles", false),
+            _ => new("spot-available", "available", CanPick),
+        };
+    }
 }

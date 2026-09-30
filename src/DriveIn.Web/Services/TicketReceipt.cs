@@ -54,7 +54,7 @@ public sealed record TicketReceipt(string Subject, string Html, IReadOnlyList<In
             <p style="margin: 0 0 16px; color: #555">{E(Address(view.Theater))}</p>
             <h2 style="font-size: 18px; margin: 0 0 4px">{E(s.Title)}</h2>
             <p style="margin: 0 0 4px"><strong>{s.StartsLocal:dddd, MMMM d, yyyy} at {s.StartsLocal:h:mm tt}</strong></p>
-            <p style="margin: 0 0 16px">{E(s.ScreenName)} · Spot <strong style="font-size: 20px">{E(t.SpotLabel)}</strong></p>
+            <p style="margin: 0 0 16px">{E(s.ScreenName)} · Spot <strong style="font-size: 20px">{E(t.SpotLabel)}</strong>{(t.VehicleSize == VehicleSize.Large ? " (large vehicle)" : "")}</p>
             <p style="text-align: center; margin: 0 0 4px"><img src="cid:{QrContentId}" width="240" height="240" alt="Ticket QR code"></p>
             <p style="text-align: center; margin: 0 0 4px; font-size: 14px">Gate code</p>
             <p style="text-align: center; margin: 0 0 8px; font-size: 32px; font-weight: bold; letter-spacing: 6px; font-family: Menlo, Consolas, monospace">{E(t.ShortCode)}</p>

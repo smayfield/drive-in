@@ -58,7 +58,7 @@ else
                     else
                     {
                         <MudSimpleTable Dense Class="manage-table mb-2" Outlined>
-                            <thead><tr><th>Row</th><th style="width: 7rem">Spots</th><th>Labels</th><th></th></tr></thead>
+                            <thead><tr><th>Row</th><th style="width: 7rem">Spots</th><th>Labels</th><th title="Spots that take large vehicles (full-size SUVs, pickups, vans)">Large</th><th></th></tr></thead>
                             <tbody>
                                 @for (var i = 0; i < draft.Rows.Count; i++)
                                 {
@@ -67,7 +67,7 @@ else
                                     <tr @key="row">
                                         <td>@SpotLabels.Row(draft.Scheme, number)</td>
                                         <td>
-                                            <MudNumericField T="int" @bind-Value="row.Spots" Immediate Min="1" Max="Screen.MaxSpotsPerRow" Variant="Variant.Outlined"
+                                            <MudNumericField T="int" Value="row.Spots" ValueChanged="n => row.SetSpots(n)" Immediate Min="1" Max="Screen.MaxSpotsPerRow" Variant="Variant.Outlined"
                                                              Margin="Margin.Dense" HideSpinButtons aria-label="@($"Spots in row {number}")" />
                                         </td>
                                         <td class="small muted">
@@ -75,6 +75,10 @@ else
                                             {
                                                 @($"{SpotLabels.Spot(draft.Scheme, number, 1)}–{SpotLabels.Spot(draft.Scheme, number, row.Spots)}")
                                             }
+                                        </td>
+                                        <td>
+                                            <MudCheckBox T="bool?" Value="row.AllLarge" ValueChanged="_ => row.SetAllLarge(row.AllLarge != true)" TriState Dense
+                                                         Color="Color.Primary" aria-label="@($"Row {number} takes large vehicles")" />
                                         </td>
                                         <td class="text-end">
                                             <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Error"
@@ -86,6 +90,26 @@ else
                         </MudSimpleTable>
                     }
                     <MudButton Size="Size.Small" Variant="Variant.Outlined" Class="mb-3" Disabled="@(draft.Rows.Count >= Screen.MaxRows)" OnClick="AddRow">Add row</MudButton>
+
+                    <MudText Typo="Typo.h6" Class="mb-1">Large vehicles</MudText>
+                    <MudText Typo="Typo.body2" Class="muted mb-2">
+                        Full-size SUVs, pickups and vans may only park in spots marked <strong>L</strong>, so they don't block the view
+                        of cars behind them; cars can park anywhere. Tick a row's Large box, or click spots on the preview to mark or
+                        unmark them one at a time.
+                    </MudText>
+                    <div class="d-flex flex-wrap gap-2 mb-2">
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="MarkBackHalf">Back half of rows</MudButton>
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => MarkAll(true)">All spots</MudButton>
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => MarkAll(false)">None</MudButton>
+                    </div>
+                    @if (draft.Rows.Count > 0 && preview.LargeSpots.Count == 0)
+                    {
+                        <MudAlert Severity="Severity.Warning" Dense Class="mb-3">No spot takes large vehicles, so large vehicles can't get tickets for this screen.</MudAlert>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Class="mb-3">@preview.LargeSpots.Count of @preview.SpotCount spots take large vehicles.</MudText>
+                    }
 
                     <div class="d-flex gap-2 align-items-center">
                         <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync">Save</MudButton>
@@ -106,7 +130,15 @@ else
                 {
                     <MudText Typo="Typo.body2" Class="muted">Spot labels: @SpotLabels.Describe(screen.LabelScheme) (@SpotLabels.Example(screen.LabelScheme)).</MudText>
                 }
-                <LotMap Screens="[preview]" />
+                @if (canManage)
+                {
+                    <MudText Typo="Typo.caption" Class="muted d-block mb-1">Click a spot to mark or unmark it for large vehicles.</MudText>
+                    <LotMap Screens="[preview]" SpotStatus="MarkStatus" OnSpotClick="ToggleLarge" />
+                }
+                else
+                {
+                    <LotMap Screens="[preview]" />
+                }
             </section>
 
             <section class="mt-4">
@@ -133,9 +165,34 @@ else
     [Parameter] public int Id { get; set; }
     [Parameter] public int ScreenId { get; set; }
 
+    // A row and which of its spots take large vehicles. Marks are kept by spot number within the row, so removing a
+    // row doesn't shift another row's marks.
     private sealed class RowDraft
     {
-        public int Spots { get; set; }
+        public int Spots { get; private set; }
+        public SortedSet<int> Large { get; } = [];
+
+        public RowDraft(int spots, bool allLarge = false)
+        {
+            Spots = spots;
+            SetAllLarge(allLarge);
+        }
+
+        public void SetSpots(int spots)
+        {
+            Spots = spots;
+            Large.RemoveWhere(n => n > spots);
+        }
+
+        // True if every spot takes large vehicles, false if none, null if some.
+        public bool? AllLarge => Large.Count == 0 ? false : Large.Count >= Spots ? true : null;
+
+        public void SetAllLarge(bool large)
+        {
+            Large.Clear();
+            if (large)
+                Large.UnionWith(Enumerable.Range(1, Math.Clamp(Spots, 0, Screen.MaxSpotsPerRow)));
+        }
     }
 
     private sealed class Draft
@@ -144,14 +201,20 @@ else
         public SpotLabelScheme Scheme { get; set; }
         public List<RowDraft> Rows { get; set; } = [];
 
-        public static Draft From(Screen s) => new()
+        public static Draft From(Screen s)
         {
-            Name = s.Name,
-            Scheme = s.LabelScheme,
-            Rows = s.RowSpots.Select(n => new RowDraft { Spots = n }).ToList(),
-        };
+            var rows = s.RowSpots.Select(n => new RowDraft(n)).ToList();
+            foreach (var (row, spot) in s.LargeSpots.Select(Screen.FromKey))
+                if (row >= 1 && row <= rows.Count)
+                    rows[row - 1].Large.Add(spot);
+            return new() { Name = s.Name, Scheme = s.LabelScheme, Rows = rows };
+        }
 
         public List<int> RowSpots => Rows.Select(r => r.Spots).ToList();
+
+        public List<int> LargeSpots => Rows
+            .SelectMany((r, i) => r.Large.Where(n => n >= 1 && n <= r.Spots).Select(n => Screen.SpotKey(i + 1, n)))
+            .Order().ToList();
     }
 
     private Screen? screen;
@@ -168,10 +231,12 @@ else
         Name = string.IsNullOrWhiteSpace(draft.Name) ? "Screen" : draft.Name,
         LabelScheme = draft.Scheme,
         RowSpots = draft.Rows.Select(r => r.Spots).Where(n => n is >= 1 and <= Screen.MaxSpotsPerRow).ToList(),
+        LargeSpots = draft.Rows.All(r => r.Spots is >= 1 and <= Screen.MaxSpotsPerRow) ? draft.LargeSpots : [],
     };
 
     private bool Dirty => screen is not null
-        && (draft.Name != screen.Name || draft.Scheme != screen.LabelScheme || !draft.RowSpots.SequenceEqual(screen.RowSpots));
+        && (draft.Name != screen.Name || draft.Scheme != screen.LabelScheme || !draft.RowSpots.SequenceEqual(screen.RowSpots)
+            || !draft.LargeSpots.SequenceEqual(screen.LargeSpots.Order()));
 
     protected override async Task LoadAsync()
     {
@@ -187,16 +252,45 @@ else
     {
         var rows = Math.Clamp(fillRows, 1, Screen.MaxRows);
         var spots = Math.Clamp(fillSpots, 1, Screen.MaxSpotsPerRow);
-        draft.Rows = Enumerable.Range(0, rows).Select(_ => new RowDraft { Spots = spots }).ToList();
+        draft.Rows = Enumerable.Range(0, rows).Select(_ => new RowDraft(spots)).ToList();
+        MarkBackHalf();
     }
 
-    private void AddRow() => draft.Rows.Add(new RowDraft { Spots = draft.Rows.LastOrDefault()?.Spots ?? fillSpots });
+    // New rows go at the back, so a row added behind a large-vehicle row takes large vehicles too.
+    private void AddRow()
+    {
+        var last = draft.Rows.LastOrDefault();
+        draft.Rows.Add(new RowDraft(last?.Spots ?? fillSpots, last?.AllLarge == true));
+    }
+
+    private void MarkBackHalf()
+    {
+        for (var i = 0; i < draft.Rows.Count; i++)
+            draft.Rows[i].SetAllLarge(i + 1 > draft.Rows.Count / 2);
+    }
+
+    private void MarkAll(bool large)
+    {
+        foreach (var row in draft.Rows)
+            row.SetAllLarge(large);
+    }
+
+    private LotSpotStatus? MarkStatus(int row, int spot) => draft.Rows[row - 1].Large.Contains(spot)
+        ? new("spot-marked", "click to mark for cars only", true)
+        : new("", "cars only; click to mark for large vehicles", true);
+
+    private void ToggleLarge(LotSpot spot)
+    {
+        var large = draft.Rows[spot.Row - 1].Large;
+        if (!large.Remove(spot.Number))
+            large.Add(spot.Number);
+    }
 
     private void Revert() => draft = Draft.From(screen!);
 
     private Task SaveAsync() => RunAsync(async () =>
     {
-        await Screens.UpdateAsync(User, ScreenId, new ScreenLayoutInput(draft.Name, draft.Scheme, draft.RowSpots));
+        await Screens.UpdateAsync(User, ScreenId, new ScreenLayoutInput(draft.Name, draft.Scheme, draft.RowSpots, draft.LargeSpots));
         screen = await Screens.GetAsync(User, ScreenId);
         draft = Draft.From(screen);
     }, "Screen saved.");

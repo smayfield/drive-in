@@ -53,7 +53,7 @@
             yield return new("schedule", $"manage/{Theater.Id}/schedule", "Schedule");
             yield return new("pricing", $"manage/{Theater.Id}/pricing", "Pricing");
             yield return new("lot", $"manage/{Theater.Id}/lot", "Lot map");
-            if (Can(TheaterPermissions.AdmitGuests) || Can(TheaterPermissions.SellAtGate))
+            if (Can(TheaterPermissions.AdmitGuests) || Can(TheaterPermissions.SellAtGate) || Can(TheaterPermissions.MoveTickets))
                 yield return new("gate", $"manage/{Theater.Id}/gate", "Gate");
             if (Can(TheaterPermissions.OfferFreeAdmission) || Can(TheaterPermissions.ApproveFreeAdmission) || Can(TheaterPermissions.ViewFreeAdmission))
                 yield return new("comps", $"manage/{Theater.Id}/comps", "Free admission");

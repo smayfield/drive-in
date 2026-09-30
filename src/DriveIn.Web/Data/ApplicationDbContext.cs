@@ -18,6 +18,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<AddOn> AddOns => Set<AddOn>();
     public DbSet<Ticket> Tickets => Set<Ticket>();
     public DbSet<TicketAddOn> TicketAddOns => Set<TicketAddOn>();
+    public DbSet<TicketMove> TicketMoves => Set<TicketMove>();
     public DbSet<CompEvent> CompEvents => Set<CompEvent>();
     public DbSet<GiftCard> GiftCards => Set<GiftCard>();
     public DbSet<GiftCardTransaction> GiftCardTransactions => Set<GiftCardTransaction>();
@@ -170,6 +171,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasForeignKey(x => x.SoldById)
                 .OnDelete(DeleteBehavior.SetNull);
             t.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+            t.Property(x => x.VehicleSize).HasConversion<string>().HasMaxLength(20);
             t.Property(x => x.Stamp).IsConcurrencyToken();
             t.Property(x => x.OptionPrice).HasPrecision(8, 2);
             t.Property(x => x.Total).HasPrecision(8, 2);
@@ -186,6 +188,21 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             t.HasOne(x => x.GiftCard)
                 .WithMany()
                 .HasForeignKey(x => x.GiftCardId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<TicketMove>(m =>
+        {
+            m.HasIndex(x => x.TicketId);
+            m.Property(x => x.FromVehicleSize).HasConversion<string>().HasMaxLength(20);
+            m.Property(x => x.ToVehicleSize).HasConversion<string>().HasMaxLength(20);
+            m.HasOne(x => x.Ticket)
+                .WithMany()
+                .HasForeignKey(x => x.TicketId)
+                .OnDelete(DeleteBehavior.Cascade);
+            m.HasOne(x => x.MovedBy)
+                .WithMany()
+                .HasForeignKey(x => x.MovedById)
                 .OnDelete(DeleteBehavior.SetNull);
         });
 

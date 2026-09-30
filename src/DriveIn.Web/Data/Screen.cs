@@ -27,7 +27,50 @@ public class Screen
 
     public int SpotCount => RowSpots.Sum();
 
+    // Spots that take a large vehicle (full-size SUV, pickup, van), as SpotKey values; the rest are for standard
+    // vehicles only, so tall vehicles park where they don't block the view. Standard vehicles may use any spot.
+    public List<int> LargeSpots { get; set; } = [];
+
     public List<Showtime> Showtimes { get; set; } = [];
+
+    // A spot as one int: row * 100 + spot (spots per row are at most 99).
+    public static int SpotKey(int row, int spot) => row * 100 + spot;
+
+    public static (int Row, int Spot) FromKey(int key) => (key / 100, key % 100);
+
+    public bool Contains(int row, int spot) => row >= 1 && row <= RowSpots.Count && spot >= 1 && spot <= RowSpots[row - 1];
+
+    public bool AllowsLarge(int row, int spot) => LargeSpots.Contains(SpotKey(row, spot));
+
+    public bool Fits(int row, int spot, VehicleSize size) => size == VehicleSize.Standard || AllowsLarge(row, spot);
+
+    // Some spots are for standard vehicles only, so buyers are asked what they're driving.
+    public bool HasSizeLimits => LargeSpots.Count < SpotCount;
+
+    // The default marking: the back half of the rows (all of a one-row screen) takes large vehicles.
+    public static List<int> BackHalfLarge(IReadOnlyList<int> rowSpots) =>
+        Enumerable.Range(1, rowSpots.Count)
+            .Where(row => row > rowSpots.Count / 2)
+            .SelectMany(row => Enumerable.Range(1, rowSpots[row - 1]).Select(spot => SpotKey(row, spot)))
+            .ToList();
+}
+
+// Stored by name, so members can be added but not renamed.
+public enum VehicleSize
+{
+    Standard, // cars, small SUVs, minivans: any spot
+    Large,    // full-size SUVs, pickups, vans: only spots marked for large vehicles
+}
+
+public static class VehicleSizes
+{
+    public static string Describe(VehicleSize size) => size switch
+    {
+        VehicleSize.Large => "Large SUV, pickup or van",
+        _ => "Car, small SUV or minivan",
+    };
+
+    public static string Short(VehicleSize size) => size == VehicleSize.Large ? "Large vehicle" : "Standard vehicle";
 }
 
 // Rows and spots are both numbered from 1: rows from the screen back, spots left to right facing the screen.

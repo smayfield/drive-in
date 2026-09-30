@@ -11,7 +11,8 @@ public sealed record GateShowing(ShowtimeView Showing, int SpotCount, int Taken)
     public int Open => Math.Max(0, SpotCount - Taken);
 }
 
-// Sales and check-in at the gate. Selling requires SellAtGate; checking tickets requires AdmitGuests.
+// Sales and check-in at the gate. Selling requires SellAtGate; checking tickets requires AdmitGuests; looking tickets
+// up also works with MoveTickets (see TicketSalesService.Moves).
 public sealed partial class TicketSalesService
 {
     // --- Selling at the gate ---
@@ -50,12 +51,12 @@ public sealed partial class TicketSalesService
 
     // Holds a spot for the car at the gate while the attendant takes payment. Like an online hold, the first to
     // hold a spot gets it, and the attendant holds one spot at a time.
-    public async Task<HoldView> HoldAtGateAsync(ClaimsPrincipal user, int showtimeId, int row, int spot)
+    public async Task<HoldView> HoldAtGateAsync(ClaimsPrincipal user, int showtimeId, int row, int spot, VehicleSize vehicle = VehicleSize.Standard)
     {
         var userId = Guard.RequireUserId(user);
         await using (var db = await dbFactory.CreateDbContextAsync())
             await auth.RequireAsync(user, await TheaterOfShowtimeAsync(db, showtimeId), TheaterPermissions.SellAtGate);
-        return await HoldAsync(userId, showtimeId, row, spot, atGate: true);
+        return await HoldAsync(userId, showtimeId, row, spot, vehicle, atGate: true);
     }
 
     // Takes a card-present payment for the held spot, sells it and checks the car in. With a gift card code (the
@@ -77,12 +78,16 @@ public sealed partial class TicketSalesService
     // Finds tickets for this theater from what the attendant scanned or typed: the 4-character gate code (case and
     // spaces don't matter), the ticket code, or the QR code's link. Gate codes are only unique among upcoming
     // tickets, so they match tickets for showings from yesterday on, soonest first; there's normally one.
+    // Needs AdmitGuests or MoveTickets; each result says which of the two the user can do.
     public async Task<List<TicketLookup>> FindAtGateAsync(ClaimsPrincipal user, int theaterId, string input)
     {
         var userId = Guard.RequireUserId(user);
         await using var db = await dbFactory.CreateDbContextAsync();
         var theater = await FindTheaterAsync(db, theaterId);
-        await auth.RequireAsync(user, theater, TheaterPermissions.AdmitGuests);
+        var canAdmit = await auth.HasAsync(user, theater, TheaterPermissions.AdmitGuests);
+        var canMove = await auth.HasAsync(user, theater, TheaterPermissions.MoveTickets);
+        if (!canAdmit && !canMove)
+            throw new AccessDeniedException();
         var now = time.GetUtcNow();
 
         List<Ticket> tickets;
@@ -106,7 +111,7 @@ public sealed partial class TicketSalesService
         if (tickets.Count == 0)
             throw new AppValidationException("No ticket matches that code. Check it and try again.");
         return tickets
-            .Select(t => new TicketLookup(ToView(t), t.UserId == userId, CanAdmit: true, AdmitProblem(t)))
+            .Select(t => new TicketLookup(ToView(t), t.UserId == userId, canAdmit, AdmitProblem(t), canMove, MoveProblem(t)))
             .OrderBy(l => l.AdmitProblem is not null).ThenBy(l => l.View.Ticket.Showtime!.StartsAt)
             .ToList();
     }
