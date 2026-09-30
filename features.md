@@ -95,7 +95,7 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   stored in UTC.
 - **Location** (`Theater.Latitude`/`Longitude`): looked up from the address (`IGeocoder`, `Geo.AddressQuery`) when a profile
   save changes the address or the theater has none, and at sign-up from the city and state; the editor can type them instead
-  (both or neither, range-checked), which skips the lookup. A lookup that finds nothing leaves them blank without blocking
+  (both or neither, range-checked), which skips the lookup, or clear them to look them up again. A lookup that finds nothing leaves them blank without blocking
   the save, and the form warns the theater won't appear in near-me searches. `TheaterGeocodingBackfill` looks up active theaters
   with an address but no coordinates once at startup.
 - **Season:** optional opens/closes (either end optional). Showings must fall inside; can't be changed to exclude scheduled showings.
@@ -134,7 +134,7 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   `TheaterService.ListNearAsync` applies the same visibility as the list (`CanBrowse`: demo theaters only for members),
   leaves out theaters without coordinates, and sorts nearest first (haversine, `Geo.DistanceMiles`). The search is in the
   query string (`near` or `lat`+`lon`, `radius`). Without a search the list is alphabetical.
-- **Geocoding** (`Geocoding:Provider`): `Nominatim` (OpenStreetMap, default; `NominatimGeocoder`) or `None`. Nominatim allows one
+- **Geocoding** (`Geocoding:Provider`, case-insensitive; an unknown value fails at startup): `Nominatim` (OpenStreetMap, default; `NominatimGeocoder`) or `None`. Nominatim allows one
   request a second, so lookups are serialized and spaced, and results (misses too) are cached in memory for a day; a bare
   5-digit query is looked up as a US postcode. Failures return "not found" and are logged.
 - Routes: `/theaters` (list), `/theaters/{slug}` (details, showings), `/theaters/{slug}/showings/{showtimeId}` (spot map +
