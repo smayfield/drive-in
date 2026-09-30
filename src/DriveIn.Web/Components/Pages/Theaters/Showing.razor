@@ -25,7 +25,7 @@ else
         }
         <div>
             <MudText Typo="Typo.h3" HtmlTag="h1">@s.Title</MudText>
-            <MudText Class="muted ">
+            <MudText Class="muted">
                 @s.StartsLocal.ToString("dddd, MMMM d · h:mm tt") · @s.ScreenName · ends about @s.EndsLocal.ToString("h:mm tt")
                 @if (s.IsMultiFeature)
                 {
@@ -55,7 +55,7 @@ else
         <MudItem xs="12" md="7">
             <div class="d-flex flex-wrap align-items-baseline gap-2 mb-2">
                 <MudText Typo="Typo.h4">@(Hold is null ? "Choose your spot" : $"Spot {Hold.SpotLabel}")</MudText>
-                <MudText Typo="Typo.body2" Class="muted ">@AvailableCount of @sale.Screen.SpotCount available</MudText>
+                <MudText Typo="Typo.body2" Class="muted">@AvailableCount of @sale.Screen.SpotCount available</MudText>
             </div>
             @if (sale.Screen.HasSizeLimits)
             {
@@ -76,7 +76,7 @@ else
                     <MudText Typo="Typo.h5" Class="mb-2">Tickets</MudText>
                     @if (sale.Prices.Options.Count == 0)
                     {
-                        <MudText Class="muted ">Prices haven't been set for this showing yet.</MudText>
+                        <MudText Class="muted">Prices haven't been set for this showing yet.</MudText>
                     }
                     else
                     {
@@ -86,7 +86,7 @@ else
                                 <li><strong>@Money.Format(o.Price)</strong> @o.Name @if (o.Description is not null) { <span class="muted small ms-1">— @o.Description</span> }</li>
                             }
                         </ul>
-                        <MudText Typo="Typo.body2" Class="muted ">
+                        <MudText Typo="Typo.body2" Class="muted">
                             @(sale.OnSale ? "Pick a green spot on the map to hold it while you pay." : "")
                             A ticket admits one car to this showing only.
                         </MudText>

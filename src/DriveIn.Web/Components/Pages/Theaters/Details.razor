@@ -106,7 +106,7 @@ else
             }
             @if (showings.Count > 0 && !TheaterTime.IsValidZone(theater.TimeZone))
             {
-                <MudText Typo="Typo.caption" Class="muted ">Times are UTC.</MudText>
+                <MudText Typo="Typo.caption" Class="muted">Times are UTC.</MudText>
             }
         </MudItem>
 
@@ -141,7 +141,7 @@ else
                 <MudText Typo="Typo.h6" Class="mb-2">Screens</MudText>
                 @if (theater.Screens.Count == 0)
                 {
-                    <MudText Class="muted ">No screens listed.</MudText>
+                    <MudText Class="muted">No screens listed.</MudText>
                 }
                 else
                 {
