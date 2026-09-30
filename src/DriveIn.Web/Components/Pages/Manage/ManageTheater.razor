@@ -7,38 +7,14 @@
 
 <PageTitle>@(theater?.Name ?? "Theater") · Manage · Drive-In Online</PageTitle>
 
-<p><a href="manage">&larr; Manage</a></p>
-
 @if (theater is null)
 {
     <Alerts Error="@Error" />
-    @if (Error is null) { <p>Loading…</p> }
+    @if (Error is null) { <MudProgressCircular Indeterminate Size="Size.Small" aria-label="Loading theater" /> }
 }
 else
 {
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-        <h1 class="mb-0">@theater.Name</h1>
-        <div class="d-flex gap-2">
-            @if (theater.IsActive)
-            {
-                <a class="btn btn-outline-secondary" href="theaters/@theater.Slug">View public page</a>
-            }
-            @if (Can(TheaterPermissions.AdmitGuests) || Can(TheaterPermissions.SellAtGate))
-            {
-                <a class="btn btn-outline-primary" href="manage/@theater.Id/gate">Gate</a>
-            }
-            <a class="btn btn-outline-primary" href="manage/@theater.Id/schedule">Schedule</a>
-            <a class="btn btn-outline-primary" href="manage/@theater.Id/pricing">Pricing</a>
-            @if (EmployeeService.ListingPermissions.Any(Can) || Can(TheaterPermissions.InviteEmployees))
-            {
-                <a class="btn btn-outline-primary" href="manage/@theater.Id/employees">Employees</a>
-            }
-            @if (Can(TheaterPermissions.ManageRoles))
-            {
-                <a class="btn btn-outline-primary" href="manage/@theater.Id/roles">Roles</a>
-            }
-        </div>
-    </div>
+    <ManageHeader Theater="theater" Title="@theater.Name" Current="overview" />
 
     <Alerts Error="@Error" Success="@Success" />
 
@@ -46,51 +22,17 @@ else
 
     @if (permissions.Count == 0)
     {
-        <div class="alert alert-info">
+        <MudAlert Severity="Severity.Info" Class="mb-3">
             You don't have any permissions at this theater yet. Ask your manager or the owner to assign you a role.
-        </div>
+        </MudAlert>
     }
 
-    @if (Can(TheaterPermissions.EditProfile))
-    {
-        <section class="mb-5">
-            <h2 class="h4">Profile</h2>
-            <div class="mb-4">
-                <label class="form-label" for="logo-file">Logo</label>
-                <div class="d-flex flex-wrap align-items-center gap-3">
-                    @if (theater.LogoUrl is not null)
-                    {
-                        <img src="@theater.LogoUrl" alt="@theater.Name logo" style="max-height: 6rem; max-width: 12rem; object-fit: contain" class="border rounded p-1" />
-                    }
-                    else
-                    {
-                        <span class="text-muted">No logo yet.</span>
-                    }
-                    <div>
-                        <InputFile id="logo-file" class="form-control form-control-sm" accept=".jpg,.jpeg,.png,.gif,image/jpeg,image/png,image/gif"
-                                   OnChange="UploadLogoAsync" />
-                        <div class="form-text">JPG, GIF or PNG, up to @(TheaterLogo.MaxBytes / (1024 * 1024)) MB. Shown on your theater's public page.</div>
-                    </div>
-                    @if (theater.LogoUrl is not null)
-                    {
-                        <button class="btn btn-sm btn-outline-danger" @onclick="RemoveLogoAsync">Remove logo</button>
-                    }
-                </div>
-            </div>
-            <EditForm Model="profile" OnValidSubmit="SaveProfileAsync">
-                <DataAnnotationsValidator />
-                <TheaterProfileFields Model="profile" />
-                <button type="submit" class="btn btn-primary mt-3">Save profile</button>
-            </EditForm>
-        </section>
-    }
-
-    <section>
-        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-            <h2 class="h4 mb-0">Screens</h2>
-            <a class="btn btn-sm btn-outline-primary" href="manage/@theater.Id/lot">Lot map</a>
+    <section class="manage-section">
+        <div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2">
+            <MudText Typo="Typo.h5">Screens</MudText>
+            <MudLink Href="@($"manage/{theater.Id}/lot")">Lot map</MudLink>
         </div>
-        <table class="table align-middle">
+        <MudSimpleTable Dense Outlined Class="manage-table">
             <thead>
                 <tr>
                     @if (CanManageScreens) { <th style="width: 6rem"></th> }
@@ -107,28 +49,28 @@ else
                     <tr @key="screen.Id">
                         @if (CanManageScreens)
                         {
-                            <td>
-                                <button class="btn btn-sm btn-link px-1" disabled="@first" title="Move up" aria-label="Move up" @onclick="() => MoveAsync(screen, -1)">▲</button>
-                                <button class="btn btn-sm btn-link px-1" disabled="@last" title="Move down" aria-label="Move down" @onclick="() => MoveAsync(screen, 1)">▼</button>
+                            <td class="text-nowrap">
+                                <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward" Size="Size.Small" Disabled="@first" aria-label="Move up" OnClick="() => MoveAsync(screen, -1)" />
+                                <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward" Size="Size.Small" Disabled="@last" aria-label="Move down" OnClick="() => MoveAsync(screen, 1)" />
                             </td>
                         }
-                        <td><a href="manage/@theater.Id/screens/@screen.Id">@screen.Name</a></td>
+                        <td><MudLink Href="@($"manage/{theater.Id}/screens/{screen.Id}")">@screen.Name</MudLink></td>
                         <td>@SpotLabels.Example(screen.LabelScheme)</td>
                         <td class="text-end">@screen.RowSpots.Count</td>
                         <td class="text-end">@screen.SpotCount</td>
                         @if (CanManageScreens)
                         {
-                            <td class="text-end">
-                                <a class="btn btn-sm btn-outline-secondary" href="manage/@theater.Id/screens/@screen.Id">Set up</a>
+                            <td class="text-end text-nowrap">
+                                <MudButton Href="@($"manage/{theater.Id}/screens/{screen.Id}")" Size="Size.Small" Variant="Variant.Outlined">Set up</MudButton>
                                 @if (theater.Screens.Count > 1)
                                 {
                                     @if (confirmDeleteId == screen.Id)
                                     {
-                                        <button class="btn btn-sm btn-danger" @onclick="() => DeleteScreenAsync(screen)">Confirm delete</button>
+                                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Error" OnClick="() => DeleteScreenAsync(screen)">Confirm delete</MudButton>
                                     }
                                     else
                                     {
-                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => confirmDeleteId = screen.Id">Delete</button>
+                                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="() => confirmDeleteId = screen.Id">Delete</MudButton>
                                     }
                                 }
                             </td>
@@ -139,20 +81,60 @@ else
                 {
                     <tr>
                         <td></td>
-                        <td colspan="4"><input class="form-control form-control-sm" placeholder="New screen name" @bind="newScreenName" maxlength="100" /></td>
-                        <td class="text-end"><button class="btn btn-sm btn-success" @onclick="AddScreenAsync">Add screen</button></td>
+                        <td colspan="4">
+                            <MudTextField T="string" @bind-Value="newScreenName" Placeholder="New screen name" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                          MaxLength="100" aria-label="New screen name" />
+                        </td>
+                        <td class="text-end"><MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="AddScreenAsync">Add screen</MudButton></td>
                     </tr>
                 }
             </tbody>
-        </table>
+        </MudSimpleTable>
         @if (CanManageScreens)
         {
-            <p class="text-muted small">
+            <MudText Typo="Typo.caption" Class="muted d-block mt-1">
                 A theater has 1 to @Screen.MaxPerTheater screens. The order sets where each screen sits on the lot map:
                 the first two face each other across the central building, and the next two face each other at 90 degrees.
-            </p>
+            </MudText>
         }
     </section>
+
+    @if (Can(TheaterPermissions.EditProfile))
+    {
+        <section class="manage-section">
+            <MudText Typo="Typo.h5">Profile</MudText>
+
+            <MudPaper Outlined Class="pa-3 mb-3">
+                <MudText Typo="Typo.h6" Class="mb-1">Logo</MudText>
+                <div class="d-flex flex-wrap align-items-center gap-3">
+                    @if (theater.LogoUrl is not null)
+                    {
+                        <img src="@theater.LogoUrl" alt="@theater.Name logo" style="max-height: 5rem; max-width: 10rem; object-fit: contain" class="logo-preview" />
+                    }
+                    else
+                    {
+                        <span class="muted">No logo yet.</span>
+                    }
+                    <MudFileUpload T="IBrowserFile" Accept=".jpg,.jpeg,.png,.gif" FilesChanged="UploadLogoAsync">
+                        <ActivatorContent>
+                            <MudButton Variant="Variant.Outlined" Size="Size.Small">@(theater.LogoUrl is null ? "Upload logo" : "Replace logo")</MudButton>
+                        </ActivatorContent>
+                    </MudFileUpload>
+                    @if (theater.LogoUrl is not null)
+                    {
+                        <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small" OnClick="RemoveLogoAsync">Remove logo</MudButton>
+                    }
+                </div>
+                <MudText Typo="Typo.caption" Class="muted d-block mt-1">JPG, GIF or PNG, up to @(TheaterLogo.MaxBytes / (1024 * 1024)) MB. Shown on your theater's public page.</MudText>
+            </MudPaper>
+
+            <EditForm Model="profile" OnValidSubmit="SaveProfileAsync">
+                <DataAnnotationsValidator />
+                <TheaterProfileFields Model="profile" />
+                <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" Class="mt-3">Save profile</MudButton>
+            </EditForm>
+        </section>
+    }
 }
 
 @code {
@@ -194,9 +176,8 @@ else
         theater = await Theaters.GetForManageAsync(User, Id);
     }, "Profile saved.");
 
-    private Task UploadLogoAsync(InputFileChangeEventArgs e) => RunAsync(async () =>
+    private Task UploadLogoAsync(IBrowserFile file) => RunAsync(async () =>
     {
-        var file = e.File;
         if (file.Size > TheaterLogo.MaxBytes)
             throw new AppValidationException($"Logos can be at most {TheaterLogo.MaxBytes / (1024 * 1024)} MB.");
         using var buffer = new MemoryStream();

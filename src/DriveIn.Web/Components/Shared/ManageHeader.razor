@@ -1,0 +1,70 @@
+@* The top of every manage page: where you are, the page title, and tabs to the other manage pages that this person's
+   permissions allow. The service behind each page is still the real check. *@
+@inject TheaterAccess Access
+
+<div class="manage-head">
+    <div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2">
+        <MudText Class="muted">
+            <MudLink Href="manage">Manage</MudLink>
+            @if (Current != "overview")
+            {
+                <span> / </span><MudLink Href="@($"manage/{Theater.Id}")">@Theater.Name</MudLink>
+            }
+            @if (Theater.IsDemo) { <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="ms-2 my-0">Demo</MudChip> }
+            @if (!Theater.IsActive) { <MudChip T="string" Size="Size.Small" Class="ms-2 my-0">Inactive</MudChip> }
+        </MudText>
+        @if (Theater.IsActive)
+        {
+            <MudLink Href="@($"theaters/{Theater.Slug}")">View public page</MudLink>
+        }
+    </div>
+
+    <MudText Typo="Typo.h4" Component="h1" Class="mt-1 mb-2">@Title</MudText>
+
+    <nav class="manage-tabs" aria-label="Manage @Theater.Name">
+        @foreach (var tab in Tabs)
+        {
+            <a class="manage-tab @(tab.Key == Current ? "active" : null)" href="@tab.Href" aria-current="@(tab.Key == Current ? "page" : null)">@tab.Text</a>
+        }
+    </nav>
+</div>
+
+@code {
+    private sealed record Tab(string Key, string Href, string Text);
+
+    [Parameter, EditorRequired] public Theater Theater { get; set; } = default!;
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    // Which tab is active: "overview", "schedule", "pricing", "lot", "gate", "employees" or "roles". Leave null on
+    // pages that aren't a tab (a screen's setup).
+    [Parameter] public string? Current { get; set; } = "overview";
+
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private IReadOnlySet<string> permissions = new HashSet<string>();
+
+    private bool Can(string permission) => permissions.Contains(permission);
+
+    private IEnumerable<Tab> Tabs
+    {
+        get
+        {
+            yield return new("overview", $"manage/{Theater.Id}", "Overview");
+            yield return new("schedule", $"manage/{Theater.Id}/schedule", "Schedule");
+            yield return new("pricing", $"manage/{Theater.Id}/pricing", "Pricing");
+            yield return new("lot", $"manage/{Theater.Id}/lot", "Lot map");
+            if (Can(TheaterPermissions.AdmitGuests) || Can(TheaterPermissions.SellAtGate))
+                yield return new("gate", $"manage/{Theater.Id}/gate", "Gate");
+            if (EmployeeService.ListingPermissions.Any(Can) || Can(TheaterPermissions.InviteEmployees))
+                yield return new("employees", $"manage/{Theater.Id}/employees", "Employees");
+            if (Can(TheaterPermissions.ManageRoles))
+                yield return new("roles", $"manage/{Theater.Id}/roles", "Roles");
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var user = (await AuthState).User;
+        permissions = await Access.GetPermissionsAsync(user, Theater);
+    }
+}

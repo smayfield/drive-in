@@ -1,23 +1,28 @@
 @* The editable cells of an add-on row (name, description, type, amount, active) on the pricing page. *@
 
-<td><input class="form-control form-control-sm" @bind="Draft.Name" maxlength="60" placeholder="e.g. Outside food" aria-label="Add-on name" /></td>
-<td><input class="form-control form-control-sm" @bind="Draft.Description" maxlength="200" aria-label="Add-on description" /></td>
+<td><MudTextField T="string" @bind-Value="Draft.Name" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="60" Placeholder="e.g. Outside food" aria-label="Add-on name" /></td>
+<td><MudTextField T="string" @bind-Value="Draft.Description" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="200" aria-label="Add-on description" /></td>
 <td>
-    <select class="form-select form-select-sm" @bind="Draft.Kind" aria-label="Add-on type">
+    <MudSelect T="AddOnKind" @bind-Value="Draft.Kind" Variant="Variant.Outlined" Margin="Margin.Dense" aria-label="Add-on type">
         @foreach (var kind in Enum.GetValues<AddOnKind>())
         {
-            <option value="@kind">@ManagePricing.KindName(kind)</option>
+            <MudSelectItem T="AddOnKind" Value="@kind">@ManagePricing.KindName(kind)</MudSelectItem>
         }
-    </select>
+    </MudSelect>
 </td>
 <td>
-    <div class="input-group input-group-sm">
-        @if (Draft.Kind != AddOnKind.PercentDiscount) { <span class="input-group-text">$</span> }
-        <input class="form-control" type="number" min="0" step="0.01" @bind="Draft.Amount" aria-label="Amount" />
-        @if (Draft.Kind == AddOnKind.PercentDiscount) { <span class="input-group-text">%</span> }
-    </div>
+    @if (Draft.Kind == AddOnKind.PercentDiscount)
+    {
+        <MudNumericField T="decimal" @bind-Value="Draft.Amount" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0m" Format="F2" HideSpinButtons
+                         Adornment="Adornment.End" AdornmentText="%" aria-label="Amount" />
+    }
+    else
+    {
+        <MudNumericField T="decimal" @bind-Value="Draft.Amount" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0m" Format="F2" HideSpinButtons
+                         Adornment="Adornment.Start" AdornmentText="$" aria-label="Amount" />
+    }
 </td>
-<td><input class="form-check-input" type="checkbox" @bind="Draft.IsActive" aria-label="Active" /></td>
+<td><MudCheckBox T="bool" @bind-Value="Draft.IsActive" Color="Color.Primary" Dense aria-label="Active" /></td>
 
 @code {
     [Parameter, EditorRequired] public AddOnDraft Draft { get; set; } = default!;

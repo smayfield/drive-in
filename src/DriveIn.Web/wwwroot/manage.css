@@ -1,0 +1,58 @@
+/* Manage and admin pages: plain, dense and quick to scan. No decoration beyond the tab bar. */
+
+.manage-head { margin-bottom: 1.25rem; }
+
+.manage-tabs {
+    display: flex;
+    gap: 0.25rem;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+}
+.manage-tab {
+    margin-bottom: -1px;
+    padding: 0.5rem 0.9rem;
+    border-bottom: 2px solid transparent;
+    color: var(--mud-palette-text-secondary);
+    font-weight: 500;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.manage-tab:hover { color: var(--mud-palette-text-primary); }
+.manage-tab.active { border-bottom-color: var(--mud-palette-primary); color: var(--mud-palette-text-primary); }
+
+/* A section on a manage page: a heading and its content, spaced consistently. */
+.manage-section { margin-bottom: 2rem; }
+.manage-section > .mud-typography-h5 { margin-bottom: 0.5rem; }
+
+/* Tables of inline-editable rows. */
+.manage-table td, .manage-table th { vertical-align: middle; }
+.manage-table .mud-input-control { margin: 0; }
+
+/* A row in a list of roles. */
+.role-row { padding: 0.75rem 1rem; }
+.role-row + .role-row { border-top: 1px solid var(--mud-palette-lines-default); }
+
+.step-done { color: var(--mud-palette-success); }
+.logo-preview { padding: 0.25rem; border: 1px solid var(--mud-palette-lines-default); border-radius: 6px; background: #fff; }
+
+.row-editing { background: color-mix(in srgb, var(--mud-palette-warning) 12%, transparent); }
+
+/* The gate: used on a phone in the dark, so big targets and unmistakable status. */
+.gate-input {
+    flex: 1;
+    min-width: 0;
+    padding: 0.6rem 0.85rem;
+    border: 1px solid var(--mud-palette-lines-inputs);
+    border-radius: 6px;
+    background: var(--mud-palette-surface);
+    color: var(--mud-palette-text-primary);
+    font-family: Menlo, Consolas, monospace;
+    font-size: 1.25rem;
+    letter-spacing: 0.08em;
+}
+.gate-input:focus { outline: 2px solid var(--mud-palette-primary); outline-offset: 1px; }
+.gate-spot { font-size: 1.75rem; font-weight: 700; }
+.gate-showing { text-transform: none; text-align: left; }
+
+/* A form field that grows to fit a row but stops at a sensible width. Class (not Style) so it lands on the control. */
+.field-grow { flex: 1 1 14rem; min-width: 0; max-width: 24rem; }
