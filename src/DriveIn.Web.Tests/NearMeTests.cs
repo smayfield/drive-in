@@ -145,6 +145,22 @@ public class NearMeTests
     }
 
     [Fact]
+    public async Task Clearing_the_coordinates_looks_them_up_again()
+    {
+        await using var app = new TestApp();
+        var owner = await app.CreateUserAsync("owner@example.com");
+        var theater = await PlaceAsync(app, "Starlight", RoundRock, ownerId: owner.Id);
+        app.Geocoder.Places["1 Main St, Austin, US"] = Austin;
+        var theaters = app.Get<TheaterService>();
+
+        var input = theater.CopyForEdit();
+        (input.AddressLine1, input.City, input.Latitude, input.Longitude) = ("1 Main St", "Austin", null, null);
+        await theaters.UpdateProfileAsync(Principals.For(owner), input);
+
+        Assert.Equal(Austin, Geo.Of(await theaters.GetForManageAsync(Principals.For(owner), theater.Id)));
+    }
+
+    [Fact]
     public async Task Signing_up_looks_up_the_city()
     {
         await using var app = new TestApp();

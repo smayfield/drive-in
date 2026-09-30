@@ -128,7 +128,8 @@ builder.Services.AddSingleton(TimeProvider.System);
 // Theater coordinates and "near me" searches. Nominatim (OpenStreetMap) needs no key but allows one request a second.
 builder.Services.AddMemoryCache();
 builder.Services.Configure<GeocodingOptions>(builder.Configuration.GetSection(GeocodingOptions.Section));
-if (builder.Configuration[$"{GeocodingOptions.Section}:Provider"] is null or "Nominatim")
+var geocodingProvider = builder.Configuration[$"{GeocodingOptions.Section}:Provider"] ?? "Nominatim";
+if (geocodingProvider.Equals("Nominatim", StringComparison.OrdinalIgnoreCase))
 {
     builder.Services.AddHttpClient(NominatimGeocoder.HttpClientName, (sp, client) =>
     {
@@ -141,9 +142,14 @@ if (builder.Configuration[$"{GeocodingOptions.Section}:Provider"] is null or "No
     builder.Services.AddSingleton<IGeocoder, NominatimGeocoder>();
     builder.Services.AddHostedService<TheaterGeocodingBackfill>();
 }
-else
+else if (geocodingProvider.Equals("None", StringComparison.OrdinalIgnoreCase))
 {
     builder.Services.AddSingleton<IGeocoder, NullGeocoder>();
+}
+else
+{
+    // Fail at startup rather than quietly stop finding theaters.
+    throw new InvalidOperationException($"Unknown {GeocodingOptions.Section}:Provider '{geocodingProvider}'. Use Nominatim or None.");
 }
 builder.Services.AddScoped<TheaterService>();
 builder.Services.AddScoped<ScreenService>();

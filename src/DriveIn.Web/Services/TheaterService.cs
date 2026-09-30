@@ -147,7 +147,7 @@ public sealed class TheaterService(
         var theater = await db.Theaters.FirstOrDefaultAsync(t => t.Id == input.Id)
             ?? throw new NotFoundException("Theater not found.");
         await auth.RequireAsync(user, theater, TheaterPermissions.EditProfile);
-        var (addressChanged, coordinatesEdited) = (!Geo.SameAddress(theater, input), !SameCoordinates(theater, input));
+        var (addressChanged, coordinatesEdited) = (!Geo.SameAddress(theater, input), CoordinatesEntered(theater, input));
         CopyProfile(input, theater);
         await EnsureSeasonCoversShowingsAsync(db, theater);
         await LocateAsync(geocoder, theater, addressChanged, coordinatesEdited);
@@ -280,7 +280,7 @@ public sealed class TheaterService(
         var theater = await db.Theaters.FirstOrDefaultAsync(t => t.Id == input.Id)
             ?? throw new NotFoundException("Theater not found.");
         await EnsureSlugFreeAsync(db, input.Slug, exceptId: theater.Id);
-        var (addressChanged, coordinatesEdited) = (!Geo.SameAddress(theater, input), !SameCoordinates(theater, input));
+        var (addressChanged, coordinatesEdited) = (!Geo.SameAddress(theater, input), CoordinatesEntered(theater, input));
         CopyProfile(input, theater);
         await EnsureSeasonCoversShowingsAsync(db, theater);
         await LocateAsync(geocoder, theater, addressChanged, coordinatesEdited);
@@ -371,8 +371,9 @@ public sealed class TheaterService(
 
     // --- Location ---
 
-    // Looks up the coordinates from the address when it changed or there are none yet, unless the editor entered
-    // them. A miss leaves them blank (the old ones belonged to the old address) and never blocks the save.
+    // Looks up the coordinates from the address when it changed or there are none yet (including when the editor
+    // cleared them), unless the editor entered them. A miss leaves them blank (the old ones belonged to the old address)
+    // and never blocks the save.
     internal static async Task LocateAsync(IGeocoder geocoder, Theater theater, bool addressChanged, bool coordinatesEdited)
     {
         if (coordinatesEdited || (!addressChanged && Geo.Of(theater) is not null))
@@ -382,7 +383,9 @@ public sealed class TheaterService(
         (theater.Latitude, theater.Longitude) = (point?.Latitude, point?.Longitude);
     }
 
-    private static bool SameCoordinates(Theater a, Theater b) => a.Latitude == b.Latitude && a.Longitude == b.Longitude;
+    // Whether the editor typed new coordinates. Clearing them isn't entering them: it asks for a fresh lookup.
+    private static bool CoordinatesEntered(Theater saved, Theater input) =>
+        Geo.Of(input) is not null && (input.Latitude != saved.Latitude || input.Longitude != saved.Longitude);
 
     // For TheaterGeocodingBackfill: locates active theaters that have an address but no coordinates. Returns how many
     // were found.
