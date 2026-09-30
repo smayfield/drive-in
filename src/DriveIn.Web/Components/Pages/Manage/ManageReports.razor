@@ -349,7 +349,8 @@ else
         }
     }
 
-    // Only rendered once a report is showing: the download is for the dates on screen.
+    // Only rendered once a report is showing: the download is for the dates on screen. Relative to <base href="/">
+    // (App.razor), like every manage link, so it resolves from the site root, not this page.
     private string CsvHref(string kind)
     {
         var report = sales ?? throw new InvalidOperationException("No report is showing.");
