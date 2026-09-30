@@ -529,6 +529,8 @@ public sealed class BillingService(
     private static async Task<Invoice> RequireDraftAsync(ApplicationDbContext db, int invoiceId)
     {
         var invoice = await LoadInvoice(db.Invoices).FirstOrDefaultAsync(i => i.Id == invoiceId) ?? throw new NotFoundException("Invoice not found.");
+        if (invoice.Status == InvoiceStatus.Void)
+            throw new AppValidationException("This invoice is void, so it can't be changed.");
         if (invoice.Status != InvoiceStatus.Draft)
             throw new AppValidationException($"{invoice.DisplayNumber} has been issued, so it can't be changed. Void it and draft another instead.");
         return invoice;
