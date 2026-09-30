@@ -48,11 +48,13 @@ namespace DriveIn.Web.Data.Migrations
                 principalColumn: "id",
                 onDelete: ReferentialAction.SetNull);
 
-            // Tickets already sold get a gate code too. The subquery refers to the row so each gets its own code.
+            // Tickets already sold get a gate code too, from ShortCodes.Alphabet as it is now (a migration is a
+            // snapshot). The subquery refers to the row so each ticket gets its own code.
             migrationBuilder.Sql("""
                 UPDATE tickets SET short_code = (
-                    SELECT string_agg(substr('ABCDEFGHJKMNPQRTUVWXYZ2346789', 1 + floor(random() * 29)::int, 1), '')
-                    FROM generate_series(1, 4) WHERE tickets.id IS NOT NULL)
+                    SELECT string_agg(substr(a.chars, 1 + floor(random() * length(a.chars))::int, 1), '' ORDER BY g)
+                    FROM (SELECT 'ABCDEFGHJKMNPQRTUVWXYZ2346789'::text AS chars) a, generate_series(1, 4) g
+                    WHERE tickets.id IS NOT NULL)
                 WHERE status = 'Sold' AND short_code IS NULL;
                 """);
 
