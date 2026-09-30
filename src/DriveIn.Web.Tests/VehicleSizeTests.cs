@@ -151,7 +151,7 @@ public class VehicleSizeTests
     public void The_default_marks_the_back_half_of_the_rows()
     {
         Assert.Equal([301, 302, 401], Screen.BackHalfLarge([2, 2, 2, 1]));
-        Assert.Equal([301, 401, 501], Screen.BackHalfLarge([1, 1, 1, 1, 1])); // an odd middle row goes to the front
+        Assert.Equal([301, 401, 501], Screen.BackHalfLarge([1, 1, 1, 1, 1])); // an odd middle row counts as back half
         Assert.Equal([101, 102], Screen.BackHalfLarge([2]));
         Assert.Empty(Screen.BackHalfLarge([]));
     }
