@@ -116,7 +116,7 @@ else
                                             <h3 class="h5 mb-0">Spot @hold.SpotLabel</h3>
                                             <span class="badge text-bg-warning" role="timer" aria-live="off">held @Remaining</span>
                                         </div>
-                                        <TicketChoices Prices="sale.Prices" AddOns="sale.AddOns" @bind-OptionId="optionId" @bind-AddOnIds="addOnIds" IdPrefix="gate" />
+                                        <TicketChoices Prices="sale.Prices" AddOns="sale.AddOns" @bind-OptionId="optionId" @bind-AddOnIds="addOnIds" />
                                         <div class="d-flex flex-wrap gap-2">
                                             <button class="btn btn-success btn-lg" disabled="@(busy || Quote is null)" @onclick="SellAsync">
                                                 @(busy ? "Processing…" : Quote is { Total: > 0 } q ? $"Charge card {Money.Format(q.Total)}" : "Sell (no charge)")

@@ -53,7 +53,6 @@
     [Parameter] public EventCallback<int> OptionIdChanged { get; set; }
     [Parameter, EditorRequired] public IReadOnlySet<int> AddOnIds { get; set; } = new HashSet<int>();
     [Parameter] public EventCallback<IReadOnlySet<int>> AddOnIdsChanged { get; set; }
-    [Parameter] public string IdPrefix { get; set; } = "ticket";
 
     public static TicketQuote? Quote(PriceSchedule prices, IEnumerable<AddOn> addOns, int optionId, IReadOnlySet<int> addOnIds) =>
         prices.Options.FirstOrDefault(o => o.Id == optionId) is PriceOption option
