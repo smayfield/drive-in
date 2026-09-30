@@ -1,86 +1,57 @@
 /* Theme tokens. Keep in step with Components/Layout/DriveInTheme.cs (MudBlazor) and with marketing.css. The light or
-   dark values apply from theme.js, which follows the visitor's OS/browser setting. Bootstrap variables are themed here
-   too, so pages that haven't moved to MudBlazor yet follow the same scheme. */
-:root, [data-bs-theme="light"] {
+   dark values apply from theme.js, which follows the visitor's OS/browser setting. The static pages (account, Invite,
+   Error) can't use MudBlazor's palette variables, so they use these; static.css builds their components from them. */
+:root, [data-theme="light"] {
     --di-bg: #eceff6;
     --di-surface: #ffffff;
     --di-ink: #14172b;
     --di-muted: #4b5070;
     --di-line: #d5d9e6;
+    --di-line-strong: #a9afc4;
     --di-primary: #c8283b;
     --di-on-primary: #ffffff;
     --di-accent: #0b7a8a;
+    --di-accent-hover: #075c69;
     --di-bulb: #ffd66b;
     --di-night: #0a0d1f;
+    --di-appbar: #0a0d1f;
+    --di-danger: #c62828;
+    --di-success: #1f7a4d;
+    --di-info: #1565c0;
+    --di-warning: #8a5a00;
 
-    --bs-body-font-family: Barlow, system-ui, -apple-system, "Segoe UI", sans-serif;
-    --bs-body-bg: var(--di-bg);
-    --bs-body-color: var(--di-ink);
-    --bs-secondary-color: var(--di-muted);
-    --bs-border-color: var(--di-line);
-    --bs-link-color: var(--di-accent);
-    --bs-link-color-rgb: 11, 122, 138;
-    --bs-link-hover-color: #075c69;
-    --bs-link-hover-color-rgb: 7, 92, 105;
+    --font-body: Barlow, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
-[data-bs-theme="dark"] {
+[data-theme="dark"] {
     --di-bg: #0a0d1f;
     --di-surface: #151a38;
     --di-ink: #efedf6;
     --di-muted: #a8a6bd;
     --di-line: #2a2f52;
+    --di-line-strong: #4a5080;
     --di-primary: #ff5468;
     --di-on-primary: #0a0d1f;
     --di-accent: #5ef2ff;
-
-    --bs-body-bg: var(--di-bg);
-    --bs-body-color: var(--di-ink);
-    --bs-secondary-color: var(--di-muted);
-    --bs-tertiary-bg: #12163a;
-    --bs-secondary-bg: #1b2148;
-    --bs-border-color: var(--di-line);
-    --bs-link-color: var(--di-accent);
-    --bs-link-color-rgb: 94, 242, 255;
-    --bs-link-hover-color: #a6f7ff;
-    --bs-link-hover-color-rgb: 166, 247, 255;
+    --di-accent-hover: #a6f7ff;
+    --di-appbar: #070918;
+    --di-danger: #ff6b6b;
+    --di-success: #3fbf7f;
+    --di-info: #5ec8ff;
+    --di-warning: #ffd66b;
 }
 
 html, body {
-    font-family: var(--bs-body-font-family);
+    font-family: var(--font-body);
     background: var(--di-bg);
     color: var(--di-ink);
 }
 
-.btn-primary {
-    --bs-btn-color: var(--di-on-primary);
-    --bs-btn-bg: var(--di-primary);
-    --bs-btn-border-color: var(--di-primary);
-    --bs-btn-hover-color: var(--di-on-primary);
-    --bs-btn-hover-bg: color-mix(in srgb, var(--di-primary) 88%, black);
-    --bs-btn-hover-border-color: color-mix(in srgb, var(--di-primary) 88%, black);
-    --bs-btn-active-color: var(--di-on-primary);
-    --bs-btn-active-bg: color-mix(in srgb, var(--di-primary) 80%, black);
-    --bs-btn-active-border-color: color-mix(in srgb, var(--di-primary) 80%, black);
-    --bs-btn-disabled-bg: var(--di-primary);
-    --bs-btn-disabled-border-color: var(--di-primary);
-}
-
-.card, .list-group, .modal-content, .dropdown-menu {
-    --bs-card-bg: var(--di-surface);
-    --bs-list-group-bg: var(--di-surface);
-    --bs-list-group-color: var(--di-ink);
-    --bs-list-group-border-color: var(--di-line);
-    --bs-card-border-color: var(--di-line);
-}
-
-.btn:focus-visible, .form-control:focus, .form-select:focus, .form-check-input:focus, a:focus-visible {
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
     outline: 2px solid var(--di-accent);
     outline-offset: 2px;
-    box-shadow: none;
 }
 
-/* The interactive app shell (Components/Layout/AppLayout.razor). Deliberately plain: this is the working part. */
 .app-appbar { border-bottom: 1px solid rgba(255, 214, 107, 0.16); }
 
 .app-brand {
@@ -164,38 +135,6 @@ h1:focus {
     .blazor-error-boundary::after {
         content: "An error has occurred."
     }
-
-.darker-border-checkbox.form-check-input {
-    border-color: #929292;
-}
-
-.form-floating > .form-control-plaintext::placeholder, .form-floating > .form-control::placeholder {
-    color: var(--bs-secondary-color);
-    text-align: end;
-}
-
-.form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
-    text-align: start;
-}
-/* ---------- Drive-In app chrome ---------- */
-
-.app-navbar {
-    background: #0a0d1f;
-    border-bottom: 3px solid #ffd66b;
-}
-
-.app-navbar .brand {
-    font-family: "Bungee", system-ui, sans-serif;
-    color: #ffd66b;
-    letter-spacing: 0.02em;
-}
-
-.app-navbar .navbar-toggler { cursor: pointer; }
-
-/* The toggler is a checkbox so it also works on statically rendered pages. */
-.nav-toggle:checked ~ .navbar-collapse { display: block; }
-
-.app-navbar form .nav-link { border: 0; }
 
 /* Blazor's error bar: hidden until the framework shows it. */
 #blazor-error-ui {

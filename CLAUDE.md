@@ -8,15 +8,16 @@ See README.md for the full picture. Conventions worth knowing before changing co
   the HTTP response for cookies), marketing and legal pages, Invite, Error and NotFound. So don't put `@rendermode` on pages.
 - **UI:** MudBlazor (MIT) for every interactive page, in `AppLayout`. Static pages use `AccountLayout` /
   `MarketingLayout` and plain CSS instead, since MudBlazor needs an interactive circuit. Light and dark follow the
-  OS: `wwwroot/theme.js` sets `data-bs-theme` and a `di-scheme` cookie (so the server prerenders the right palette),
+  OS: `wwwroot/theme.js` sets `data-theme` and a `di-scheme` cookie (so the server prerenders the right palette),
   and `MudThemeProvider` follows the system. Keep `Layout/DriveInTheme.cs`, the tokens at the top of `wwwroot/app.css`
   and `marketing.css` in step. Public pages (theaters, showings, tickets) are the flashy ones (`wwwroot/public.css`: the
   marquee header and the ticket `Stub`); manage and admin pages stay plain, dense MudBlazor. Gotchas: use
   `Class="muted"` for muted text (`Color.Secondary` is the teal accent); copy a `@for` variable into a local before using
   it inside a component's child content (it's rendered after the loop moves on); MudBlazor's `lg` breakpoint is 1280px,
-  not Bootstrap's 992px; on a Mud input, `Style` lands on the inner input root, so use `Class` (see `.field-grow` in `manage.css`) for
-  layout like flex sizing. Every manage page starts with `ManageHeader` and every admin page with `AdminHeader` (title plus tabs). Bootstrap is still
-  loaded, but only the static pages (account, Invite, Error) still use it; the last step is restyling those and dropping it.
+  not the 992px of the old Bootstrap grid; on a Mud input, `Style` lands on the inner input root, so use `Class` (see `.field-grow` in `manage.css`) for
+  layout like flex sizing. Every manage page starts with `ManageHeader` and every admin page with `AdminHeader` (title plus tabs). There is no Bootstrap:
+  `wwwroot/static.css` has the base rules, grid, and the few components (buttons, forms, alerts, cards) the static pages use, plus
+  the Bootstrap-named utilities MudBlazor lacks (`text-end`, `justify-content-between`, ...). Add the one rule a page needs there.
 - **Authorization lives in services, not just pages.** Every `Services/*` method takes the acting
   `ClaimsPrincipal` and checks it: `Guard.RequireAdmin` for site-admin work, or
   `auth.RequireAsync(user, theater, TheaterPermissions.X)` for anything done at a theater. Pages derive
