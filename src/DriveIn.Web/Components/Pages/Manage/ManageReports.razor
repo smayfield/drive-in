@@ -349,8 +349,12 @@ else
         }
     }
 
-    private string CsvHref(string kind) =>
-        $"manage/{Id}/reports/{kind}.csv?from={Iso(sales!.From)}&to={Iso(sales.To)}";
+    // Only rendered once a report is showing: the download is for the dates on screen.
+    private string CsvHref(string kind)
+    {
+        var report = sales ?? throw new InvalidOperationException("No report is showing.");
+        return $"manage/{Id}/reports/{kind}.csv?from={Iso(report.From)}&to={Iso(report.To)}";
+    }
 
     private static string Iso(DateOnly date) => date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
 
