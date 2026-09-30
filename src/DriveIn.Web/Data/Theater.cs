@@ -101,6 +101,11 @@ public static class Seasons
         (null, DateOnly closes) => $"through {closes:MMM d, yyyy}",
         _ => "year-round",
     };
+
+    // Whether the season is open on any day of the calendar month starting on monthStart. The plan bills these months.
+    public static bool TouchesMonth(Theater theater, DateOnly monthStart) =>
+        (theater.SeasonOpensOn is not DateOnly opens || opens <= monthStart.AddMonths(1).AddDays(-1))
+        && (theater.SeasonClosesOn is not DateOnly closes || closes >= monthStart);
 }
 
 // Stored by name, so members can be added but not renamed.

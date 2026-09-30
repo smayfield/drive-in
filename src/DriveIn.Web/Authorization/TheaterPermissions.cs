@@ -27,6 +27,8 @@ public static class TheaterPermissions
     public const string ManageGiftCards = "giftcards.manage";
     public const string ViewGiftCards = "giftcards.view";
     public const string ViewReports = "reports.view";
+    public const string ViewBilling = "billing.view";
+    public const string ManageBilling = "billing.manage";
 
     public static readonly IReadOnlyList<TheaterPermission> All =
     [
@@ -47,11 +49,16 @@ public static class TheaterPermissions
         new(ManageGiftCards, "Tickets", "Manage gift cards", "Turn gift card sales on or off for the theater. Redeeming a gift card at the gate needs \"Sell tickets at the gate\"."),
         new(ViewGiftCards, "Tickets", "View gift cards", "See the gift cards sold, who bought each, and what balance is left (codes are shown as their last four characters only)."),
         new(ViewReports, "Reports", "View reports", "See ticket sales, attendance and gift card reports (sold, redeemed and still owed) for any dates, and download them as CSV."),
+        new(ViewBilling, "Billing", "View billing", "See the theater's plan, its invoices and receipts, and what's owed."),
+        new(ManageBilling, "Billing", "Manage billing", "Change where invoices are emailed, and cancel the theater's subscription."),
     ];
 
     public static readonly IReadOnlySet<string> AllKeys = All.Select(p => p.Key).ToHashSet();
 
     public static bool IsKnown(string key) => AllKeys.Contains(key);
+
+    // The owner's business with us rather than running the theater, so no default role gets these.
+    public static readonly IReadOnlySet<string> Billing = new HashSet<string> { ViewBilling, ManageBilling };
 }
 
 // Roles created for every new theater. Owners can rename, change or delete them.
@@ -60,7 +67,7 @@ public static class DefaultTheaterRoles
     public static readonly IReadOnlyList<(string Name, string Description, string[] Permissions)> All =
     [
         ("Manager", "Runs the theater day to day, including staff and roles.",
-            TheaterPermissions.All.Select(p => p.Key).ToArray()),
+            TheaterPermissions.All.Select(p => p.Key).Where(k => !TheaterPermissions.Billing.Contains(k)).ToArray()),
         ("Operations", "Keeps the theater's details, screens and schedule up to date.",
             [TheaterPermissions.EditProfile, TheaterPermissions.ManageScreens, TheaterPermissions.ManageSchedule]),
         ("Ticketing", "Gate and box office staff: sells tickets at the gate, checks tickets, admits guests and moves cars to other spots.",

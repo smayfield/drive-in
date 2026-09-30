@@ -1,0 +1,24 @@
+@* An invoice's status as a chip: Draft, Issued (or Overdue once past its due date), Paid or Void. *@
+
+<MudChip T="string" Size="Size.Small" Color="@Color" Class="my-0">@Text</MudChip>
+
+@code {
+    [Parameter, EditorRequired] public Invoice Invoice { get; set; } = default!;
+    [Parameter, EditorRequired] public DateOnly Today { get; set; }
+
+    private string Text => Invoice.IsOverdue(Today) ? "Overdue" : Invoice.Status switch
+    {
+        InvoiceStatus.Issued => "Due",
+        InvoiceStatus.Paid => "Paid",
+        InvoiceStatus.Void => "Void",
+        _ => "Draft",
+    };
+
+    private Color Color => Invoice.IsOverdue(Today) ? Color.Error : Invoice.Status switch
+    {
+        InvoiceStatus.Issued => Color.Warning,
+        InvoiceStatus.Paid => Color.Success,
+        InvoiceStatus.Draft => Color.Info,
+        _ => Color.Default,
+    };
+}

@@ -1,0 +1,41 @@
+@page "/manage/{Id:int}/billing/invoices/{InvoiceId:int}"
+@attribute [Authorize]
+@inherits AppComponentBase
+@inject TheaterService Theaters
+@inject BillingService Billing
+@inject IJSRuntime JS
+
+<PageTitle>@(invoice?.DisplayNumber ?? "Invoice") · Billing · Drive-In Online</PageTitle>
+
+@if (theater is null || invoice is null)
+{
+    <Alerts Error="@Error" />
+    @if (Error is null) { <MudProgressCircular Indeterminate Size="Size.Small" aria-label="Loading invoice" /> }
+}
+else
+{
+    <ManageHeader Theater="theater" Title="@($"Invoice {invoice.DisplayNumber}")" Current="billing" />
+
+    <div class="d-flex flex-wrap gap-2 mb-3 no-print">
+        <MudButton Variant="Variant.Text" Href="@($"manage/{Id}/billing")" StartIcon="@Icons.Material.Filled.ArrowBack">Billing</MudButton>
+        <MudButton Variant="Variant.Outlined" OnClick="PrintAsync" StartIcon="@Icons.Material.Filled.Print">Print or save as PDF</MudButton>
+    </div>
+
+    <InvoiceView Invoice="invoice" Today="Billing.Today" />
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+    [Parameter] public int InvoiceId { get; set; }
+
+    private Theater? theater;
+    private Invoice? invoice;
+
+    protected override async Task LoadAsync()
+    {
+        theater = await Theaters.GetForManageAsync(User, Id);
+        invoice = await Billing.GetInvoiceAsync(User, Id, InvoiceId);
+    }
+
+    private async Task PrintAsync() => await JS.InvokeVoidAsync("print");
+}

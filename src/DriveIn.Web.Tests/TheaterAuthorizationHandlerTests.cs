@@ -63,6 +63,7 @@ public class TheaterAuthorizationHandlerTests
     {
         Assert.Equal(All.Count, AllKeys.Count);
         Assert.All(DefaultTheaterRoles.All.SelectMany(r => r.Permissions), k => Assert.True(IsKnown(k), k));
-        Assert.Equal(AllKeys, DefaultTheaterRoles.All.Single(r => r.Name == "Manager").Permissions.ToHashSet());
+        // Everything but billing, which stays with the owner unless they grant it.
+        Assert.Equal(AllKeys.Except(Billing).ToHashSet(), DefaultTheaterRoles.All.Single(r => r.Name == "Manager").Permissions.ToHashSet());
     }
 }

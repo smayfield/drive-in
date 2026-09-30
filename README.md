@@ -170,8 +170,11 @@ invitee sets a password or continues with Google using the invited address.
 - **Going live**: the owner (or an admin) asks from the manage page, agreeing to the Standard plan's billing; admins
   are emailed. An admin activates or declines it (with a note to the owner) on `/admin/theaters`. Activating makes the
   theater public and selling for real, and deletes its test tickets. Theaters created by an admin are live from the start.
-- **Billing** is per screen for each calendar month the operating season touches (every month without a season); the
-  manage page shows the estimate. There's no billing processor yet: billing is handled outside the app.
+- **Billing** is per screen for each calendar month the operating season touches (every month without a season).
+  Activation starts the theater's subscription at the current price. An hourly job drafts each month's invoice; an admin
+  reviews and issues them at `/admin/billing` (emailed to the owner, due `Billing:PaymentTermsDays` later) and records
+  payments as they arrive (each emails a receipt). There's no card processor for this yet. Owners see their plan and
+  invoices under Manage → Billing (owner-only unless granted). Details in [features.md](features.md).
 
 ## Look and feel
 

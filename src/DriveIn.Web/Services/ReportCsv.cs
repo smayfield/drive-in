@@ -34,6 +34,32 @@ public static class ReportCsv
             r.IsTest ? "yes" : "",
         }));
 
+    // Admin billing (BillingReportService), at /admin/billing/{kind}.csv.
+    public static readonly IReadOnlyList<string> BillingKinds = ["invoices", "payments", "aging"];
+
+    public static string BillingInvoices(BillingReport report) => Build(
+        ["Invoice", "Theater", "Period", "Issued", "Due", "Status", "Total", "Paid", "Balance"],
+        report.Invoices.Select(i => new object?[]
+        {
+            i.DisplayNumber, i.TheaterName, i.PeriodMonth, i.IssuedAt is DateTimeOffset at ? DateOnly.FromDateTime(at.UtcDateTime) : null,
+            i.DueOn, i.Status.ToString(), i.Total, i.AmountPaid, i.Balance,
+        }));
+
+    public static string BillingPayments(BillingReport report) => Build(
+        ["Received", "Invoice", "Theater", "Period", "Method", "Reference", "Amount"],
+        report.Payments.Select(p => new object?[]
+        {
+            p.Payment.ReceivedOn, p.Invoice.DisplayNumber, p.Invoice.TheaterName, p.Invoice.PeriodMonth,
+            Data.PaymentMethods.Describe(p.Payment.Method), p.Payment.Reference, p.Payment.Amount,
+        }));
+
+    public static string BillingAging(BillingReport report) => Build(
+        ["Theater", "Current", "1-30 days", "31-60 days", "61-90 days", "Over 90 days", "Total"],
+        report.Aging.Append(report.AgingTotal).Select(a => new object?[]
+        {
+            a.TheaterName, a.Current, a.Days1To30, a.Days31To60, a.Days61To90, a.Over90, a.Total,
+        }));
+
     public static string Build(IEnumerable<string> header, IEnumerable<IEnumerable<object?>> rows)
     {
         var sb = new StringBuilder();

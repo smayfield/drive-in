@@ -1,7 +1,9 @@
-@* On a theater's manage page: for a demo theater, the setup checklist and the request to go live; for a live one, its plan. *@
+@* On a theater's manage page: for a demo theater, the setup checklist and the request to go live; for a live one, its
+   subscription and a link to its Billing page. *@
 @using System.Security.Claims
 @using Microsoft.Extensions.Options
 @inject OnboardingService Onboarding
+@inject BillingService Billing
 @inject IOptions<PlanOptions> Plans
 
 @if (Theater.IsDemo)
@@ -63,8 +65,16 @@ else if (isOwner)
 {
     <MudPaper Outlined Class="px-3 py-2 mb-4">
         <MudText Typo="Typo.body2">
-            <strong>Standard plan</strong>@if (Theater.LiveSince is DateTimeOffset since) { <text> · live since @TheaterTime.ToLocal(Theater, since).ToString("MMM d, yyyy")</text> }
-            · @QuoteText
+            <strong>@(subscription?.Plan ?? "Standard") plan</strong>@if (Theater.LiveSince is DateTimeOffset since) { <text> · live since @TheaterTime.ToLocal(Theater, since).ToString("MMM d, yyyy")</text> }
+            @if (subscription is null)
+            {
+                <text> · not billed</text>
+            }
+            else
+            {
+                <text> · @Theater.Screens.Count screen@(Theater.Screens.Count == 1 ? "" : "s") × @Money.Format(subscription.PricePerScreenPerMonth) = @Money.Format(Theater.Screens.Count * subscription.PricePerScreenPerMonth) a month in season@(subscription.IsActive ? "" : " (cancelled)")</text>
+            }
+            · <MudLink Href="@($"manage/{Theater.Id}/billing")" Typo="Typo.body2">Billing and invoices</MudLink>
         </MudText>
     </MudPaper>
 }
@@ -77,6 +87,7 @@ else if (isOwner)
     [Parameter] public EventCallback OnChanged { get; set; }
 
     private List<SetupStep> steps = [];
+    private Subscription? subscription;
     private bool isOwner;
     private bool acceptBilling;
     private bool busy;
@@ -102,6 +113,7 @@ else if (isOwner)
     {
         isOwner = TheaterAccess.HasFullAccess(User, Theater);
         steps = Theater.IsDemo ? await Onboarding.GetSetupStepsAsync(User, Theater.Id) : [];
+        subscription = !Theater.IsDemo && isOwner ? (await Billing.GetTheaterBillingAsync(User, Theater.Id)).Subscription : null;
     }
 
     private async Task RequestAsync()

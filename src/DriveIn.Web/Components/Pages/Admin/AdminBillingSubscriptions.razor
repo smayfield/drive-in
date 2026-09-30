@@ -1,0 +1,136 @@
+@page "/admin/billing/subscriptions"
+@attribute [Authorize(Policy = Policies.Admin)]
+@inherits AppComponentBase
+@inject BillingService Billing
+@inject Microsoft.Extensions.Options.IOptions<PlanOptions> Plans
+
+<PageTitle>Subscriptions · Admin · Drive-In Online</PageTitle>
+
+<AdminHeader Title="Billing" Current="billing" Sub="subscriptions" />
+
+<Alerts Error="@Error" Success="@Success" />
+
+<MudText Typo="Typo.body2" Class="muted mb-3">
+    A theater's subscription starts when it goes live, at the plan's price then (@Plans.Value.PriceDisplay per screen). Admin-created
+    theaters, and any that went live without a price set, aren't billed until you start one here. A price change applies to
+    invoices drafted from then on; the Terms promise owners 30 days' notice. Cancelling bills the current month and nothing after.
+</MudText>
+
+@if (rows is not null)
+{
+    @if (rows.Count == 0)
+    {
+        <MudText Class="muted">No live theaters yet.</MudText>
+    }
+    else
+    {
+        <MudSimpleTable Dense Hover Outlined Class="manage-table">
+            <thead>
+                <tr><th>Theater</th><th>Owner</th><th class="text-end">Screens</th><th>Status</th><th class="text-end">Per screen</th><th class="text-end">Per month</th><th>Since</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var r in rows)
+                {
+                    var sub = r.Subscription;
+                    <tr @key="r.TheaterId" class="@(editingId == r.TheaterId ? "row-editing" : null)">
+                        <td>
+                            <MudLink Href="@($"admin/theaters/{r.TheaterId}")">@r.TheaterName</MudLink>
+                            @if (!r.TheaterActive) { <MudChip T="string" Size="Size.Small" Class="ms-1 my-0">Inactive</MudChip> }
+                        </td>
+                        <td>@(sub?.BillingEmail ?? r.OwnerEmail ?? "—")</td>
+                        <td class="text-end">@r.Screens</td>
+                        <td>
+                            @if (sub is null) { <MudChip T="string" Size="Size.Small" Class="my-0">Not billed</MudChip> }
+                            else if (sub.IsActive) { <MudChip T="string" Size="Size.Small" Color="Color.Success" Class="my-0">Active</MudChip> }
+                            else { <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="my-0">Cancelled</MudChip> <span class="muted small">last month @sub.EndsAfterMonth?.ToString("MMM yyyy")</span> }
+                        </td>
+                        <td class="text-end">
+                            @if (editingId == r.TheaterId)
+                            {
+                                <MudNumericField T="decimal" @bind-Value="price" Variant="Variant.Outlined" Margin="Margin.Dense" Adornment="Adornment.Start" AdornmentText="$"
+                                                 Format="0.00" Min="0.01m" aria-label="Price per screen" Style="max-width: 8rem" />
+                            }
+                            else if (sub is not null)
+                            {
+                                @Money.Format(sub.PricePerScreenPerMonth)
+                            }
+                        </td>
+                        <td class="text-end">@(r.MonthlyTotal is decimal m ? Money.Format(m) : "")</td>
+                        <td>@sub?.StartedOn.ToString("MMM d, yyyy")</td>
+                        <td class="text-end text-nowrap">
+                            @if (editingId == r.TheaterId)
+                            {
+                                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" Disabled="busy" OnClick="() => SavePriceAsync(r)">@(sub is null ? "Start billing" : "Save price")</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="() => editingId = null">Cancel</MudButton>
+                            }
+                            else if (confirmCancelId == r.TheaterId)
+                            {
+                                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Error" Disabled="busy" OnClick="() => CancelAsync(r)">Cancel subscription</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="() => confirmCancelId = null">Keep</MudButton>
+                            }
+                            else if (sub is null)
+                            {
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => Edit(r)">Start…</MudButton>
+                            }
+                            else
+                            {
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => Edit(r)">Price…</MudButton>
+                                @if (sub.IsActive)
+                                {
+                                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="() => confirmCancelId = r.TheaterId">Cancel…</MudButton>
+                                }
+                                else
+                                {
+                                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Success" Disabled="busy" OnClick="() => ReactivateAsync(r)">Reactivate</MudButton>
+                                }
+                                <MudButton Size="Size.Small" Variant="Variant.Text" Href="@($"manage/{r.TheaterId}/billing")">Billing page</MudButton>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+}
+
+@code {
+    private List<BillingSubscriptionRow>? rows;
+    private int? editingId;
+    private int? confirmCancelId;
+    private decimal price;
+    private bool busy;
+
+    protected override async Task LoadAsync() => rows = await Billing.ListSubscriptionsAsync(User);
+
+    private void Edit(BillingSubscriptionRow row)
+    {
+        confirmCancelId = null;
+        editingId = row.TheaterId;
+        price = row.Subscription?.PricePerScreenPerMonth ?? Plans.Value.PricePerScreenPerMonth ?? 0m;
+    }
+
+    private async Task Act(Func<Task> action, string success)
+    {
+        busy = true;
+        if (await RunAsync(action, success))
+        {
+            editingId = null;
+            confirmCancelId = null;
+        }
+        await ReloadAsync();
+        busy = false;
+    }
+
+    // Keeps the outcome's alert.
+    private async Task ReloadAsync() => rows = await Billing.ListSubscriptionsAsync(User);
+
+    private Task SavePriceAsync(BillingSubscriptionRow row) => row.Subscription is null
+        ? Act(() => Billing.StartSubscriptionAsync(User, row.TheaterId, price), $"Billing started for {row.TheaterName}. This month's invoice is drafted if it's in season.")
+        : Act(() => Billing.ChangePriceAsync(User, row.TheaterId, price), $"{row.TheaterName}'s price is now {Money.Format(price)} per screen from the next invoice drafted.");
+
+    private Task CancelAsync(BillingSubscriptionRow row) =>
+        Act(() => Billing.CancelAsync(User, row.TheaterId), $"Cancelled. {row.TheaterName} is billed through this month and the owner has been emailed.");
+
+    private Task ReactivateAsync(BillingSubscriptionRow row) =>
+        Act(() => Billing.ReactivateAsync(User, row.TheaterId), $"{row.TheaterName}'s subscription is active again.");
+}

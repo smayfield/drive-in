@@ -15,14 +15,34 @@
     <nav class="manage-tabs" aria-label="Admin">
         <a class="manage-tab @(Current == "theaters" ? "active" : null)" href="admin/theaters" aria-current="@(Current == "theaters" ? "page" : null)">Theaters</a>
         <a class="manage-tab @(Current == "users" ? "active" : null)" href="admin/users" aria-current="@(Current == "users" ? "page" : null)">Users</a>
+        <a class="manage-tab @(Current == "billing" ? "active" : null)" href="admin/billing" aria-current="@(Current != "billing" ? null : Sub is null ? "page" : "true")">Billing</a>
     </nav>
+    @if (Current == "billing" && Sub is not null)
+    {
+        <nav class="manage-tabs manage-subtabs" aria-label="Billing">
+            @foreach (var (key, href, text) in BillingTabs)
+            {
+                <a class="manage-tab @(Sub == key ? "active" : null)" href="@href" aria-current="@(Sub == key ? "page" : null)">@text</a>
+            }
+        </nav>
+    }
 </div>
 
 @code {
     [Parameter, EditorRequired] public string Title { get; set; } = "";
 
-    // "theaters" or "users".
+    // "theaters", "users" or "billing".
     [Parameter] public string Current { get; set; } = "theaters";
+
+    // Under Billing: "invoices", "subscriptions" or "reports".
+    [Parameter] public string? Sub { get; set; }
+
+    private static readonly (string Key, string Href, string Text)[] BillingTabs =
+    [
+        ("invoices", "admin/billing", "Invoices"),
+        ("subscriptions", "admin/billing/subscriptions", "Subscriptions"),
+        ("reports", "admin/billing/reports", "Reports"),
+    ];
 
     // A page under a tab (a theater's edit page) links back to it.
     [Parameter] public (string Href, string Text)? Parent { get; set; }

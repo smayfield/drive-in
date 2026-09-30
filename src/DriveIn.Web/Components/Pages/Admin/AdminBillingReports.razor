@@ -1,0 +1,162 @@
+@page "/admin/billing/reports"
+@attribute [Authorize(Policy = Policies.Admin)]
+@inherits AppComponentBase
+@inject BillingReportService Reports
+@inject BillingService Billing
+
+<PageTitle>Billing reports · Admin · Drive-In Online</PageTitle>
+
+<AdminHeader Title="Billing" Current="billing" Sub="reports" />
+
+<div class="d-flex flex-wrap align-center gap-2 mb-3">
+    <MudDatePicker @bind-Date="fromValue" Label="From month" OpenTo="OpenTo.Month" FixDay="1" DateFormat="MMM yyyy" Variant="Variant.Outlined" Margin="Margin.Dense" Class="report-date" />
+    <MudDatePicker @bind-Date="toValue" Label="To month" OpenTo="OpenTo.Month" FixDay="1" DateFormat="MMM yyyy" Variant="Variant.Outlined" Margin="Margin.Dense" Class="report-date" />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ShowAsync">Show</MudButton>
+</div>
+
+<Alerts Error="@Error" Success="@Success" />
+
+@if (report is not null)
+{
+    var owed = report.AgingTotal.Total;
+    var overdue = owed - report.AgingTotal.Current;
+    <div class="report-tiles mb-4">
+        <MudPaper Outlined Class="report-tile">
+            <span class="report-tile-label">Subscriptions</span>
+            <span class="report-tile-value">@report.ActiveSubscriptions</span>
+            <span class="muted small">active, @report.BilledScreens screen@(report.BilledScreens == 1 ? "" : "s")@(report.CanceledSubscriptions > 0 ? $" · {report.CanceledSubscriptions} cancelled" : "")</span>
+        </MudPaper>
+        <MudPaper Outlined Class="report-tile">
+            <span class="report-tile-label">Billing this month</span>
+            <span class="report-tile-value">@Money.Format(report.ProjectedThisMonth)</span>
+            <span class="muted small">next month @Money.Format(report.ProjectedNextMonth), at current screens and seasons</span>
+        </MudPaper>
+        <MudPaper Outlined Class="report-tile">
+            <span class="report-tile-label">Invoiced</span>
+            <span class="report-tile-value">@Money.Format(report.Months.Sum(m => m.Invoiced))</span>
+            <span class="muted small">for @Range</span>
+        </MudPaper>
+        <MudPaper Outlined Class="report-tile">
+            <span class="report-tile-label">Collected</span>
+            <span class="report-tile-value">@Money.Format(report.Months.Sum(m => m.Collected))</span>
+            <span class="muted small">received in @Range</span>
+        </MudPaper>
+        <MudPaper Outlined Class="report-tile">
+            <span class="report-tile-label">Owed today</span>
+            <span class="report-tile-value">@Money.Format(owed)</span>
+            <span class="muted small">@(overdue > 0 ? $"{Money.Format(overdue)} overdue" : "none overdue")</span>
+        </MudPaper>
+    </div>
+
+    <MudGrid Spacing="4">
+        <MudItem xs="12" md="6">
+            <section class="manage-section">
+                <div class="d-flex justify-content-between align-items-baseline gap-2">
+                    <MudText Typo="Typo.h5">By month</MudText>
+                    <a href="@CsvHref("payments")" download data-enhance-nav="false">Payments (CSV)</a>
+                </div>
+                <MudText Typo="Typo.body2" Class="muted mb-1">Invoiced by the month billed (issued and paid invoices); collected by the date received.</MudText>
+                <MudSimpleTable Dense Outlined Class="manage-table">
+                    <thead><tr><th>Month</th><th class="text-end">Invoices</th><th class="text-end">Invoiced</th><th class="text-end">Collected</th></tr></thead>
+                    <tbody>
+                        @foreach (var m in report.Months)
+                        {
+                            <tr><td>@m.Month.ToString("MMM yyyy")</td><td class="text-end">@m.Invoices</td><td class="text-end">@Money.Format(m.Invoiced)</td><td class="text-end">@Money.Format(m.Collected)</td></tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </section>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <section class="manage-section">
+                <div class="d-flex justify-content-between align-items-baseline gap-2">
+                    <MudText Typo="Typo.h5">By theater</MudText>
+                    <a href="@CsvHref("invoices")" download data-enhance-nav="false">Invoices (CSV)</a>
+                </div>
+                <MudText Typo="Typo.body2" Class="muted mb-1">Invoices for @Range, and what's still owed on them.</MudText>
+                @if (report.Theaters.Count == 0)
+                {
+                    <MudText Class="muted">No invoices issued for these months.</MudText>
+                }
+                else
+                {
+                    <MudSimpleTable Dense Outlined Class="manage-table">
+                        <thead><tr><th>Theater</th><th class="text-end">Invoices</th><th class="text-end">Invoiced</th><th class="text-end">Paid</th><th class="text-end">Owed</th></tr></thead>
+                        <tbody>
+                            @foreach (var t in report.Theaters)
+                            {
+                                <tr>
+                                    <td>@if (t.TheaterId is int id) { <MudLink Href="@($"admin/theaters/{id}")">@t.TheaterName</MudLink> } else { @t.TheaterName <span class="muted small"> (deleted)</span> }</td>
+                                    <td class="text-end">@t.Invoices</td>
+                                    <td class="text-end">@Money.Format(t.Invoiced)</td>
+                                    <td class="text-end">@Money.Format(t.Paid)</td>
+                                    <td class="text-end">@Money.Format(t.Outstanding)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
+            </section>
+        </MudItem>
+
+        <MudItem xs="12">
+            <section class="manage-section">
+                <div class="d-flex justify-content-between align-items-baseline gap-2">
+                    <MudText Typo="Typo.h5">Owed today, by days past due</MudText>
+                    <a href="@CsvHref("aging")" download data-enhance-nav="false">Aging (CSV)</a>
+                </div>
+                @if (report.Aging.Count == 0)
+                {
+                    <MudText Class="muted">Nothing is owed.</MudText>
+                }
+                else
+                {
+                    <MudSimpleTable Dense Outlined Class="manage-table">
+                        <thead><tr><th>Theater</th><th class="text-end">Not yet due</th><th class="text-end">1–30 days</th><th class="text-end">31–60</th><th class="text-end">61–90</th><th class="text-end">Over 90</th><th class="text-end">Total</th></tr></thead>
+                        <tbody>
+                            @foreach (var a in report.Aging.Append(report.AgingTotal))
+                            {
+                                <tr class="@(ReferenceEquals(a, report.AgingTotal) ? "report-total" : null)">
+                                    <td>@a.TheaterName</td>
+                                    <td class="text-end">@Money.Format(a.Current)</td>
+                                    <td class="text-end">@Money.Format(a.Days1To30)</td>
+                                    <td class="text-end">@Money.Format(a.Days31To60)</td>
+                                    <td class="text-end">@Money.Format(a.Days61To90)</td>
+                                    <td class="text-end">@Money.Format(a.Over90)</td>
+                                    <td class="text-end"><strong>@Money.Format(a.Total)</strong></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                    <MudLink Href="admin/billing" Typo="Typo.body2" Class="d-block mt-1">See invoices (filter to overdue)</MudLink>
+                }
+            </section>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    private BillingReport? report;
+    private DateTime? fromValue;
+    private DateTime? toValue;
+
+    private string Range => report is null ? "" : report.From == report.To
+        ? report.From.ToString("MMM yyyy")
+        : $"{report.From:MMM yyyy} – {report.To:MMM yyyy}";
+
+    protected override async Task LoadAsync()
+    {
+        if (fromValue is null || toValue is null)
+        {
+            var today = Billing.Today;
+            fromValue = new DateTime(today.Year, 1, 1);
+            toValue = new DateTime(today.Year, today.Month, 1);
+        }
+        report = await Reports.GetReportAsync(User, DateOnly.FromDateTime(fromValue.Value), DateOnly.FromDateTime(toValue.Value));
+    }
+
+    private Task ShowAsync() => RunAsync(LoadAsync);
+
+    private string CsvHref(string kind) => report is null ? "" : $"admin/billing/{kind}.csv?from={report.From:yyyy-MM}&to={report.To:yyyy-MM}";
+}

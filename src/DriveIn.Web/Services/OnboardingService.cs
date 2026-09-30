@@ -31,12 +31,13 @@ public sealed record PlanQuote(int Screens, decimal? MonthlyTotal, int? BilledMo
 
 // Self-service sign-up and the path from demo to live. Any signed-in user (not an employee account) can sign a
 // theater up; it starts in demo mode with them as owner. Going live is the owner's (or an admin's) request, since
-// it starts billing, and an admin activates it. There's no billing processor yet: billing is handled offline.
+// it starts billing, and an admin activates it, which starts the theater's subscription (BillingService).
 public sealed partial class OnboardingService(
     IDbContextFactory<ApplicationDbContext> dbFactory,
     IAppEmailSender email,
     IOptions<PlanOptions> plans,
     IOptions<CompanyOptions> company,
+    BillingService billing,
     TimeProvider time,
     ILogger<OnboardingService> logger)
 {
@@ -185,8 +186,13 @@ public sealed partial class OnboardingService(
         theater.Mode = TheaterMode.Live;
         theater.LiveSince = time.GetUtcNow();
         theater.GoLiveRequestedAt = null;
+        // Billing starts now at the plan's current price, this month included. Without a configured price the theater
+        // is listed under Admin → Billing as live without a subscription, for an admin to start at a price they enter.
+        if (plans.Value.PricePerScreenPerMonth is decimal price && !await db.Subscriptions.AnyAsync(s => s.TheaterId == theaterId))
+            db.Subscriptions.Add(BillingService.NewSubscription(theater, price, time.GetUtcNow()));
         await db.SaveChangesAsync();
         await tx.CommitAsync();
+        await billing.GenerateDraftsCoreAsync(theaterId);
 
         if (theater.Owner?.Email is string to)
             await TrySendAsync(to, $"{theater.Name} is live on Drive-In Online",
@@ -237,7 +243,7 @@ public sealed partial class OnboardingService(
         return candidate;
     }
 
-    private static async Task<List<string>> AdminEmailsAsync(ApplicationDbContext db) =>
+    internal static async Task<List<string>> AdminEmailsAsync(ApplicationDbContext db) =>
         await (from ur in db.UserRoles
                join r in db.Roles on ur.RoleId equals r.Id
                join u in db.Users on ur.UserId equals u.Id

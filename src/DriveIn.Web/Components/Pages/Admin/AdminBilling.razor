@@ -1,0 +1,139 @@
+@page "/admin/billing"
+@attribute [Authorize(Policy = Policies.Admin)]
+@inherits AppComponentBase
+@inject BillingService Billing
+
+<PageTitle>Invoices · Admin · Drive-In Online</PageTitle>
+
+<AdminHeader Title="Billing" Current="billing" Sub="invoices" />
+
+<Alerts Error="@Error" Success="@Success" />
+
+<MudText Typo="Typo.body2" Class="muted mb-3">
+    Draft invoices are made automatically each month a subscription bills (checked hourly). Review them, add any credits,
+    then issue them: issuing numbers each one and emails it to the theater's billing address. Record payments as they
+    arrive; each one emails a receipt.
+</MudText>
+
+<div class="d-flex flex-wrap gap-2 mb-3">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(busy || drafts == 0)" OnClick="IssueAllAsync">
+        Issue all drafts@(drafts > 0 ? $" ({drafts})" : "")
+    </MudButton>
+    <MudButton Variant="Variant.Outlined" Disabled="busy" OnClick="GenerateAsync">Check for new drafts now</MudButton>
+</div>
+
+<div class="d-flex flex-wrap align-center gap-2 mb-3">
+    <MudSelect T="InvoiceStatus?" Value="status" ValueChanged="StatusChangedAsync" Label="Status" Variant="Variant.Outlined" Margin="Margin.Dense" Dense Class="report-date">
+        <MudSelectItem T="InvoiceStatus?" Value="null">Any</MudSelectItem>
+        @foreach (var s in Enum.GetValues<InvoiceStatus>())
+        {
+            <MudSelectItem T="InvoiceStatus?" Value="s">@s</MudSelectItem>
+        }
+    </MudSelect>
+    <MudDatePicker Date="month" DateChanged="MonthChangedAsync" Label="Month billed" OpenTo="OpenTo.Month" FixDay="1" DateFormat="MMM yyyy"
+                   Variant="Variant.Outlined" Margin="Margin.Dense" Clearable Class="report-date" />
+    <MudSwitch T="bool" Value="overdueOnly" ValueChanged="OverdueChangedAsync" Color="Color.Error" Label="Overdue only" />
+</div>
+
+@if (invoices is not null)
+{
+    @if (invoices.Count == 0)
+    {
+        <MudText Class="muted">No invoices match.</MudText>
+    }
+    else
+    {
+        <MudSimpleTable Dense Hover Outlined Class="manage-table">
+            <thead>
+                <tr><th>Invoice</th><th>Theater</th><th>Period</th><th>Status</th><th class="text-end">Total</th><th class="text-end">Balance</th><th>Due</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var i in invoices)
+                {
+                    <tr @key="i.Id">
+                        <td><MudLink Href="@($"admin/billing/invoices/{i.Id}")">@i.DisplayNumber</MudLink></td>
+                        <td>@i.TheaterName@(i.TheaterId is null ? " (deleted)" : "")</td>
+                        <td>@i.PeriodMonth.ToString("MMM yyyy")</td>
+                        <td><InvoiceStatusChip Invoice="i" Today="Billing.Today" /></td>
+                        <td class="text-end">@Money.Format(i.Total)</td>
+                        <td class="text-end">@(i.Status is InvoiceStatus.Issued ? Money.Format(i.Balance) : "")</td>
+                        <td>@i.DueOn?.ToString("MMM d, yyyy")</td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+        <MudText Typo="Typo.caption" Class="muted d-block mt-1">
+            @invoices.Count invoice@(invoices.Count == 1 ? "" : "s") · @Money.Format(invoices.Where(i => i.Status == InvoiceStatus.Issued).Sum(i => i.Balance)) owed on those issued
+        </MudText>
+    }
+}
+
+@code {
+    private List<Invoice>? invoices;
+    private int drafts;
+    private InvoiceStatus? status;
+    private DateTime? month;
+    private bool overdueOnly;
+    private bool busy;
+
+    protected override async Task LoadAsync()
+    {
+        var filter = new InvoiceFilter(status, month is DateTime m ? DateOnly.FromDateTime(m) : null, OverdueOnly: overdueOnly);
+        invoices = await Billing.ListInvoicesAsync(User, filter);
+        drafts = (await Billing.ListInvoicesAsync(User, new InvoiceFilter(InvoiceStatus.Draft))).Count;
+    }
+
+    private Task StatusChangedAsync(InvoiceStatus? value)
+    {
+        status = value;
+        return RunAsync(LoadAsync);
+    }
+
+    private Task MonthChangedAsync(DateTime? value)
+    {
+        month = value;
+        return RunAsync(LoadAsync);
+    }
+
+    private Task OverdueChangedAsync(bool value)
+    {
+        overdueOnly = value;
+        return RunAsync(LoadAsync);
+    }
+
+    private async Task GenerateAsync()
+    {
+        busy = true;
+        var created = 0;
+        await RunAsync(async () =>
+        {
+            created = await Billing.GenerateDraftsAsync(User);
+            await LoadAsync();
+        });
+        if (Error is null)
+            Success = created == 0 ? "No new invoices are due." : $"Drafted {created} invoice{(created == 1 ? "" : "s")}.";
+        busy = false;
+    }
+
+    private async Task IssueAllAsync()
+    {
+        busy = true;
+        IssueResult? result = null;
+        await RunAsync(async () =>
+        {
+            try
+            {
+                result = await Billing.IssueAllDraftsAsync(User, BaseUri);
+            }
+            finally
+            {
+                // Some may have been issued before one failed.
+                await LoadAsync();
+            }
+        });
+        if (result is { } r && Error is null)
+            Success = $"Issued {r.Issued} invoice{(r.Issued == 1 ? "" : "s")}." +
+                (r.NotEmailed > 0 ? $" {r.NotEmailed} couldn't be emailed (no address, or the email failed); open them to resend." : "");
+        busy = false;
+    }
+}

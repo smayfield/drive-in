@@ -1,0 +1,98 @@
+@* An invoice as the owner reads and prints it: who it's from and to, its lines, payments and what's still owed. Used on
+   the theater's Billing page and the admin invoice page. manage.css hides the rest of the app when printing. *@
+@using Microsoft.Extensions.Options
+@inject IOptions<CompanyOptions> Company
+
+<MudPaper Outlined Class="invoice mb-4">
+    <div class="invoice-head">
+        <div>
+            <MudText Typo="Typo.h5" HtmlTag="h2">@Company.Value.Name</MudText>
+            <MudText Typo="Typo.body2" Class="muted" Style="white-space: pre-line">@Company.Value.Address</MudText>
+            <MudText Typo="Typo.body2" Class="muted">@Company.Value.Email</MudText>
+        </div>
+        <div class="text-end">
+            <MudText Typo="Typo.h4" HtmlTag="p">Invoice</MudText>
+            <MudText Typo="Typo.h6" HtmlTag="p">@Invoice.DisplayNumber</MudText>
+            <InvoiceStatusChip Invoice="Invoice" Today="Today" />
+        </div>
+    </div>
+
+    <div class="invoice-head">
+        <div>
+            <MudText Typo="Typo.subtitle2" Class="muted">Bill to</MudText>
+            @if (!string.IsNullOrWhiteSpace(Invoice.BillToName)) { <MudText>@Invoice.BillToName</MudText> }
+            <MudText>@Invoice.TheaterName</MudText>
+            @if (Invoice.TheaterAddress is { Length: > 0 } address) { <MudText Typo="Typo.body2">@address</MudText> }
+            @if (Invoice.BillToEmail is { Length: > 0 } to) { <MudText Typo="Typo.body2" Class="muted">@to</MudText> }
+        </div>
+        <table class="invoice-meta">
+            <tbody>
+                <tr><td>Period</td><td>@BillingEmails.Period(Invoice)</td></tr>
+                @if (Invoice.IssuedAt is DateTimeOffset issued) { <tr><td>Issued</td><td>@issued.UtcDateTime.ToString("MMM d, yyyy")</td></tr> }
+                @if (Invoice.DueOn is DateOnly due) { <tr><td>Due</td><td>@due.ToString("MMM d, yyyy")</td></tr> }
+                @if (Invoice.PaidAt is DateTimeOffset paid && Invoice.Status == InvoiceStatus.Paid) { <tr><td>Paid</td><td>@paid.UtcDateTime.ToString("MMM d, yyyy")</td></tr> }
+                @if (Invoice.VoidedAt is DateTimeOffset voided) { <tr><td>Voided</td><td>@voided.UtcDateTime.ToString("MMM d, yyyy")</td></tr> }
+            </tbody>
+        </table>
+    </div>
+
+    <table class="invoice-lines">
+        <thead><tr><th>Description</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Amount</th>@if (LineActions is not null) { <th class="no-print"><span class="visually-hidden">Actions</span></th> }</tr></thead>
+        <tbody>
+            @foreach (var line in Invoice.Lines.OrderBy(l => l.SortOrder))
+            {
+                <tr @key="line.Id">
+                    <td>@line.Description</td>
+                    <td class="num">@line.Quantity</td>
+                    <td class="num">@Money.Format(line.UnitPrice)</td>
+                    <td class="num">@Money.Format(line.Amount)</td>
+                    @if (LineActions is not null) { <td class="num no-print">@LineActions(line)</td> }
+                </tr>
+            }
+        </tbody>
+        <tfoot>
+            <tr class="invoice-total"><td colspan="3" class="num">Total</td><td class="num">@Money.Format(Invoice.Total)</td>@if (LineActions is not null) { <td class="no-print"></td> }</tr>
+            @if (Invoice.Payments.Count > 0)
+            {
+                <tr><td colspan="3" class="num">Paid</td><td class="num">@Money.Format(-Invoice.AmountPaid)</td>@if (LineActions is not null) { <td class="no-print"></td> }</tr>
+                <tr class="invoice-total"><td colspan="3" class="num">Balance due</td><td class="num">@Money.Format(Invoice.Balance)</td>@if (LineActions is not null) { <td class="no-print"></td> }</tr>
+            }
+        </tfoot>
+    </table>
+
+    @if (Invoice.Payments.Count > 0)
+    {
+        <MudText Typo="Typo.subtitle2" Class="mb-1">Payments received</MudText>
+        <table class="invoice-lines">
+            <thead><tr><th>Received</th><th>Method</th><th>Reference</th><th class="num">Amount</th></tr></thead>
+            <tbody>
+                @foreach (var p in Invoice.Payments.OrderBy(p => p.ReceivedOn))
+                {
+                    <tr @key="p.Id"><td>@p.ReceivedOn.ToString("MMM d, yyyy")</td><td>@PaymentMethods.Describe(p.Method)</td><td>@p.Reference</td><td class="num">@Money.Format(p.Amount)</td></tr>
+                }
+            </tbody>
+        </table>
+    }
+
+    @if (Invoice.Status == InvoiceStatus.Void)
+    {
+        <MudAlert Severity="Severity.Warning" Dense>This invoice is void and nothing is owed on it.@(Invoice.VoidReason is { Length: > 0 } r ? $" {r}" : "")</MudAlert>
+    }
+    else if (Invoice.Status == InvoiceStatus.Issued)
+    {
+        <MudText Typo="Typo.body2" Class="muted">
+            Please pay @Money.Format(Invoice.Balance)@(Invoice.DueOn is DateOnly d ? $" by {d:MMM d, yyyy}" : ""), quoting @Invoice.DisplayNumber.
+            Questions? Write to @Company.Value.Email.
+        </MudText>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public Invoice Invoice { get; set; } = default!;
+
+    // For the overdue chip.
+    [Parameter, EditorRequired] public DateOnly Today { get; set; }
+
+    // Admin: a button per line (remove), on drafts.
+    [Parameter] public RenderFragment<InvoiceLine>? LineActions { get; set; }
+}
