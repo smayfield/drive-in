@@ -7,132 +7,126 @@
 
 <PageTitle>@(screen?.Name ?? "Screen") · Manage · Drive-In Online</PageTitle>
 
-<p><a href="manage/@Id">&larr; Back to theater</a> · <a href="manage/@Id/lot">Lot map</a> · <a href="manage/@Id/schedule">Schedule</a></p>
-
 @if (screen is null)
 {
     <Alerts Error="@Error" />
-    @if (Error is null) { <p>Loading…</p> }
+    @if (Error is null) { <MudProgressCircular Indeterminate Size="Size.Small" aria-label="Loading screen" /> }
 }
 else
 {
-    <h1>@screen.Name <small class="text-muted fs-5">@screen.Theater!.Name</small></h1>
+    <ManageHeader Theater="screen.Theater!" Title="@screen.Name" Current="@null" />
     <Alerts Error="@Error" Success="@Success" />
 
-    <div class="row g-4">
+    <MudGrid Spacing="4">
         @if (canManage)
         {
-            <div class="col-lg-5">
-                <section class="card">
-                    <div class="card-body">
-                        <h2 class="h5">Screen</h2>
-                        <div class="mb-3">
-                            <label class="form-label" for="screen-name">Name</label>
-                            <input id="screen-name" class="form-control" @bind="draft.Name" @bind:event="oninput" maxlength="100" />
-                        </div>
+            <MudItem xs="12" md="5">
+                <MudPaper Outlined Class="pa-4">
+                    <MudText Typo="Typo.h5" Class="mb-2">Screen</MudText>
+                    <MudTextField T="string" @bind-Value="draft.Name" Immediate Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="100" Class="mb-3" />
 
-                        <fieldset class="mb-3">
-                            <legend class="form-label fs-6">Spot labels</legend>
+                    <fieldset class="mb-3 border-0 p-0">
+                        <legend class="mud-typography mud-typography-h6">Spot labels</legend>
+                        <MudRadioGroup T="SpotLabelScheme" @bind-Value="draft.Scheme">
                             @foreach (var scheme in Enum.GetValues<SpotLabelScheme>())
                             {
-                                <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="scheme" id="scheme-@scheme"
-                                           checked="@(draft.Scheme == scheme)" @onchange="() => draft.Scheme = scheme" />
-                                    <label class="form-check-label" for="scheme-@scheme">
-                                        @SpotLabels.Describe(scheme) <span class="text-muted small">— @SpotLabels.Example(scheme)</span>
-                                    </label>
-                                </div>
+                                <MudRadio Value="@scheme" Color="Color.Primary" Dense>
+                                    @SpotLabels.Describe(scheme) <span class="muted small">— @SpotLabels.Example(scheme)</span>
+                                </MudRadio>
                             }
-                            <div class="form-text">
-                                Row 1 is nearest the screen. Spots are numbered left to right as drivers face the screen.
-                            </div>
-                        </fieldset>
+                        </MudRadioGroup>
+                        <MudText Typo="Typo.caption" Class="muted d-block">
+                            Row 1 is nearest the screen. Spots are numbered left to right as drivers face the screen.
+                        </MudText>
+                    </fieldset>
 
-                        <h3 class="h6">Rows</h3>
-                        <div class="input-group input-group-sm mb-3">
-                            <input class="form-control" type="number" min="1" max="@Screen.MaxRows" @bind="fillRows" aria-label="Number of rows" />
-                            <span class="input-group-text">rows of</span>
-                            <input class="form-control" type="number" min="1" max="@Screen.MaxSpotsPerRow" @bind="fillSpots" aria-label="Spots per row" />
-                            <span class="input-group-text">spots</span>
-                            <button class="btn btn-outline-secondary" @onclick="Fill">Fill</button>
-                        </div>
-
-                        @if (draft.Rows.Count == 0)
-                        {
-                            <p class="text-muted small">No rows yet. Fill in a grid above or add rows one at a time.</p>
-                        }
-                        else
-                        {
-                            <table class="table table-sm align-middle">
-                                <thead><tr><th>Row</th><th style="width: 7rem">Spots</th><th>Labels</th><th></th></tr></thead>
-                                <tbody>
-                                    @for (var i = 0; i < draft.Rows.Count; i++)
-                                    {
-                                        var row = draft.Rows[i];
-                                        var number = i + 1;
-                                        <tr @key="row">
-                                            <td>@SpotLabels.Row(draft.Scheme, number)</td>
-                                            <td>
-                                                <input class="form-control form-control-sm" type="number" min="1" max="@Screen.MaxSpotsPerRow"
-                                                       @bind="row.Spots" @bind:event="oninput" aria-label="Spots in row @number" />
-                                            </td>
-                                            <td class="small text-muted">
-                                                @if (row.Spots is >= 1 and <= Screen.MaxSpotsPerRow)
-                                                {
-                                                    @($"{SpotLabels.Spot(draft.Scheme, number, 1)}–{SpotLabels.Spot(draft.Scheme, number, row.Spots)}")
-                                                }
-                                            </td>
-                                            <td class="text-end">
-                                                <button class="btn btn-sm btn-link text-danger px-1" title="Remove row" aria-label="Remove row" @onclick="() => draft.Rows.Remove(row)">✕</button>
-                                            </td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
-                        }
-                        <button class="btn btn-sm btn-outline-secondary mb-3" disabled="@(draft.Rows.Count >= Screen.MaxRows)" @onclick="AddRow">Add row</button>
-
-                        <div class="d-flex gap-2 align-items-center">
-                            <button class="btn btn-primary" @onclick="SaveAsync">Save</button>
-                            <button class="btn btn-outline-secondary" disabled="@(!Dirty)" @onclick="Revert">Revert</button>
-                            @if (Dirty) { <span class="text-muted small">Unsaved changes</span> }
-                        </div>
+                    <MudText Typo="Typo.h6" Class="mb-1">Rows</MudText>
+                    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                        <MudNumericField T="int" @bind-Value="fillRows" Min="1" Max="Screen.MaxRows" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                         HideSpinButtons Style="width: 5rem" aria-label="Number of rows" />
+                        <span>rows of</span>
+                        <MudNumericField T="int" @bind-Value="fillSpots" Min="1" Max="Screen.MaxSpotsPerRow" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                         HideSpinButtons Style="width: 5rem" aria-label="Spots per row" />
+                        <span>spots</span>
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="Fill">Fill</MudButton>
                     </div>
-                </section>
-            </div>
+
+                    @if (draft.Rows.Count == 0)
+                    {
+                        <MudText Typo="Typo.body2" Class="muted">No rows yet. Fill in a grid above or add rows one at a time.</MudText>
+                    }
+                    else
+                    {
+                        <MudSimpleTable Dense Class="manage-table mb-2" Outlined>
+                            <thead><tr><th>Row</th><th style="width: 7rem">Spots</th><th>Labels</th><th></th></tr></thead>
+                            <tbody>
+                                @for (var i = 0; i < draft.Rows.Count; i++)
+                                {
+                                    var row = draft.Rows[i];
+                                    var number = i + 1;
+                                    <tr @key="row">
+                                        <td>@SpotLabels.Row(draft.Scheme, number)</td>
+                                        <td>
+                                            <MudNumericField T="int" @bind-Value="row.Spots" Immediate Min="1" Max="Screen.MaxSpotsPerRow" Variant="Variant.Outlined"
+                                                             Margin="Margin.Dense" HideSpinButtons aria-label="@($"Spots in row {number}")" />
+                                        </td>
+                                        <td class="small muted">
+                                            @if (row.Spots is >= 1 and <= Screen.MaxSpotsPerRow)
+                                            {
+                                                @($"{SpotLabels.Spot(draft.Scheme, number, 1)}–{SpotLabels.Spot(draft.Scheme, number, row.Spots)}")
+                                            }
+                                        </td>
+                                        <td class="text-end">
+                                            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Error"
+                                                           aria-label="@($"Remove row {number}")" OnClick="() => draft.Rows.Remove(row)" />
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    }
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Class="mb-3" Disabled="@(draft.Rows.Count >= Screen.MaxRows)" OnClick="AddRow">Add row</MudButton>
+
+                    <div class="d-flex gap-2 align-items-center">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync">Save</MudButton>
+                        <MudButton Variant="Variant.Outlined" Disabled="@(!Dirty)" OnClick="Revert">Revert</MudButton>
+                        @if (Dirty) { <span class="muted small">Unsaved changes</span> }
+                    </div>
+                </MudPaper>
+            </MudItem>
         }
 
-        <div class="@(canManage ? "col-lg-7" : "col-12")">
+        <MudItem xs="12" md="@(canManage ? 7 : 12)">
             <section>
-                <h2 class="h5">
-                    @(canManage ? "Preview" : "Layout")
-                    <small class="text-muted">@preview.RowSpots.Count rows · @preview.SpotCount spots</small>
-                </h2>
+                <div class="d-flex flex-wrap align-items-baseline gap-2 mb-1">
+                    <MudText Typo="Typo.h5">@(canManage ? "Preview" : "Layout")</MudText>
+                    <MudText Typo="Typo.body2" Class="muted">@preview.RowSpots.Count rows · @preview.SpotCount spots</MudText>
+                </div>
                 @if (!canManage)
                 {
-                    <p class="text-muted small">Spot labels: @SpotLabels.Describe(screen.LabelScheme) (@SpotLabels.Example(screen.LabelScheme)).</p>
+                    <MudText Typo="Typo.body2" Class="muted">Spot labels: @SpotLabels.Describe(screen.LabelScheme) (@SpotLabels.Example(screen.LabelScheme)).</MudText>
                 }
                 <LotMap Screens="[preview]" />
             </section>
 
             <section class="mt-4">
-                <h2 class="h5">Upcoming showtimes</h2>
+                <MudText Typo="Typo.h5" Class="mb-1">Upcoming showtimes</MudText>
                 @if (showtimes.Count == 0)
                 {
-                    <p class="text-muted">Nothing scheduled. <a href="manage/@Id/schedule">Open the schedule</a></p>
+                    <MudText Class="muted">Nothing scheduled. <MudLink Href="@($"manage/{Id}/schedule")">Open the schedule</MudLink></MudText>
                 }
                 else
                 {
                     <ul class="list-unstyled">
                         @foreach (var s in showtimes)
                         {
-                            <li>@s.StartsLocal.ToString("ddd, MMM d · h:mm tt") — <strong>@s.Title</strong>@if (s.IsMultiFeature) { <span class="text-muted small"> (@s.Features.Count films, @s.IntermissionMinutes min intermission)</span> }</li>
+                            <li>@s.StartsLocal.ToString("ddd, MMM d · h:mm tt") — <strong>@s.Title</strong>@if (s.IsMultiFeature) { <span class="muted small"> (@s.Features.Count films, @s.IntermissionMinutes min intermission)</span> }</li>
                         }
                     </ul>
                 }
             </section>
-        </div>
-    </div>
+        </MudItem>
+    </MudGrid>
 }
 
 @code {

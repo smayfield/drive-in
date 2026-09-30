@@ -6,72 +6,67 @@
 
 @if (Theater.IsDemo)
 {
-    <section class="card border-info mb-4">
-        <div class="card-body">
-            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-                <h2 class="h5 mb-0"><span class="badge text-bg-info me-2">Demo</span>Set up your theater</h2>
-                <span class="text-muted small">@steps.Count(s => s.Done && !s.Optional) of @steps.Count(s => !s.Optional) required steps done</span>
-            </div>
-            <p class="small text-muted">
-                Your theater is private: only you and your staff can see it. Sales are test sales (no money is charged), so try the
-                whole thing, from buying a ticket to checking it in at the gate.
-            </p>
-            <ol class="list-unstyled mb-3">
-                @foreach (var step in steps)
-                {
-                    <li class="d-flex gap-2 mb-2">
-                        <span aria-hidden="true" class="@(step.Done ? "text-success" : "text-muted")">@(step.Done ? "✔" : "○")</span>
-                        <span>
-                            <a href="@step.Href">@step.Title</a>@if (step.Optional) { <span class="text-muted small"> (optional)</span> }
-                            <span class="visually-hidden">@(step.Done ? "done" : "to do")</span>
-                            <span class="d-block small text-muted">@step.Detail</span>
-                        </span>
-                    </li>
-                }
-            </ol>
-
-            <h3 class="h6">Go live</h3>
-            @if (Theater.GoLiveRequestedAt is DateTimeOffset asked)
-            {
-                <div class="alert alert-warning mb-0">
-                    You asked to go live on @TheaterTime.ToLocal(Theater, asked).ToString("MMM d, h:mm tt"). We'll review your theater
-                    and email the owner when it's live.
-                </div>
-            }
-            else if (!isOwner)
-            {
-                <p class="small text-muted mb-0">When everything's ready, the theater's owner can take it live.</p>
-            }
-            else
-            {
-                <p class="small">
-                    Going live lists your theater publicly and starts real sales, on the Standard plan: @QuoteText
-                    Your demo test tickets are cleared out.
-                </p>
-                @if (error is not null)
-                {
-                    <div class="alert alert-danger">@error</div>
-                }
-                <div class="form-check mb-2">
-                    <input class="form-check-input" type="checkbox" id="accept-billing" @bind="acceptBilling" />
-                    <label class="form-check-label" for="accept-billing">
-                        I agree to the Standard plan's billing as described on the <a href="pricing" target="_blank">Pricing</a> page
-                        and in the <a href="legal/terms" target="_blank">Terms of Service</a>.
-                    </label>
-                </div>
-                <button class="btn btn-success" disabled="@busy" @onclick="RequestAsync">Ask to go live</button>
-            }
+    <MudPaper Outlined Class="pa-3 mb-4" Style="border-color: var(--mud-palette-info)">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+            <MudText Typo="Typo.h5"><MudChip T="string" Size="Size.Small" Color="Color.Info" Class="me-2 my-0">Demo</MudChip>Set up your theater</MudText>
+            <span class="muted small">@steps.Count(s => s.Done && !s.Optional) of @steps.Count(s => !s.Optional) required steps done</span>
         </div>
-    </section>
+        <MudText Typo="Typo.body2" Class="muted mb-2">
+            Your theater is private: only you and your staff can see it. Sales are test sales (no money is charged), so try the
+            whole thing, from buying a ticket to checking it in at the gate.
+        </MudText>
+        <ol class="list-unstyled mb-3">
+            @foreach (var step in steps)
+            {
+                <li class="d-flex gap-2 mb-2">
+                    <span aria-hidden="true" class="@(step.Done ? "step-done" : "muted")">@(step.Done ? "✔" : "○")</span>
+                    <span>
+                        <MudLink Href="@step.Href">@step.Title</MudLink>@if (step.Optional) { <span class="muted small"> (optional)</span> }
+                        <span class="visually-hidden">@(step.Done ? "done" : "to do")</span>
+                        <span class="d-block small muted">@step.Detail</span>
+                    </span>
+                </li>
+            }
+        </ol>
+
+        <MudText Typo="Typo.h6" Class="mb-1">Go live</MudText>
+        @if (Theater.GoLiveRequestedAt is DateTimeOffset asked)
+        {
+            <MudAlert Severity="Severity.Warning">
+                You asked to go live on @TheaterTime.ToLocal(Theater, asked).ToString("MMM d, h:mm tt"). We'll review your theater
+                and email the owner when it's live.
+            </MudAlert>
+        }
+        else if (!isOwner)
+        {
+            <MudText Typo="Typo.body2" Class="muted">When everything's ready, the theater's owner can take it live.</MudText>
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Class="mb-2">
+                Going live lists your theater publicly and starts real sales, on the Standard plan: @QuoteText
+                Your demo test tickets are cleared out.
+            </MudText>
+            @if (error is not null)
+            {
+                <MudAlert Severity="Severity.Error" Class="mb-2">@error</MudAlert>
+            }
+            <MudCheckBox T="bool" @bind-Value="acceptBilling" Color="Color.Primary" Class="mb-1">
+                I agree to the Standard plan's billing as described on the <MudLink Href="pricing" Target="_blank">Pricing</MudLink> page
+                and in the <MudLink Href="legal/terms" Target="_blank">Terms of Service</MudLink>.
+            </MudCheckBox>
+            <MudButton Variant="Variant.Filled" Color="Color.Success" Disabled="@busy" OnClick="RequestAsync">Ask to go live</MudButton>
+        }
+    </MudPaper>
 }
 else if (isOwner)
 {
-    <section class="card mb-4">
-        <div class="card-body py-2 small">
+    <MudPaper Outlined Class="px-3 py-2 mb-4">
+        <MudText Typo="Typo.body2">
             <strong>Standard plan</strong>@if (Theater.LiveSince is DateTimeOffset since) { <text> · live since @TheaterTime.ToLocal(Theater, since).ToString("MMM d, yyyy")</text> }
             · @QuoteText
-        </div>
-    </section>
+        </MudText>
+    </MudPaper>
 }
 
 @code {

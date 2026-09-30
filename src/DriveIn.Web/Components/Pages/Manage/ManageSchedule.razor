@@ -9,222 +9,211 @@
 
 <PageTitle>Schedule · Manage · Drive-In Online</PageTitle>
 
-<p><a href="manage/@Id">&larr; Back to theater</a> · <a href="manage/@Id/lot">Lot map</a> · <a href="manage/@Id/pricing">Pricing</a></p>
-
 @if (theater is null)
 {
     <Alerts Error="@Error" />
-    @if (Error is null) { <p>Loading…</p> }
+    @if (Error is null) { <MudProgressCircular Indeterminate Size="Size.Small" aria-label="Loading schedule" /> }
 }
 else
 {
-    <h1>Schedule <small class="text-muted fs-5">@theater.Name</small></h1>
+    <ManageHeader Theater="theater" Title="Schedule" Current="schedule" />
     @if (TheaterTime.IsValidZone(theater.TimeZone))
     {
-        <p class="text-muted">Times are in the theater's time zone, @theater.TimeZone.</p>
+        <MudText Class="muted mb-3">Times are in the theater's time zone, @theater.TimeZone.</MudText>
     }
     else
     {
-        <div class="alert alert-warning">
+        <MudAlert Severity="Severity.Warning" Class="mb-3">
             This theater's time zone isn't set or isn't recognized, so the times below are entered and shown in UTC.
             Set it in the theater's profile (e.g. America/Chicago) to use local time.
-        </div>
+        </MudAlert>
     }
 
     <Alerts Error="@Error" Success="@Success" />
 
     @if (canManage)
     {
-        <section class="card mb-4">
-            <div class="card-body">
-                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-                    <h2 class="h5 mb-0">@(draft.EditingId is null ? "Add a showing" : "Change showing")</h2>
-                    <div class="d-flex align-items-center gap-2 small">
-                        <label for="default-intermission" class="text-nowrap">Default intermission</label>
-                        <input id="default-intermission" class="form-control form-control-sm" style="width: 5rem" type="number"
-                               min="0" max="@Showtime.MaxIntermissionMinutes" @bind="defaultIntermission" />
-                        <span>min</span>
-                        <button class="btn btn-sm btn-outline-secondary" @onclick="SaveDefaultIntermissionAsync">Save</button>
-                    </div>
+        <MudPaper Outlined Class="pa-3 mb-4">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                <MudText Typo="Typo.h5">@(draft.EditingId is null ? "Add a showing" : "Change showing")</MudText>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="small text-nowrap">Default intermission</span>
+                    <MudNumericField T="int" @bind-Value="defaultIntermission" Min="0" Max="Showtime.MaxIntermissionMinutes" Variant="Variant.Outlined"
+                                     Margin="Margin.Dense" HideSpinButtons Style="width: 5rem" aria-label="Default intermission in minutes" />
+                    <span class="small">min</span>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="SaveDefaultIntermissionAsync">Save</MudButton>
                 </div>
-                @if (films.Count == 0)
-                {
-                    <p class="text-muted mb-0">Add a film below first.</p>
-                }
-                else
-                {
-                    <div class="row g-2 mb-3">
-                        <div class="col-md-3">
-                            <label class="form-label" for="st-screen">Screen</label>
-                            <select id="st-screen" class="form-select" @bind="draft.ScreenId">
-                                @foreach (var s in theater.Screens)
-                                {
-                                    <option value="@s.Id">@s.Name</option>
-                                }
-                            </select>
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label" for="st-date">Date</label>
-                            <input id="st-date" class="form-control" type="date" @bind="draft.Date" />
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label" for="st-time">Starts</label>
-                            <input id="st-time" class="form-control" type="time" @bind="draft.Time" />
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label" for="st-pricing">Pricing</label>
-                            <select id="st-pricing" class="form-select" @bind="draft.PriceScheduleId">
-                                <option value="0">@DefaultLabel</option>
-                                @foreach (var p in OtherSchedules.Concat(PinnedDefault(draft.PriceScheduleId)))
-                                {
-                                    <option value="@p.Id">@p.Name</option>
-                                }
-                            </select>
-                        </div>
-                    </div>
+            </div>
+            @if (films.Count == 0)
+            {
+                <MudText Class="muted">Add a film below first.</MudText>
+            }
+            else
+            {
+                <MudGrid Spacing="2" Class="mb-2">
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudSelect T="int" @bind-Value="draft.ScreenId" Label="Screen" Variant="Variant.Outlined" Margin="Margin.Dense">
+                            @foreach (var s in theater.Screens)
+                            {
+                                <MudSelectItem T="int" Value="@s.Id">@s.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudDatePicker @bind-Date="draft.DateValue" Label="Date" Variant="Variant.Outlined" Margin="Margin.Dense" Editable />
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudTimePicker @bind-Time="draft.TimeValue" Label="Starts" Variant="Variant.Outlined" Margin="Margin.Dense" AmPm Editable />
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudSelect T="int" @bind-Value="draft.PriceScheduleId" Label="Pricing" Variant="Variant.Outlined" Margin="Margin.Dense">
+                            <MudSelectItem T="int" Value="0">@DefaultLabel</MudSelectItem>
+                            @foreach (var p in OtherSchedules.Concat(PinnedDefault(draft.PriceScheduleId)))
+                            {
+                                <MudSelectItem T="int" Value="@p.Id">@p.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                </MudGrid>
 
-                    <div class="mb-2" style="max-width: 36rem">
-                        @for (var i = 0; i < draft.Features.Count; i++)
-                        {
-                            var feature = draft.Features[i];
-                            var number = i + 1;
-                            <div class="input-group mb-2" @key="feature">
-                                <label class="input-group-text" style="width: 7rem" for="st-film-@number">
-                                    @(draft.Features.Count == 1 ? "Film" : $"Feature {number}")
-                                </label>
-                                <select id="st-film-@number" class="form-select" @bind="feature.FilmId">
-                                    @foreach (var f in films)
-                                    {
-                                        <option value="@f.Id">@f.Title (@f.RuntimeMinutes min)</option>
-                                    }
-                                </select>
-                                @if (draft.Features.Count > 1)
-                                {
-                                    <button class="btn btn-outline-danger" title="Remove feature @number" aria-label="Remove feature @number"
-                                            @onclick="() => draft.Features.Remove(feature)">✕</button>
-                                }
-                            </div>
-                        }
-                        @if (draft.Features.Count < Showtime.MaxFeatures)
-                        {
-                            <button class="btn btn-sm btn-outline-secondary" @onclick="AddFeature">
-                                @(draft.Features.Count == 1 ? "Make it a double feature" : "Add another feature")
-                            </button>
-                        }
-                    </div>
-
-                    @if (draft.Features.Count > 1)
+                <div class="mb-2" style="max-width: 36rem">
+                    @for (var i = 0; i < draft.Features.Count; i++)
                     {
-                        <div class="input-group input-group-sm mb-3" style="max-width: 20rem">
-                            <label class="input-group-text" for="st-intermission">Intermission</label>
-                            <input id="st-intermission" class="form-control" type="number" min="0" max="@Showtime.MaxIntermissionMinutes"
-                                   @bind="draft.Intermission" @bind:event="oninput" />
-                            <span class="input-group-text">min between films</span>
+                        var feature = draft.Features[i];
+                        var number = i + 1;
+                        <div class="d-flex gap-2 align-items-start mb-2" @key="feature">
+                            <MudSelect T="int" @bind-Value="feature.FilmId" Label="@(draft.Features.Count == 1 ? "Film" : $"Feature {number}")"
+                                       Variant="Variant.Outlined" Margin="Margin.Dense">
+                                @foreach (var f in films)
+                                {
+                                    <MudSelectItem T="int" Value="@f.Id">@f.Title (@f.RuntimeMinutes min)</MudSelectItem>
+                                }
+                            </MudSelect>
+                            @if (draft.Features.Count > 1)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Error" Class="mt-2"
+                                               aria-label="@($"Remove feature {number}")" OnClick="() => draft.Features.Remove(feature)" />
+                            }
                         </div>
                     }
+                    @if (draft.Features.Count < Showtime.MaxFeatures)
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="AddFeature">
+                            @(draft.Features.Count == 1 ? "Make it a double feature" : "Add another feature")
+                        </MudButton>
+                    }
+                </div>
 
-                    <p class="small text-muted mb-3">@Preview()</p>
-
-                    <div class="d-flex gap-2">
-                        @if (draft.EditingId is null)
-                        {
-                            <button class="btn btn-primary" @onclick="SaveShowtimeAsync">Schedule</button>
-                        }
-                        else
-                        {
-                            <button class="btn btn-primary" @onclick="SaveShowtimeAsync">Save changes</button>
-                            <button class="btn btn-outline-secondary" @onclick="ResetDraft">Cancel</button>
-                        }
+                @if (draft.Features.Count > 1)
+                {
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <MudNumericField T="int" @bind-Value="draft.Intermission" Immediate Min="0" Max="Showtime.MaxIntermissionMinutes" Label="Intermission"
+                                         Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons Style="width: 9rem" />
+                        <span class="small">min between films</span>
                     </div>
                 }
-            </div>
-        </section>
+
+                <MudText Typo="Typo.body2" Class="muted mb-3">@Preview()</MudText>
+
+                <div class="d-flex gap-2">
+                    @if (draft.EditingId is null)
+                    {
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveShowtimeAsync">Schedule</MudButton>
+                    }
+                    else
+                    {
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveShowtimeAsync">Save changes</MudButton>
+                        <MudButton Variant="Variant.Outlined" OnClick="ResetDraft">Cancel</MudButton>
+                    }
+                </div>
+            }
+        </MudPaper>
     }
     else
     {
-        <p class="text-muted">Default intermission between double-feature films: @theater.DefaultIntermissionMinutes minutes.</p>
+        <MudText Class="muted mb-3">Default intermission between double-feature films: @theater.DefaultIntermissionMinutes minutes.</MudText>
     }
 
-    <section class="mb-5">
-        <h2 class="h4">Upcoming showings</h2>
+    <section class="manage-section">
+        <MudText Typo="Typo.h5">Upcoming showings</MudText>
         @if (showtimes.Count == 0)
         {
-            <p class="text-muted">Nothing scheduled.</p>
+            <MudText Class="muted">Nothing scheduled.</MudText>
         }
         @foreach (var day in showtimes.GroupBy(s => DateOnly.FromDateTime(s.StartsLocal)))
         {
-            <h3 class="h6 mt-3">@day.Key.ToString("dddd, MMMM d, yyyy")</h3>
-            <table class="table table-sm align-middle">
+            <MudText Typo="Typo.h6" Class="mt-3 mb-1">@day.Key.ToString("dddd, MMMM d, yyyy")</MudText>
+            <MudSimpleTable Dense Outlined Class="manage-table">
                 <tbody>
                     @foreach (var s in day)
                     {
-                        <tr @key="s.Id" class="@(draft.EditingId == s.Id ? "table-warning" : null)">
+                        <tr @key="s.Id" class="@(draft.EditingId == s.Id ? "row-editing" : null)">
                             <td style="width: 12rem">@s.StartsLocal.ToString("h:mm tt")–@s.EndsLocal.ToString("h:mm tt")</td>
                             <td style="width: 10rem">@s.ScreenName</td>
                             <td>
                                 @if (s.IsMultiFeature)
                                 {
-                                    <span class="badge text-bg-warning me-1">@(s.Features.Count == 2 ? "Double feature" : $"{s.Features.Count} features")</span>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="me-1 my-0">@(s.Features.Count == 2 ? "Double feature" : $"{s.Features.Count} features")</MudChip>
                                     @foreach (var f in s.Features)
                                     {
                                         <div class="small">
-                                            <span class="text-muted">@f.StartsLocal.ToString("h:mm tt")</span> @f.Title
-                                            @if (f.Rating is not null) { <span class="badge text-bg-secondary ms-1">@f.Rating</span> }
+                                            <span class="muted">@f.StartsLocal.ToString("h:mm tt")</span> @f.Title
+                                            @if (f.Rating is not null) { <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ms-1 my-0">@f.Rating</MudChip> }
                                         </div>
                                     }
-                                    <div class="small text-muted">@s.IntermissionMinutes min intermission</div>
+                                    <div class="small muted">@s.IntermissionMinutes min intermission</div>
                                 }
                                 else
                                 {
                                     var f = s.Features[0];
                                     @f.Title
-                                    @if (f.Rating is not null) { <span class="badge text-bg-secondary ms-1">@f.Rating</span> }
+                                    @if (f.Rating is not null) { <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ms-1 my-0">@f.Rating</MudChip> }
                                 }
                             </td>
                             <td style="width: 13rem">
                                 @if (canManage)
                                 {
-                                    <select class="form-select form-select-sm" value="@(s.PriceScheduleId ?? 0)" aria-label="Pricing for this showing"
-                                            @onchange="e => SetPricingAsync(s.Id, e.Value)">
-                                        <option value="0">@DefaultLabel</option>
+                                    <MudSelect T="int" Value="@(s.PriceScheduleId ?? 0)" ValueChanged="@((int v) => SetPricingAsync(s.Id, v))" Variant="Variant.Outlined"
+                                               Margin="Margin.Dense" aria-label="Pricing for this showing">
+                                        <MudSelectItem T="int" Value="0">@DefaultLabel</MudSelectItem>
                                         @foreach (var p in OtherSchedules.Concat(PinnedDefault(s.PriceScheduleId ?? 0)))
                                         {
-                                            <option value="@p.Id">@p.Name</option>
+                                            <MudSelectItem T="int" Value="@p.Id">@p.Name</MudSelectItem>
                                         }
-                                    </select>
+                                    </MudSelect>
                                 }
                                 else if (s.PriceScheduleName is not null)
                                 {
-                                    <span class="badge text-bg-info">@s.PriceScheduleName pricing</span>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="my-0">@s.PriceScheduleName pricing</MudChip>
                                 }
                             </td>
                             @if (canManage)
                             {
-                                <td class="text-end" style="width: 13rem">
+                                <td class="text-end text-nowrap" style="width: 13rem">
                                     @if (s.StartsLocal > NowLocal)
                                     {
-                                        <button class="btn btn-sm btn-outline-secondary" @onclick="() => StartEdit(s)">Edit</button>
+                                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => StartEdit(s)">Edit</MudButton>
                                     }
                                     @if (confirmShowtimeId == s.Id)
                                     {
-                                        <button class="btn btn-sm btn-danger" @onclick="() => DeleteShowtimeAsync(s.Id)">Confirm remove</button>
+                                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Error" OnClick="() => DeleteShowtimeAsync(s.Id)">Confirm remove</MudButton>
                                     }
                                     else
                                     {
-                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => confirmShowtimeId = s.Id">Remove</button>
+                                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="() => confirmShowtimeId = s.Id">Remove</MudButton>
                                     }
                                 </td>
                             }
                         </tr>
                     }
                 </tbody>
-            </table>
+            </MudSimpleTable>
         }
     </section>
 
-    <section>
-        <h2 class="h4">Films</h2>
-        <table class="table align-middle">
+    <section class="manage-section">
+        <MudText Typo="Typo.h5">Films</MudText>
+        <MudSimpleTable Dense Outlined Class="manage-table">
             <thead><tr><th style="width: 4.5rem"></th><th>Title</th><th style="width: 8rem">Rating</th><th style="width: 10rem">Runtime (min)</th>@if (canManage) { <th style="width: 14rem"></th> }</tr></thead>
             <tbody>
                 @foreach (var f in films)
@@ -233,40 +222,40 @@ else
                         <td>
                             @if (f.PosterUrl is not null)
                             {
-                                <img src="@f.PosterUrl" alt="Poster for @f.Title" width="46" height="69" style="object-fit: cover" loading="lazy" />
+                                <img src="@f.PosterUrl" alt="Poster for @f.Title" width="46" height="69" style="object-fit: cover; border-radius: 3px" loading="lazy" />
                             }
                         </td>
                         @if (editingFilm?.Id == f.Id)
                         {
-                            <td><input class="form-control form-control-sm" @bind="editingFilm.Title" maxlength="200" aria-label="Title" /></td>
-                            <td><input class="form-control form-control-sm" @bind="editingFilm.Rating" maxlength="10" aria-label="Rating" /></td>
-                            <td><input class="form-control form-control-sm" type="number" min="1" max="@Film.MaxRuntimeMinutes" @bind="editingFilm.RuntimeMinutes" aria-label="Runtime in minutes" /></td>
-                            <td class="text-end">
-                                <button class="btn btn-sm btn-primary" @onclick="SaveFilmAsync">Save</button>
-                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => editingFilm = null">Cancel</button>
+                            <td><MudTextField T="string" @bind-Value="editingFilm.Title" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="200" aria-label="Title" /></td>
+                            <td><MudTextField T="string" @bind-Value="editingFilm.Rating" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="10" aria-label="Rating" /></td>
+                            <td><MudNumericField T="int" @bind-Value="editingFilm.RuntimeMinutes" Min="1" Max="Film.MaxRuntimeMinutes" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons aria-label="Runtime in minutes" /></td>
+                            <td class="text-end text-nowrap">
+                                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveFilmAsync">Save</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => editingFilm = null">Cancel</MudButton>
                             </td>
                         }
                         else
                         {
                             <td>
-                                @f.Title @if (f.ReleaseYear is not null) { <span class="text-muted">(@f.ReleaseYear)</span> }
-                                @if (f.Genres is not null) { <div class="small text-muted">@f.Genres</div> }
-                                @if (f.Directors is not null) { <div class="small text-muted">Directed by @f.Directors</div> }
-                                @if (f.Cast is not null) { <div class="small text-muted">Starring @f.Cast</div> }
+                                @f.Title @if (f.ReleaseYear is not null) { <span class="muted"> (@f.ReleaseYear)</span> }
+                                @if (f.Genres is not null) { <div class="small muted">@f.Genres</div> }
+                                @if (f.Directors is not null) { <div class="small muted">Directed by @f.Directors</div> }
+                                @if (f.Cast is not null) { <div class="small muted">Starring @f.Cast</div> }
                             </td>
                             <td>@f.Rating</td>
                             <td>@f.RuntimeMinutes</td>
                             @if (canManage)
                             {
-                                <td class="text-end">
-                                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => StartEditFilm(f)">Edit</button>
+                                <td class="text-end text-nowrap">
+                                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => StartEditFilm(f)">Edit</MudButton>
                                     @if (confirmFilmId == f.Id)
                                     {
-                                        <button class="btn btn-sm btn-danger" @onclick="() => DeleteFilmAsync(f.Id)">Confirm delete</button>
+                                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Error" OnClick="() => DeleteFilmAsync(f.Id)">Confirm delete</MudButton>
                                     }
                                     else
                                     {
-                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => { confirmFilmId = f.Id; editingFilm = null; }">Delete</button>
+                                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="() => { confirmFilmId = f.Id; editingFilm = null; }">Delete</MudButton>
                                     }
                                 </td>
                             }
@@ -274,43 +263,41 @@ else
                     </tr>
                     @if (editingFilm?.Id == f.Id)
                     {
-                        <tr @key="@($"details-{f.Id}")" class="table-warning">
+                        <tr @key="@($"details-{f.Id}")" class="row-editing">
                             <td></td>
                             <td colspan="4">
-                                <div class="row g-2 mb-2">
-                                    <div class="col-md-2">
-                                        <label class="form-label small" for="film-year">Year</label>
-                                        <input id="film-year" class="form-control form-control-sm" type="number" min="@Film.MinReleaseYear" @bind="editingFilm.ReleaseYear" />
-                                    </div>
-                                    <div class="col-md-5">
-                                        <label class="form-label small" for="film-directors">Directed by</label>
-                                        <input id="film-directors" class="form-control form-control-sm" @bind="editingFilm.Directors" maxlength="300" />
-                                    </div>
-                                    <div class="col-md-5">
-                                        <label class="form-label small" for="film-genres">Genres</label>
-                                        <input id="film-genres" class="form-control form-control-sm" @bind="editingFilm.Genres" maxlength="200" placeholder="Horror, Thriller" />
-                                    </div>
+                                <MudGrid Spacing="2" Class="mb-1">
+                                    <MudItem xs="12" sm="4" md="2">
+                                        <MudNumericField T="int?" @bind-Value="editingFilm.ReleaseYear" Min="Film.MinReleaseYear" Label="Year" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons />
+                                    </MudItem>
+                                    <MudItem xs="12" sm="8" md="5">
+                                        <MudTextField T="string" @bind-Value="editingFilm.Directors" Label="Directed by" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="300" />
+                                    </MudItem>
+                                    <MudItem xs="12" md="5">
+                                        <MudTextField T="string" @bind-Value="editingFilm.Genres" Label="Genres" Placeholder="Horror, Thriller" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="200" />
+                                    </MudItem>
+                                    <MudItem xs="12">
+                                        <MudTextField T="string" @bind-Value="editingFilm.Cast" Label="Starring" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="500" />
+                                    </MudItem>
+                                    <MudItem xs="12">
+                                        <MudTextField T="string" @bind-Value="editingFilm.Overview" Label="Description" Lines="3" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="2000" />
+                                    </MudItem>
+                                </MudGrid>
+                                <div class="d-flex flex-wrap align-items-center gap-2">
+                                    <MudFileUpload T="IBrowserFile" Accept=".jpg,.jpeg,.png,.gif" FilesChanged="UploadPosterAsync">
+                                        <ActivatorContent>
+                                            <MudButton Size="Size.Small" Variant="Variant.Outlined">@(editingFilm.PosterUpdatedAt is null ? "Upload poster" : "Replace poster")</MudButton>
+                                        </ActivatorContent>
+                                    </MudFileUpload>
+                                    @if (editingFilm.PosterUpdatedAt is not null)
+                                    {
+                                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="RemovePosterAsync">Remove poster</MudButton>
+                                    }
                                 </div>
-                                <div class="mb-2">
-                                    <label class="form-label small" for="film-cast">Starring</label>
-                                    <input id="film-cast" class="form-control form-control-sm" @bind="editingFilm.Cast" maxlength="500" />
-                                </div>
-                                <div class="mb-2">
-                                    <label class="form-label small" for="film-overview">Description</label>
-                                    <textarea id="film-overview" class="form-control form-control-sm" rows="3" @bind="editingFilm.Overview" maxlength="2000"></textarea>
-                                </div>
-                                <div class="mb-1">
-                                    <label class="form-label small" for="film-poster">Poster</label>
-                                    <div class="d-flex flex-wrap align-items-center gap-3">
-                                        <InputFile id="film-poster" class="form-control form-control-sm w-auto" accept=".jpg,.jpeg,.png,.gif,image/jpeg,image/png,image/gif"
-                                                   OnChange="UploadPosterAsync" />
-                                        @if (editingFilm.PosterUpdatedAt is not null)
-                                        {
-                                            <button class="btn btn-sm btn-outline-danger" @onclick="RemovePosterAsync">Remove poster</button>
-                                        }
-                                    </div>
-                                    <div class="form-text">JPG, GIF or PNG, up to @(FilmPoster.MaxBytes / (1024 * 1024)) MB. Use artwork you have the right to show, such as the distributor's promotional poster. Uploads save right away; use Save for the other details.</div>
-                                </div>
+                                <MudText Typo="Typo.caption" Class="muted d-block mt-1">
+                                    JPG, GIF or PNG, up to @(FilmPoster.MaxBytes / (1024 * 1024)) MB. Use artwork you have the right to show, such as the distributor's promotional poster.
+                                    Uploads save right away; use Save for the other details.
+                                </MudText>
                             </td>
                         </tr>
                     }
@@ -319,17 +306,17 @@ else
                 {
                     <tr>
                         <td></td>
-                        <td><input class="form-control form-control-sm" placeholder="New film title" @bind="newFilm.Title" maxlength="200" aria-label="New film title" /></td>
-                        <td><input class="form-control form-control-sm" placeholder="PG-13" @bind="newFilm.Rating" maxlength="10" aria-label="New film rating" /></td>
-                        <td><input class="form-control form-control-sm" type="number" min="1" max="@Film.MaxRuntimeMinutes" @bind="newFilm.RuntimeMinutes" aria-label="New film runtime in minutes" /></td>
-                        <td class="text-end"><button class="btn btn-sm btn-success" @onclick="AddFilmAsync">Add film</button></td>
+                        <td><MudTextField T="string" @bind-Value="newFilm.Title" Placeholder="New film title" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="200" aria-label="New film title" /></td>
+                        <td><MudTextField T="string" @bind-Value="newFilm.Rating" Placeholder="PG-13" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="10" aria-label="New film rating" /></td>
+                        <td><MudNumericField T="int" @bind-Value="newFilm.RuntimeMinutes" Min="1" Max="Film.MaxRuntimeMinutes" Variant="Variant.Outlined" Margin="Margin.Dense" HideSpinButtons aria-label="New film runtime in minutes" /></td>
+                        <td class="text-end"><MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="AddFilmAsync">Add film</MudButton></td>
                     </tr>
                 }
             </tbody>
-        </table>
+        </MudSimpleTable>
         @if (films.Count == 0 && !canManage)
         {
-            <p class="text-muted">No films yet.</p>
+            <MudText Class="muted">No films yet.</MudText>
         }
     </section>
 }
@@ -352,6 +339,19 @@ else
         public TimeOnly Time { get; set; } = new(20, 30);
         public int Intermission { get; set; }
         public int PriceScheduleId { get; set; } // 0 = the default
+
+        // The pickers work in DateTime and TimeSpan; the draft keeps a plain date and time.
+        public DateTime? DateValue
+        {
+            get => Date.ToDateTime(TimeOnly.MinValue);
+            set { if (value is DateTime d) Date = DateOnly.FromDateTime(d); }
+        }
+
+        public TimeSpan? TimeValue
+        {
+            get => Time.ToTimeSpan();
+            set { if (value is TimeSpan t) Time = TimeOnly.FromTimeSpan(t); }
+        }
     }
 
     private Theater? theater;
@@ -507,9 +507,8 @@ else
     });
 
     // Posters save immediately; the edit form (and any unsaved text in it) stays open.
-    private Task UploadPosterAsync(InputFileChangeEventArgs e) => RunAsync(async () =>
+    private Task UploadPosterAsync(IBrowserFile file) => RunAsync(async () =>
     {
-        var file = e.File;
         if (file.Size > FilmPoster.MaxBytes)
             throw new AppValidationException($"Posters can be at most {FilmPoster.MaxBytes / (1024 * 1024)} MB.");
         using var buffer = new MemoryStream();

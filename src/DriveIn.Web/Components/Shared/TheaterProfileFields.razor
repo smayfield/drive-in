@@ -1,68 +1,65 @@
 @* Profile inputs shared by the owner and admin theater forms. Place inside an EditForm. *@
 
-<div class="row g-3">
-    <div class="col-md-8">
-        <label class="form-label" for="name">Name</label>
-        <InputText id="name" class="form-control" @bind-Value="Model.Name" />
-        <ValidationMessage For="() => Model.Name" />
-    </div>
-    <div class="col-md-4">
-        <label class="form-label" for="tz">Time zone</label>
-        <InputText id="tz" class="form-control" @bind-Value="Model.TimeZone" placeholder="America/Chicago" />
-    </div>
-    <div class="col-md-6">
-        <label class="form-label" for="addr1">Address</label>
-        <InputText id="addr1" class="form-control" @bind-Value="Model.AddressLine1" />
-    </div>
-    <div class="col-md-6">
-        <label class="form-label" for="addr2">Address line 2</label>
-        <InputText id="addr2" class="form-control" @bind-Value="Model.AddressLine2" />
-    </div>
-    <div class="col-md-4">
-        <label class="form-label" for="city">City</label>
-        <InputText id="city" class="form-control" @bind-Value="Model.City" />
-    </div>
-    <div class="col-md-3">
-        <label class="form-label" for="state">State</label>
-        <InputText id="state" class="form-control" @bind-Value="Model.State" />
-    </div>
-    <div class="col-md-2">
-        <label class="form-label" for="zip">Postal code</label>
-        <InputText id="zip" class="form-control" @bind-Value="Model.PostalCode" />
-    </div>
-    <div class="col-md-3">
-        <label class="form-label" for="country">Country</label>
-        <InputText id="country" class="form-control" @bind-Value="Model.Country" />
-    </div>
-    <div class="col-md-6">
-        <label class="form-label" for="phone">Phone</label>
-        <InputText id="phone" class="form-control" @bind-Value="Model.Phone" />
-        <ValidationMessage For="() => Model.Phone" />
-    </div>
-    <div class="col-md-6">
-        <label class="form-label" for="web">Website</label>
-        <InputText id="web" class="form-control" @bind-Value="Model.Website" placeholder="https://" />
-        <ValidationMessage For="() => Model.Website" />
-    </div>
-    <div class="col-md-3">
-        <label class="form-label" for="season-opens">Season opens</label>
-        <InputDate id="season-opens" class="form-control" @bind-Value="Model.SeasonOpensOn" />
-    </div>
-    <div class="col-md-3">
-        <label class="form-label" for="season-closes">Season closes</label>
-        <InputDate id="season-closes" class="form-control" @bind-Value="Model.SeasonClosesOn" />
-    </div>
-    <div class="col-md-6 d-flex align-items-end">
-        <p class="form-text mb-2">
+<MudGrid Spacing="2">
+    <MudItem xs="12" md="8">
+        <MudTextField T="string" @bind-Value="Model.Name" For="() => Model.Name" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense" />
+    </MudItem>
+    <MudItem xs="12" md="4">
+        <MudTextField T="string" @bind-Value="Model.TimeZone" Label="Time zone" Placeholder="America/Chicago" Variant="Variant.Outlined" Margin="Margin.Dense" />
+    </MudItem>
+    <MudItem xs="12" md="6">
+        <MudTextField T="string" @bind-Value="Model.AddressLine1" Label="Address" Variant="Variant.Outlined" Margin="Margin.Dense" />
+    </MudItem>
+    <MudItem xs="12" md="6">
+        <MudTextField T="string" @bind-Value="Model.AddressLine2" Label="Address line 2" Variant="Variant.Outlined" Margin="Margin.Dense" />
+    </MudItem>
+    <MudItem xs="12" md="4">
+        <MudTextField T="string" @bind-Value="Model.City" Label="City" Variant="Variant.Outlined" Margin="Margin.Dense" />
+    </MudItem>
+    <MudItem xs="6" md="3">
+        <MudTextField T="string" @bind-Value="Model.State" Label="State" Variant="Variant.Outlined" Margin="Margin.Dense" />
+    </MudItem>
+    <MudItem xs="6" md="2">
+        <MudTextField T="string" @bind-Value="Model.PostalCode" Label="Postal code" Variant="Variant.Outlined" Margin="Margin.Dense" />
+    </MudItem>
+    <MudItem xs="12" md="3">
+        <MudTextField T="string" @bind-Value="Model.Country" Label="Country" Variant="Variant.Outlined" Margin="Margin.Dense" />
+    </MudItem>
+    <MudItem xs="12" md="6">
+        <MudTextField T="string" @bind-Value="Model.Phone" For="() => Model.Phone" Label="Phone" InputType="InputType.Telephone" Variant="Variant.Outlined" Margin="Margin.Dense" />
+    </MudItem>
+    <MudItem xs="12" md="6">
+        <MudTextField T="string" @bind-Value="Model.Website" For="() => Model.Website" Label="Website" Placeholder="https://" Variant="Variant.Outlined" Margin="Margin.Dense" />
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudDatePicker @bind-Date="SeasonOpens" Label="Season opens" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable Editable />
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudDatePicker @bind-Date="SeasonCloses" Label="Season closes" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable Editable />
+    </MudItem>
+    <MudItem xs="12" md="6" Class="d-flex align-items-center">
+        <MudText Typo="Typo.body2" Class="muted">
             Showings can only be scheduled from opening day through closing day. Leave either blank for no limit.
-        </p>
-    </div>
-    <div class="col-12">
-        <label class="form-label" for="desc">Description</label>
-        <InputTextArea id="desc" class="form-control" rows="4" @bind-Value="Model.Description" />
-    </div>
-</div>
+        </MudText>
+    </MudItem>
+    <MudItem xs="12">
+        <MudTextField T="string" @bind-Value="Model.Description" Label="Description" Lines="4" Variant="Variant.Outlined" Margin="Margin.Dense" />
+    </MudItem>
+</MudGrid>
 
 @code {
     [Parameter, EditorRequired] public Theater Model { get; set; } = default!;
+
+    // The date pickers work in DateTime; the model stores plain dates.
+    private DateTime? SeasonOpens
+    {
+        get => Model.SeasonOpensOn?.ToDateTime(TimeOnly.MinValue);
+        set => Model.SeasonOpensOn = value is DateTime d ? DateOnly.FromDateTime(d) : null;
+    }
+
+    private DateTime? SeasonCloses
+    {
+        get => Model.SeasonClosesOn?.ToDateTime(TimeOnly.MinValue);
+        set => Model.SeasonClosesOn = value is DateTime d ? DateOnly.FromDateTime(d) : null;
+    }
 }

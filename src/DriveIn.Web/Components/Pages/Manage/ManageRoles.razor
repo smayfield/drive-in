@@ -7,16 +7,18 @@
 
 <PageTitle>Roles · Manage · Drive-In Online</PageTitle>
 
-<p><a href="manage/@Id">&larr; Back to theater</a> · <a href="manage/@Id/employees">Employees</a></p>
-<h1>Roles @if (theaterName is not null) { <small class="text-muted fs-5">@theaterName</small> }</h1>
-<p class="text-muted">
+@if (theater is not null)
+{
+    <ManageHeader Theater="theater" Title="Roles" Current="roles" />
+}
+<MudText Class="muted mb-3">
     A role is a set of actions. Employees can have several roles and can do anything any of their roles allows.
     Employees with no roles can't do anything. Owners always have every action.
     @if (!fullAccess)
     {
         <span>You can only grant, change or remove actions you have yourself.</span>
     }
-</p>
+</MudText>
 
 <Alerts Error="@Error" Success="@Success" />
 
@@ -24,110 +26,105 @@
 {
     @if (editor is null)
     {
-        <button class="btn btn-primary mb-3" @onclick="StartNew">New role</button>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mb-3" OnClick="StartNew">New role</MudButton>
     }
 
     @if (editor is not null)
     {
-        <div class="card mb-4">
-            <div class="card-body">
-                <h2 class="h5">@(editor.Id is null ? "New role" : $"Edit {editor.OriginalName}")</h2>
-                <div class="row g-3 mb-3">
-                    <div class="col-md-4">
-                        <label class="form-label" for="role-name">Name</label>
-                        <input id="role-name" class="form-control" @bind="editor.Name" maxlength="60" />
-                    </div>
-                    <div class="col-md-8">
-                        <label class="form-label" for="role-desc">Description</label>
-                        <input id="role-desc" class="form-control" @bind="editor.Description" maxlength="300" />
-                    </div>
-                </div>
-                @foreach (var group in TheaterPermissions.All.GroupBy(p => p.Group))
-                {
-                    <fieldset class="mb-3">
-                        <legend class="h6">@group.Key</legend>
-                        @foreach (var p in group)
-                        {
-                            var allowed = permissions.Contains(p.Key);
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="perm-@p.Key"
-                                       checked="@editor.Permissions.Contains(p.Key)" disabled="@(!allowed)"
-                                       @onchange="args => Toggle(p.Key, (bool)args.Value!)" />
-                                <label class="form-check-label" for="perm-@p.Key">
-                                    @p.Name <span class="text-muted small">— @p.Description</span>
-                                    @if (!allowed) { <span class="text-muted small">(you don't have this)</span> }
-                                </label>
-                            </div>
-                        }
-                    </fieldset>
-                }
-                <button class="btn btn-primary" @onclick="SaveAsync">@(editor.Id is null ? "Create role" : "Save role")</button>
-                <button class="btn btn-outline-secondary" @onclick="() => editor = null">Cancel</button>
+        <MudPaper Outlined Class="pa-4 mb-4">
+            <MudText Typo="Typo.h5" Class="mb-2">@(editor.Id is null ? "New role" : $"Edit {editor.OriginalName}")</MudText>
+            <MudGrid Spacing="2" Class="mb-2">
+                <MudItem xs="12" md="4">
+                    <MudTextField T="string" @bind-Value="editor.Name" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="60" />
+                </MudItem>
+                <MudItem xs="12" md="8">
+                    <MudTextField T="string" @bind-Value="editor.Description" Label="Description" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="300" />
+                </MudItem>
+            </MudGrid>
+            @foreach (var group in TheaterPermissions.All.GroupBy(p => p.Group))
+            {
+                <fieldset class="mb-2 border-0 p-0">
+                    <legend class="mud-typography mud-typography-h6">@group.Key</legend>
+                    @foreach (var p in group)
+                    {
+                        var key = p.Key;
+                        var allowed = permissions.Contains(key);
+                        <MudCheckBox T="bool" Value="editor.Permissions.Contains(key)" ValueChanged="on => Toggle(key, on)"
+                                     Disabled="@(!allowed)" Color="Color.Primary" Dense>
+                            @p.Name <span class="muted small">— @p.Description</span>
+                            @if (!allowed) { <span class="muted small">(you don't have this)</span> }
+                        </MudCheckBox>
+                    }
+                </fieldset>
+            }
+            <div class="d-flex gap-2 mt-2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync">@(editor.Id is null ? "Create role" : "Save role")</MudButton>
+                <MudButton Variant="Variant.Outlined" OnClick="() => editor = null">Cancel</MudButton>
             </div>
-        </div>
+        </MudPaper>
     }
 
     @if (roles.Count == 0)
     {
-        <p class="text-muted">No roles yet.</p>
+        <MudText Class="muted">No roles yet.</MudText>
     }
-    <div class="list-group">
+    <MudPaper Outlined>
         @foreach (var role in roles)
         {
             var mine = role.Permissions.All(permissions.Contains);
-            <div class="list-group-item" @key="role.Id">
+            <div class="role-row" @key="role.Id">
                 <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
                     <div>
                         <div class="fw-semibold">
                             @role.Name
-                            <span class="badge text-bg-light ms-1">@role.MemberCount employee@(role.MemberCount == 1 ? "" : "s")</span>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ms-1 my-0">@role.MemberCount employee@(role.MemberCount == 1 ? "" : "s")</MudChip>
                         </div>
                         @if (!string.IsNullOrWhiteSpace(role.Description))
                         {
-                            <div class="small text-muted">@role.Description</div>
+                            <div class="small muted">@role.Description</div>
                         }
                         <div class="mt-1">
                             @if (role.Permissions.Count == 0)
                             {
-                                <span class="small text-muted">No actions</span>
+                                <span class="small muted">No actions</span>
                             }
                             @foreach (var key in role.Permissions)
                             {
-                                <span class="badge text-bg-secondary me-1">@NameOf(key)</span>
+                                <MudChip T="string" Size="Size.Small" Class="my-0">@NameOf(key)</MudChip>
                             }
                         </div>
                     </div>
                     <div class="text-nowrap">
                         @if (mine)
                         {
-                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => StartEdit(role)">Edit</button>
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => StartEdit(role)">Edit</MudButton>
                             @if (confirmDeleteId == role.Id)
                             {
-                                <button class="btn btn-sm btn-danger" @onclick="() => DeleteAsync(role)">
+                                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Error" OnClick="() => DeleteAsync(role)">
                                     @(role.MemberCount > 0 ? $"Delete and remove from {role.MemberCount}" : "Confirm delete")
-                                </button>
-                                <button class="btn btn-sm btn-link" @onclick="() => confirmDeleteId = null">Cancel</button>
+                                </MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="() => confirmDeleteId = null">Cancel</MudButton>
                             }
                             else
                             {
-                                <button class="btn btn-sm btn-outline-danger" @onclick="() => confirmDeleteId = role.Id">Delete</button>
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="() => confirmDeleteId = role.Id">Delete</MudButton>
                             }
                         }
                         else
                         {
-                            <span class="small text-muted">Has actions you don't have</span>
+                            <span class="small muted">Has actions you don't have</span>
                         }
                     </div>
                 </div>
             </div>
         }
-    </div>
+    </MudPaper>
 }
 
 @code {
     [Parameter] public int Id { get; set; }
 
-    private string? theaterName;
+    private Theater? theater;
     private bool fullAccess;
     private IReadOnlySet<string> permissions = new HashSet<string>();
     private List<RoleSummary>? roles;
@@ -145,8 +142,7 @@
 
     protected override async Task LoadAsync()
     {
-        var theater = await Theaters.GetForManageAsync(User, Id);
-        theaterName = theater.Name;
+        theater = await Theaters.GetForManageAsync(User, Id);
         fullAccess = TheaterAccess.HasFullAccess(User, theater);
         permissions = await Access.GetPermissionsAsync(User, theater);
         roles = await RoleManager.ListAsync(User, Id); // requires ManageRoles

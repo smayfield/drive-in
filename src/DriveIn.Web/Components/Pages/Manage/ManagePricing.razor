@@ -7,145 +7,127 @@
 
 <PageTitle>Pricing · Manage · Drive-In Online</PageTitle>
 
-<p><a href="manage/@Id">&larr; Back to theater</a> · <a href="manage/@Id/schedule">Schedule</a></p>
-
-@if (pricing is null)
+@if (pricing is null || theater is null)
 {
     <Alerts Error="@Error" />
-    @if (Error is null) { <p>Loading…</p> }
+    @if (Error is null) { <MudProgressCircular Indeterminate Size="Size.Small" aria-label="Loading pricing" /> }
 }
 else
 {
-    <h1>Pricing <small class="text-muted fs-5">@theaterName</small></h1>
-    <p class="text-muted">
+    <ManageHeader Theater="theater" Title="Pricing" Current="pricing" />
+    <MudText Class="muted mb-3">
         A price schedule lists the ways a spot can be bought, such as 1 occupant, 2 occupants or a car load.
-        Showtimes use the default schedule unless you pick another one for them on the <a href="manage/@Id/schedule">schedule</a>,
+        Showtimes use the default schedule unless you pick another one for them on the <MudLink Href="@($"manage/{Id}/schedule")">schedule</MudLink>,
         e.g. for 3D movies or special showings.
-    </p>
+    </MudText>
 
     <Alerts Error="@Error" Success="@Success" />
 
-    <section class="mb-5">
-        <h2 class="h4">Price schedules</h2>
+    <section class="manage-section">
+        <MudText Typo="Typo.h5">Price schedules</MudText>
         @foreach (var schedule in pricing.Schedules)
         {
-            <div class="card mb-3" @key="schedule.Id">
-                <div class="card-body">
-                    @if (editor?.Id == schedule.Id)
-                    {
-                        <div class="mb-3" style="max-width: 24rem">
-                            <label class="form-label" for="schedule-name">Name</label>
-                            <input id="schedule-name" class="form-control" @bind="editor.Name" maxlength="60" />
-                        </div>
-                        <table class="table table-sm align-middle">
-                            <thead><tr><th style="width: 5rem"></th><th>Option</th><th>Description</th><th style="width: 9rem">Price</th><th></th></tr></thead>
-                            <tbody>
-                                @for (var i = 0; i < editor.Options.Count; i++)
+            <MudPaper Outlined Class="pa-3 mb-3" @key="schedule.Id">
+                @if (editor?.Id == schedule.Id)
+                {
+                    <MudTextField T="string" @bind-Value="editor.Name" Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="60"
+                                  Style="max-width: 24rem" Class="mb-3" />
+                    <MudSimpleTable Dense Outlined Class="manage-table mb-2">
+                        <thead><tr><th style="width: 6rem"></th><th>Option</th><th>Description</th><th style="width: 9rem">Price</th><th></th></tr></thead>
+                        <tbody>
+                            @for (var i = 0; i < editor.Options.Count; i++)
+                            {
+                                var option = editor.Options[i];
+                                var index = i;
+                                <tr @key="option">
+                                    <td class="text-nowrap">
+                                        <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward" Size="Size.Small" Disabled="@(index == 0)" aria-label="Move up" OnClick="() => editor.Move(index, -1)" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward" Size="Size.Small" Disabled="@(index == editor.Options.Count - 1)" aria-label="Move down" OnClick="() => editor.Move(index, 1)" />
+                                    </td>
+                                    <td><MudTextField T="string" @bind-Value="option.Name" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="60" Placeholder="e.g. 2 occupants" aria-label="Option name" /></td>
+                                    <td><MudTextField T="string" @bind-Value="option.Description" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="200" aria-label="Option description" /></td>
+                                    <td><MudNumericField T="decimal" @bind-Value="option.Price" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0m" Format="F2" HideSpinButtons Adornment="Adornment.Start" AdornmentText="$" aria-label="Price" /></td>
+                                    <td class="text-end"><MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Error" aria-label="Remove option" OnClick="() => editor.Options.Remove(option)" /></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Class="mb-3" Disabled="@(editor.Options.Count >= PriceOption.MaxPerSchedule)"
+                               OnClick="() => editor.Options.Add(new OptionDraft())">Add option</MudButton>
+                    <div class="d-flex gap-2">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveScheduleAsync">Save</MudButton>
+                        <MudButton Variant="Variant.Outlined" OnClick="() => editor = null">Cancel</MudButton>
+                    </div>
+                }
+                else
+                {
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                        <MudText Typo="Typo.h6">
+                            @schedule.Name
+                            @if (schedule.IsDefault) { <MudChip T="string" Size="Size.Small" Color="Color.Primary" Class="ms-1 my-0">Default</MudChip> }
+                        </MudText>
+                        @if (canManage)
+                        {
+                            <div class="d-flex flex-wrap gap-2">
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => StartEdit(schedule)">Edit</MudButton>
+                                @if (!schedule.IsDefault)
                                 {
-                                    var option = editor.Options[i];
-                                    var index = i;
-                                    <tr @key="option">
-                                        <td>
-                                            <button class="btn btn-sm btn-link px-1" disabled="@(index == 0)" title="Move up" aria-label="Move up" @onclick="() => editor.Move(index, -1)">▲</button>
-                                            <button class="btn btn-sm btn-link px-1" disabled="@(index == editor.Options.Count - 1)" title="Move down" aria-label="Move down" @onclick="() => editor.Move(index, 1)">▼</button>
-                                        </td>
-                                        <td><input class="form-control form-control-sm" @bind="option.Name" maxlength="60" placeholder="e.g. 2 occupants" aria-label="Option name" /></td>
-                                        <td><input class="form-control form-control-sm" @bind="option.Description" maxlength="200" aria-label="Option description" /></td>
-                                        <td>
-                                            <div class="input-group input-group-sm">
-                                                <span class="input-group-text">$</span>
-                                                <input class="form-control" type="number" min="0" step="0.01" @bind="option.Price" aria-label="Price" />
-                                            </div>
-                                        </td>
-                                        <td class="text-end"><button class="btn btn-sm btn-link text-danger px-1" title="Remove option" aria-label="Remove option" @onclick="() => editor.Options.Remove(option)">✕</button></td>
-                                    </tr>
+                                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary" OnClick="() => MakeDefaultAsync(schedule)">Make default</MudButton>
+                                    @if (confirmDeleteScheduleId == schedule.Id)
+                                    {
+                                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Error" OnClick="() => DeleteScheduleAsync(schedule)">Confirm delete</MudButton>
+                                    }
+                                    else
+                                    {
+                                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="() => confirmDeleteScheduleId = schedule.Id">Delete</MudButton>
+                                    }
                                 }
-                            </tbody>
-                        </table>
-                        <button class="btn btn-sm btn-outline-secondary mb-3" disabled="@(editor.Options.Count >= PriceOption.MaxPerSchedule)"
-                                @onclick="() => editor.Options.Add(new OptionDraft())">Add option</button>
-                        <div class="d-flex gap-2">
-                            <button class="btn btn-primary" @onclick="SaveScheduleAsync">Save</button>
-                            <button class="btn btn-outline-secondary" @onclick="() => editor = null">Cancel</button>
-                        </div>
+                            </div>
+                        }
+                    </div>
+                    @if (schedule.Options.Count == 0)
+                    {
+                        <MudText Class="muted">No prices yet.@if (canManage) { <span> Choose Edit to add options such as "1 occupant" or "Car load".</span> }</MudText>
                     }
                     else
                     {
-                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-                            <h3 class="h5 mb-0">
-                                @schedule.Name
-                                @if (schedule.IsDefault) { <span class="badge text-bg-primary ms-1">Default</span> }
-                            </h3>
-                            @if (canManage)
-                            {
-                                <div class="d-flex gap-2">
-                                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => StartEdit(schedule)">Edit</button>
-                                    @if (!schedule.IsDefault)
-                                    {
-                                        <button class="btn btn-sm btn-outline-primary" @onclick="() => MakeDefaultAsync(schedule)">Make default</button>
-                                        @if (confirmDeleteScheduleId == schedule.Id)
-                                        {
-                                            <button class="btn btn-sm btn-danger" @onclick="() => DeleteScheduleAsync(schedule)">Confirm delete</button>
-                                        }
-                                        else
-                                        {
-                                            <button class="btn btn-sm btn-outline-danger" @onclick="() => confirmDeleteScheduleId = schedule.Id">Delete</button>
-                                        }
-                                    }
-                                </div>
-                            }
-                        </div>
-                        @if (schedule.Options.Count == 0)
-                        {
-                            <p class="text-muted mb-0">No prices yet.@if (canManage) { <span> Choose Edit to add options such as "1 occupant" or "Car load".</span> }</p>
-                        }
-                        else
-                        {
-                            <table class="table table-sm mb-0">
-                                <tbody>
-                                    @foreach (var option in schedule.Options)
-                                    {
-                                        <tr>
-                                            <td>@option.Name @if (option.Description is not null) { <span class="text-muted small ms-1">@option.Description</span> }</td>
-                                            <td class="text-end" style="width: 8rem">@Money.Format(option.Price)</td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
-                        }
+                        <MudSimpleTable Dense Style="box-shadow: none; background: transparent">
+                            <tbody>
+                                @foreach (var option in schedule.Options)
+                                {
+                                    <tr>
+                                        <td>@option.Name @if (option.Description is not null) { <span class="muted small ms-1">@option.Description</span> }</td>
+                                        <td class="text-end" style="width: 8rem">@Money.Format(option.Price)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
                     }
-                </div>
-            </div>
+                }
+            </MudPaper>
         }
 
         @if (canManage)
         {
-            <div class="row g-2 align-items-end" style="max-width: 44rem">
-                <div class="col-sm-5">
-                    <label class="form-label" for="new-schedule">New schedule</label>
-                    <input id="new-schedule" class="form-control" @bind="newScheduleName" maxlength="60" placeholder="e.g. 3D" />
-                </div>
-                <div class="col-sm-4">
-                    <label class="form-label" for="copy-from">Start from</label>
-                    <select id="copy-from" class="form-select" @bind="copyFromId">
-                        <option value="0">Nothing</option>
-                        @foreach (var s in pricing.Schedules)
-                        {
-                            <option value="@s.Id">Copy of @s.Name</option>
-                        }
-                    </select>
-                </div>
-                <div class="col-sm-3">
-                    <button class="btn btn-success w-100" @onclick="CreateScheduleAsync">Create</button>
-                </div>
+            <div class="d-flex flex-wrap gap-2 align-items-start" style="max-width: 44rem">
+                <MudTextField T="string" @bind-Value="newScheduleName" Label="New schedule" Placeholder="e.g. 3D" Variant="Variant.Outlined" Margin="Margin.Dense"
+                              MaxLength="60" Class="field-grow" />
+                <MudSelect T="int" @bind-Value="copyFromId" Label="Start from" Variant="Variant.Outlined" Margin="Margin.Dense" Class="field-grow">
+                    <MudSelectItem T="int" Value="0">Nothing</MudSelectItem>
+                    @foreach (var s in pricing.Schedules)
+                    {
+                        <MudSelectItem T="int" Value="@s.Id">Copy of @s.Name</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-1" OnClick="CreateScheduleAsync">Create</MudButton>
             </div>
         }
     </section>
 
-    <section>
-        <h2 class="h4">Add-ons</h2>
-        <p class="text-muted">Fees (such as bringing in outside food) and discounts (such as for veterans or seniors) that can be added to a ticket.</p>
-        <table class="table align-middle">
+    <section class="manage-section">
+        <MudText Typo="Typo.h5">Add-ons</MudText>
+        <MudText Class="muted mb-2">Fees (such as bringing in outside food) and discounts (such as for veterans or seniors) that can be added to a ticket.</MudText>
+        <MudSimpleTable Dense Outlined Class="manage-table">
             <thead>
                 <tr>
                     <th>Name</th><th>Description</th><th style="width: 11rem">Type</th><th style="width: 9rem">Amount</th><th style="width: 5rem">Active</th>
@@ -155,13 +137,13 @@ else
             <tbody>
                 @foreach (var addOn in pricing.AddOns)
                 {
-                    <tr @key="addOn.Id" class="@(addOn.IsActive ? null : "text-muted")">
+                    <tr @key="addOn.Id" class="@(addOn.IsActive ? null : "muted")">
                         @if (editingAddOn?.Id == addOn.Id)
                         {
                             <AddOnFields Draft="editingAddOn" />
-                            <td class="text-end">
-                                <button class="btn btn-sm btn-primary" @onclick="SaveAddOnAsync">Save</button>
-                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => editingAddOn = null">Cancel</button>
+                            <td class="text-end text-nowrap">
+                                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAddOnAsync">Save</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => editingAddOn = null">Cancel</MudButton>
                             </td>
                         }
                         else
@@ -173,15 +155,15 @@ else
                             <td>@(addOn.IsActive ? "Yes" : "No")</td>
                             @if (canManage)
                             {
-                                <td class="text-end">
-                                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => StartEditAddOn(addOn)">Edit</button>
+                                <td class="text-end text-nowrap">
+                                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => StartEditAddOn(addOn)">Edit</MudButton>
                                     @if (confirmDeleteAddOnId == addOn.Id)
                                     {
-                                        <button class="btn btn-sm btn-danger" @onclick="() => DeleteAddOnAsync(addOn)">Confirm delete</button>
+                                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Error" OnClick="() => DeleteAddOnAsync(addOn)">Confirm delete</MudButton>
                                     }
                                     else
                                     {
-                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => { confirmDeleteAddOnId = addOn.Id; editingAddOn = null; }">Delete</button>
+                                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="() => { confirmDeleteAddOnId = addOn.Id; editingAddOn = null; }">Delete</MudButton>
                                     }
                                 </td>
                             }
@@ -192,14 +174,14 @@ else
                 {
                     <tr>
                         <AddOnFields Draft="newAddOn" />
-                        <td class="text-end"><button class="btn btn-sm btn-success" @onclick="AddAddOnAsync">Add</button></td>
+                        <td class="text-end"><MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="AddAddOnAsync">Add</MudButton></td>
                     </tr>
                 }
             </tbody>
-        </table>
+        </MudSimpleTable>
         @if (pricing.AddOns.Count == 0 && !canManage)
         {
-            <p class="text-muted">No add-ons.</p>
+            <MudText Class="muted">No add-ons.</MudText>
         }
     </section>
 }
@@ -230,7 +212,7 @@ else
     }
 
     private TheaterPricing? pricing;
-    private string? theaterName;
+    private Theater? theater;
     private bool canManage;
     private ScheduleDraft? editor;
     private string newScheduleName = "";
@@ -250,8 +232,7 @@ else
 
     protected override async Task LoadAsync()
     {
-        var theater = await Theaters.GetForManageAsync(User, Id);
-        theaterName = theater.Name;
+        theater = await Theaters.GetForManageAsync(User, Id);
         canManage = (await Access.GetPermissionsAsync(User, theater)).Contains(TheaterPermissions.ManagePricing);
         await ReloadAsync();
     }

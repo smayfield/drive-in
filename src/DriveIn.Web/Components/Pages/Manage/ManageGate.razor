@@ -10,144 +10,140 @@
 
 <PageTitle>Gate · Manage · Drive-In Online</PageTitle>
 
-<p><a href="manage/@Id">&larr; Back to theater</a></p>
-
 @if (theater is null)
 {
     <Alerts Error="@Error" />
-    @if (Error is null) { <p>Loading…</p> }
+    @if (Error is null) { <MudProgressCircular Indeterminate Size="Size.Small" aria-label="Loading gate" /> }
 }
 else
 {
-    <h1>Gate <small class="text-muted fs-5">@theater.Name</small></h1>
+    <ManageHeader Theater="theater" Title="Gate" Current="gate" />
 
-    <div class="row g-4">
+    <MudGrid Spacing="4">
         @if (canAdmit)
         {
-            <div class="@(canSell ? "col-lg-4" : "col-lg-8")">
-                <section class="card">
-                    <div class="card-body">
-                        <h2 class="h5">Check in</h2>
-                        <form class="d-flex gap-2 mb-2" @onsubmit="FindAsync">
-                            <input @ref="codeInput" class="form-control form-control-lg font-monospace" autocomplete="off" autocapitalize="characters"
-                                   placeholder="Gate code or scan" aria-label="Gate code, ticket code or scanned QR code" @bind="code" />
-                            <button type="submit" class="btn btn-primary btn-lg">Find</button>
-                        </form>
-                        <p class="small text-muted">
-                            Type the guest's 4-character gate code, or scan their QR code: a handheld scanner types into this
-                            box, or a phone's camera app opens the ticket directly.
-                        </p>
-                        @if (section == Section.CheckIn)
-                        {
-                            <Alerts Error="@Error" Success="@Success" />
-                        }
-                        @foreach (var found in lookups)
-                        {
-                            var t = found.View.Ticket;
-                            var s = found.View.Showing;
-                            var valid = found.AdmitProblem is null;
-                            <div class="card mb-2 @(valid ? "border-success" : "border-danger")" @key="t.Id">
-                                <div class="card-body">
-                                    <p class="fs-4 fw-bold mb-1 @(valid ? "text-success" : "text-danger")">@(valid ? "Valid" : "Not valid")</p>
-                                    @if (!valid)
-                                    {
-                                        <p class="mb-2">@found.AdmitProblem</p>
-                                    }
-                                    <p class="mb-1"><span class="fs-3 fw-bold">Spot @t.SpotLabel</span> · @s.ScreenName</p>
-                                    <p class="mb-1">@s.Title</p>
-                                    <p class="mb-1 small">@s.StartsLocal.ToString("ddd, MMM d · h:mm tt") · gate code <span class="font-monospace">@t.ShortCode</span></p>
-                                    <p class="mb-2 small text-muted">
-                                        @t.OptionName@foreach (var a in t.AddOns) { @($" · {a.Name}") }
-                                        · @(t.SoldAtGate ? "sold at the gate" : "bought online")@(t.IsTest ? " · test ticket" : "")
-                                    </p>
-                                    @if (valid)
-                                    {
-                                        <button class="btn btn-success btn-lg" disabled="@busy" @onclick="() => AdmitAsync(t.Code!)">Check in</button>
-                                    }
-                                </div>
+            <MudItem xs="12" lg="@(canSell ? 4 : 8)">
+                <MudPaper Outlined Class="pa-3">
+                    <MudText Typo="Typo.h5" Class="mb-2">Check in</MudText>
+                    @* A plain input on purpose: handheld scanners type into it and press Enter, and it gets focus after each lookup. *@
+                    <form class="d-flex gap-2 mb-2" @onsubmit="FindAsync">
+                        <input @ref="codeInput" class="gate-input" autocomplete="off" autocapitalize="characters"
+                               placeholder="Gate code or scan" aria-label="Gate code, ticket code or scanned QR code" @bind="code" />
+                        <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large">Find</MudButton>
+                    </form>
+                    <MudText Typo="Typo.body2" Class="muted mb-2">
+                        Type the guest's 4-character gate code, or scan their QR code: a handheld scanner types into this
+                        box, or a phone's camera app opens the ticket directly.
+                    </MudText>
+                    @if (section == Section.CheckIn)
+                    {
+                        <Alerts Error="@Error" Success="@Success" />
+                    }
+                    @foreach (var found in lookups)
+                    {
+                        var t = found.View.Ticket;
+                        var s = found.View.Showing;
+                        var valid = found.AdmitProblem is null;
+                        <MudPaper Outlined Class="pa-3 mb-2" Style="@($"border-color: var(--mud-palette-{(valid ? "success" : "error")}); border-width: 2px")" @key="t.Id">
+                            <MudText Typo="Typo.h4" Color="@(valid ? Color.Success : Color.Error)">@(valid ? "Valid" : "Not valid")</MudText>
+                            @if (!valid)
+                            {
+                                <MudText Class="mb-2">@found.AdmitProblem</MudText>
+                            }
+                            <div class="mb-1"><span class="gate-spot">Spot @t.SpotLabel</span> · @s.ScreenName</div>
+                            <div class="mb-1">@s.Title</div>
+                            <div class="mb-1 small">@s.StartsLocal.ToString("ddd, MMM d · h:mm tt") · gate code <span class="font-monospace">@t.ShortCode</span></div>
+                            <div class="mb-2 small muted">
+                                @t.OptionName@foreach (var a in t.AddOns) { @($" · {a.Name}") }
+                                · @(t.SoldAtGate ? "sold at the gate" : "bought online")@(t.IsTest ? " · test ticket" : "")
                             </div>
-                        }
-                    </div>
-                </section>
-            </div>
+                            @if (valid)
+                            {
+                                <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Large" FullWidth Disabled="@busy" OnClick="() => AdmitAsync(t.Code!)">Check in</MudButton>
+                            }
+                        </MudPaper>
+                    }
+                </MudPaper>
+            </MudItem>
         }
 
         @if (canSell)
         {
-            <div class="@(canAdmit ? "col-lg-8" : "col-12")">
-                <section class="card">
-                    <div class="card-body">
-                        <h2 class="h5">Sell a ticket</h2>
-                        @if (section == Section.Sell)
+            <MudItem xs="12" lg="@(canAdmit ? 8 : 12)">
+                <MudPaper Outlined Class="pa-3">
+                    <MudText Typo="Typo.h5" Class="mb-2">Sell a ticket</MudText>
+                    @if (section == Section.Sell)
+                    {
+                        <Alerts Error="@Error" Success="@Success" />
+                    }
+                    @if (showings.Count == 0)
+                    {
+                        <MudText Class="muted">No showings are left today.</MudText>
+                    }
+                    <div class="d-flex flex-wrap gap-2 mb-3">
+                        @foreach (var g in showings)
                         {
-                            <Alerts Error="@Error" Success="@Success" />
-                        }
-                        @if (showings.Count == 0)
-                        {
-                            <p class="text-muted mb-0">No showings are left today.</p>
-                        }
-                        <div class="d-flex flex-wrap gap-2 mb-3">
-                            @foreach (var g in showings)
-                            {
-                                var selected = g.Showing.Id == sale?.Showing.Id;
-                                <button class="btn @(selected ? "btn-primary" : "btn-outline-primary") text-start" disabled="@(busy || Hold is not null)"
-                                        @onclick="() => SelectAsync(g.Showing.Id)">
+                            var selected = g.Showing.Id == sale?.Showing.Id;
+                            var showingId = g.Showing.Id;
+                            <MudButton Variant="@(selected ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Class="gate-showing" Disabled="@(busy || Hold is not null)"
+                                       OnClick="() => SelectAsync(showingId)">
+                                <span class="text-start">
                                     <strong>@g.Showing.StartsLocal.ToString("h:mm tt")</strong> @g.Showing.Title
                                     <span class="d-block small">@g.Showing.ScreenName · @g.Open open@(g.Showing.StartsLocal <= NowLocal ? " · started" : "")</span>
-                                </button>
-                            }
-                        </div>
-
-                        @if (sale is not null && availability is not null)
-                        {
-                            @if (!sale.OnSale)
-                            {
-                                <div class="alert alert-info">@sale.NotOnSaleReason</div>
-                            }
-                            <div class="row g-3">
-                                <div class="col-xxl-7">
-                                    <SeatMap Screen="sale.Screen" Availability="availability" CanPick="sale.OnSale && !busy && Hold is null"
-                                             OnPick="HoldAsync" MineLabel="This car" />
-                                </div>
-                                <div class="col-xxl-5">
-                                    @if (Hold is HoldView hold)
-                                    {
-                                        <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
-                                            <h3 class="h5 mb-0">Spot @hold.SpotLabel</h3>
-                                            <span class="badge text-bg-warning" role="timer" aria-live="off">held @Remaining</span>
-                                        </div>
-                                        <TicketChoices Prices="sale.Prices" AddOns="sale.AddOns" @bind-OptionId="optionId" @bind-AddOnIds="addOnIds" />
-                                        <div class="d-flex flex-wrap gap-2">
-                                            <button class="btn btn-success btn-lg" disabled="@(busy || Quote is null)" @onclick="SellAsync">
-                                                @(busy ? "Processing…" : Quote is { Total: > 0 } q ? $"Charge card {Money.Format(q.Total)}" : "Sell (no charge)")
-                                            </button>
-                                            <button class="btn btn-outline-secondary" disabled="@busy" @onclick="ReleaseAsync">Cancel</button>
-                                        </div>
-                                        <p class="small text-muted mt-2 mb-0">
-                                            Take the card on the terminal. The car is checked in when the sale goes through. Sales are final.
-                                        </p>
-                                    }
-                                    else if (lastSale is TicketView sold)
-                                    {
-                                        <div class="alert alert-success">
-                                            <p class="fs-5 fw-bold mb-1">Sold and checked in</p>
-                                            <p class="mb-1">Send the car to <strong>spot @sold.Ticket.SpotLabel</strong> on @sold.Showing.ScreenName.</p>
-                                            <p class="mb-0 small">@Money.Format(sold.Ticket.Total) · gate code <span class="font-monospace">@sold.Ticket.ShortCode</span></p>
-                                        </div>
-                                        <p class="text-muted small">Pick a green spot for the next car.</p>
-                                    }
-                                    else if (sale.OnSale)
-                                    {
-                                        <p class="text-muted">Pick a green spot for the car. @AvailableCount of @sale.Screen.SpotCount are open.</p>
-                                    }
-                                </div>
-                            </div>
+                                </span>
+                            </MudButton>
                         }
                     </div>
-                </section>
-            </div>
+
+                    @if (sale is not null && availability is not null)
+                    {
+                        @if (!sale.OnSale)
+                        {
+                            <MudAlert Severity="Severity.Info" Class="mb-2">@sale.NotOnSaleReason</MudAlert>
+                        }
+                        <MudGrid Spacing="3">
+                            <MudItem xs="12" xl="7">
+                                <SeatMap Screen="sale.Screen" Availability="availability" CanPick="sale.OnSale && !busy && Hold is null"
+                                         OnPick="HoldAsync" MineLabel="This car" />
+                            </MudItem>
+                            <MudItem xs="12" xl="5">
+                                @if (Hold is HoldView hold)
+                                {
+                                    <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                                        <MudText Typo="Typo.h5">Spot @hold.SpotLabel</MudText>
+                                        <MudChip T="string" Color="Color.Warning" role="timer" aria-live="off">held @Remaining</MudChip>
+                                    </div>
+                                    <TicketChoices Prices="sale.Prices" AddOns="sale.AddOns" @bind-OptionId="optionId" @bind-AddOnIds="addOnIds" />
+                                    <div class="d-flex flex-wrap gap-2">
+                                        <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Large" Disabled="@(busy || Quote is null)" OnClick="SellAsync">
+                                            @(busy ? "Processing…" : Quote is { Total: > 0 } q ? $"Charge card {Money.Format(q.Total)}" : "Sell (no charge)")
+                                        </MudButton>
+                                        <MudButton Variant="Variant.Outlined" Size="Size.Large" Disabled="@busy" OnClick="ReleaseAsync">Cancel</MudButton>
+                                    </div>
+                                    <MudText Typo="Typo.body2" Class="muted mt-2">
+                                        Take the card on the terminal. The car is checked in when the sale goes through. Sales are final.
+                                    </MudText>
+                                }
+                                else if (lastSale is TicketView sold)
+                                {
+                                    <MudAlert Severity="Severity.Success" Class="mb-2">
+                                        <MudText Typo="Typo.h6">Sold and checked in</MudText>
+                                        <div>Send the car to <strong>spot @sold.Ticket.SpotLabel</strong> on @sold.Showing.ScreenName.</div>
+                                        <div class="small">@Money.Format(sold.Ticket.Total) · gate code <span class="font-monospace">@sold.Ticket.ShortCode</span></div>
+                                    </MudAlert>
+                                    <MudText Typo="Typo.body2" Class="muted">Pick a green spot for the next car.</MudText>
+                                }
+                                else if (sale.OnSale)
+                                {
+                                    <MudText Class="muted">Pick a green spot for the car. @AvailableCount of @sale.Screen.SpotCount are open.</MudText>
+                                }
+                            </MudItem>
+                        </MudGrid>
+                    }
+                </MudPaper>
+            </MudItem>
         }
-    </div>
+    </MudGrid>
 }
 
 @code {

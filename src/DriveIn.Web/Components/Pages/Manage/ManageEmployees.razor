@@ -9,8 +9,10 @@
 
 <PageTitle>Employees · Manage · Drive-In Online</PageTitle>
 
-<p><a href="manage/@Id">&larr; Back to theater</a></p>
-<h1>Employees @if (theaterName is not null) { <small class="text-muted fs-5">@theaterName</small> }</h1>
+@if (theater is not null)
+{
+    <ManageHeader Theater="theater" Title="Employees" Current="employees" />
+}
 
 <Alerts Error="@Error" Success="@Success" />
 
@@ -18,40 +20,37 @@
 {
     @if (Can(TheaterPermissions.InviteEmployees))
     {
-        <section class="mb-4">
-            <h2 class="h5">Invite an employee</h2>
-            <p class="text-muted small">
+        <section class="manage-section">
+            <MudText Typo="Typo.h5">Invite an employee</MudText>
+            <MudText Typo="Typo.body2" Class="muted mb-2">
                 They'll get an email link to create an account for this theater, with a password or with Google.
                 New employees have no roles, so they can't do anything until someone assigns them one.
-            </p>
-            <form class="row g-2" @onsubmit="InviteAsync">
-                <div class="col-sm-8 col-md-6">
-                    <input type="email" class="form-control" placeholder="name@example.com" @bind="inviteEmail" required />
-                </div>
-                <div class="col-auto">
-                    <button type="submit" class="btn btn-primary">Send invite</button>
-                </div>
+            </MudText>
+            <form class="d-flex flex-wrap gap-2 align-items-start" @onsubmit="InviteAsync">
+                <MudTextField T="string" @bind-Value="inviteEmail" InputType="InputType.Email" Label="Email" Placeholder="name@example.com"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Required Class="field-grow" />
+                <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" Class="mt-1">Send invite</MudButton>
             </form>
         </section>
     }
 
     @if (employees is not null)
     {
-        <section class="mb-4">
-            <div class="d-flex justify-content-between align-items-center">
-                <h2 class="h5 mb-0">Employees</h2>
+        <section class="manage-section">
+            <div class="d-flex justify-content-between align-items-baseline">
+                <MudText Typo="Typo.h5">Employees</MudText>
                 @if (Can(TheaterPermissions.ManageRoles))
                 {
-                    <a href="manage/@Id/roles" class="small">Manage roles</a>
+                    <MudLink Href="@($"manage/{Id}/roles")">Manage roles</MudLink>
                 }
             </div>
             @if (employees.Count == 0)
             {
-                <p class="text-muted mt-2">No employees yet.</p>
+                <MudText Class="muted">No employees yet.</MudText>
             }
             else
             {
-                <table class="table align-middle mt-2">
+                <MudSimpleTable Dense Hover Class="manage-table" Outlined>
                     <thead><tr><th>Employee</th><th>Roles</th><th>Sign-in</th><th></th></tr></thead>
                     <tbody>
                         @foreach (var e in employees)
@@ -59,8 +58,8 @@
                             <tr @key="e.Id">
                                 <td>
                                     <div>@(e.DisplayName ?? e.Email)</div>
-                                    @if (e.DisplayName is not null) { <div class="small text-muted">@e.Email</div> }
-                                    @if (e.IsLockedOut) { <span class="badge text-bg-warning">Locked</span> }
+                                    @if (e.DisplayName is not null) { <div class="small muted">@e.Email</div> }
+                                    @if (e.IsLockedOut) { <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="my-0">Locked</MudChip> }
                                 </td>
                                 <td>
                                     @if (editingRolesFor == e.Id)
@@ -68,39 +67,37 @@
                                         @foreach (var role in roles!)
                                         {
                                             var grantable = WithinMyAuthority(role);
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" id="r-@e.Id-@role.Id"
-                                                       checked="@selectedRoles.Contains(role.Id)" disabled="@(!grantable)"
-                                                       @onchange="args => ToggleRole(role.Id, (bool)args.Value!)" />
-                                                <label class="form-check-label" for="r-@e.Id-@role.Id"
-                                                       title="@(grantable ? role.Description : "This role has permissions you don't have.")">
+                                            var roleId = role.Id;
+                                            <div title="@(grantable ? role.Description : "This role has permissions you don't have.")">
+                                                <MudCheckBox T="bool" Value="selectedRoles.Contains(roleId)" ValueChanged="on => ToggleRole(roleId, on)"
+                                                             Disabled="@(!grantable)" Color="Color.Primary" Dense>
                                                     @role.Name
-                                                    @if (!grantable) { <span class="text-muted small">(can't change)</span> }
-                                                </label>
+                                                    @if (!grantable) { <span class="muted small">(can't change)</span> }
+                                                </MudCheckBox>
                                             </div>
                                         }
                                         @if (roles!.Count == 0)
                                         {
-                                            <span class="text-muted small">No roles yet. <a href="manage/@Id/roles">Create one</a>.</span>
+                                            <span class="muted small">No roles yet. <MudLink Href="@($"manage/{Id}/roles")">Create one</MudLink>.</span>
                                         }
-                                        <div class="mt-2">
-                                            <button class="btn btn-sm btn-primary" @onclick="() => SaveRolesAsync(e)">Save roles</button>
-                                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => editingRolesFor = null">Cancel</button>
+                                        <div class="mt-2 d-flex gap-2">
+                                            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="() => SaveRolesAsync(e)">Save roles</MudButton>
+                                            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => editingRolesFor = null">Cancel</MudButton>
                                         </div>
                                     }
                                     else
                                     {
                                         @if (e.Roles.Count == 0)
                                         {
-                                            <span class="text-muted small">No roles</span>
+                                            <span class="muted small">No roles</span>
                                         }
                                         @foreach (var r in e.Roles)
                                         {
-                                            <span class="badge text-bg-secondary me-1">@r.Name</span>
+                                            <MudChip T="string" Size="Size.Small" Class="my-0">@r.Name</MudChip>
                                         }
                                         @if (Can(TheaterPermissions.ManageRoles))
                                         {
-                                            <button class="btn btn-sm btn-link" @onclick="() => StartEditRoles(e)">Edit</button>
+                                            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="() => StartEditRoles(e)">Edit</MudButton>
                                         }
                                     }
                                 </td>
@@ -108,36 +105,36 @@
                                 <td class="text-end text-nowrap">
                                     @if (Can(TheaterPermissions.ManageEmployees))
                                     {
-                                        <button class="btn btn-sm btn-outline-secondary" @onclick="() => ResetAsync(e)">Send password reset</button>
+                                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => ResetAsync(e)">Send password reset</MudButton>
                                         @if (confirmDeleteId == e.Id)
                                         {
-                                            <button class="btn btn-sm btn-danger" @onclick="() => DeleteAsync(e)">Confirm delete</button>
+                                            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Error" OnClick="() => DeleteAsync(e)">Confirm delete</MudButton>
                                         }
                                         else
                                         {
-                                            <button class="btn btn-sm btn-outline-danger" @onclick="() => confirmDeleteId = e.Id">Delete</button>
+                                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="() => confirmDeleteId = e.Id">Delete</MudButton>
                                         }
                                     }
                                 </td>
                             </tr>
                         }
                     </tbody>
-                </table>
+                </MudSimpleTable>
             }
         </section>
     }
 
     @if (pending is not null)
     {
-        <section>
-            <h2 class="h5">Pending invitations</h2>
+        <section class="manage-section">
+            <MudText Typo="Typo.h5">Pending invitations</MudText>
             @if (pending.Count == 0)
             {
-                <p class="text-muted">None.</p>
+                <MudText Class="muted">None.</MudText>
             }
             else
             {
-                <table class="table align-middle">
+                <MudSimpleTable Dense Hover Class="manage-table" Outlined>
                     <thead><tr><th>Email</th><th>Type</th><th>Expires</th><th></th></tr></thead>
                     <tbody>
                         @foreach (var i in pending)
@@ -146,17 +143,17 @@
                                 <td>@i.Email</td>
                                 <td>@i.Kind</td>
                                 <td>@(i.ExpiresAt <= DateTimeOffset.UtcNow ? "Expired" : i.ExpiresAt.ToLocalTime().ToString("MMM d, yyyy"))</td>
-                                <td class="text-end">
+                                <td class="text-end text-nowrap">
                                     @if (Can(TheaterPermissions.InviteEmployees) && (i.Kind == InvitationKind.Employee || User.IsAdmin()))
                                     {
-                                        <button class="btn btn-sm btn-outline-secondary" @onclick="() => ResendAsync(i)">Resend</button>
-                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => RevokeAsync(i)">Revoke</button>
+                                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => ResendAsync(i)">Resend</MudButton>
+                                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="() => RevokeAsync(i)">Revoke</MudButton>
                                     }
                                 </td>
                             </tr>
                         }
                     </tbody>
-                </table>
+                </MudSimpleTable>
             }
         </section>
     }
@@ -166,7 +163,7 @@
     [Parameter] public int Id { get; set; }
 
     private bool loaded;
-    private string? theaterName;
+    private Theater? theater;
     private IReadOnlySet<string> permissions = new HashSet<string>();
     private List<EmployeeSummary>? employees;
     private List<Invitation>? pending;
@@ -183,8 +180,7 @@
 
     protected override async Task LoadAsync()
     {
-        var theater = await Theaters.GetForManageAsync(User, Id);
-        theaterName = theater.Name;
+        theater = await Theaters.GetForManageAsync(User, Id);
         permissions = await Access.GetPermissionsAsync(User, theater);
         if (!EmployeeService.ListingPermissions.Any(Can) && !Can(TheaterPermissions.InviteEmployees))
             throw new AccessDeniedException();
