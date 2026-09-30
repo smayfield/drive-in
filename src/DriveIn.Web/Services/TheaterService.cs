@@ -262,7 +262,7 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
     }
 
     // Deletes the theater with its screens, schedule, ticket sales, pricing, invitations, roles, subscription and draft
-    // invoices, and employee accounts (employee accounts are only valid for this theater, so they go too).
+    // invoices (other invoices are kept), and employee accounts (employee accounts are only valid for this theater, so they go too).
     public async Task DeleteAsync(ClaimsPrincipal user, int id)
     {
         Guard.RequireAdmin(user);
@@ -289,7 +289,8 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
         db.AddOns.RemoveRange(db.AddOns.Where(a => a.TheaterId == id));
         db.PriceOptions.RemoveRange(db.PriceOptions.Where(o => o.Schedule!.TheaterId == id));
         db.PriceSchedules.RemoveRange(db.PriceSchedules.Where(s => s.TheaterId == id));
-        // Issued invoices are records and are kept, detached from the theater; drafts and the subscription go.
+        // Every invoice past draft (issued, paid or void) is a record and is kept, detached from the theater; drafts and the
+        // subscription go.
         foreach (var invoice in await db.Invoices.Where(i => i.TheaterId == id).ToListAsync())
         {
             if (invoice.Status == InvoiceStatus.Draft)

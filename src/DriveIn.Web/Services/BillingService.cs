@@ -227,10 +227,13 @@ public sealed class BillingService(
         {
             var theater = sub.Theater!;
             var thisMonth = MonthOf(LocalToday(theater, now));
-            foreach (var month in new[] { thisMonth.AddMonths(-1), thisMonth })
+            var lastMonth = thisMonth.AddMonths(-1);
+            var invoiced = await db.Invoices
+                .Where(i => i.SubscriptionId == sub.Id && i.PeriodMonth >= lastMonth && i.Status != InvoiceStatus.Void)
+                .Select(i => i.PeriodMonth).ToListAsync();
+            foreach (var month in new[] { lastMonth, thisMonth })
             {
-                if (!IsBillable(sub, theater, month)
-                    || await db.Invoices.AnyAsync(i => i.SubscriptionId == sub.Id && i.PeriodMonth == month && i.Status != InvoiceStatus.Void))
+                if (!IsBillable(sub, theater, month) || invoiced.Contains(month))
                     continue;
                 var draft = NewDraft(sub, theater, month, now);
                 db.Invoices.Add(draft);
