@@ -140,7 +140,7 @@ invitee sets a password or continues with Google using the invited address.
 
 - **MudBlazor** (MIT, free for commercial use) provides the components for every signed-in page; the app shell is
   `Components/Layout/AppLayout.razor`. Marketing pages, legal pages and the Identity account pages stay statically
-  rendered (fast, indexable, and Identity needs the HTTP response) with plain CSS; they are marked
+  rendered (fast, indexable, and Identity needs the HTTP response) with plain CSS (`wwwroot/static.css`); they are marked
   `[ExcludeFromInteractiveRouting]`.
 - **Light and dark** follow the visitor's browser or OS setting, with no toggle. `wwwroot/theme.js` runs before first paint and
   remembers the choice in a `di-scheme` cookie, so the server prerenders the right palette next time (the first-ever visit

@@ -1,5 +1,5 @@
 /* Styles for the public marketing pages (Home, NotFound). Everything is scoped under .marketing
-   so it does not collide with Bootstrap on the app pages. */
+   so it does not collide with the app pages (static.css, MudBlazor). */
 
 :root {
   --bg: #f7f3ea;
@@ -222,7 +222,7 @@ html { -webkit-text-size-adjust: 100%; }
 }
 
 .marketing .card {
-  color: var(--text); /* Bootstrap's .card sets its own color */
+  color: var(--text); /* the global .card in static.css sets its own color */
   padding: 22px;
   border-radius: 14px;
   background: var(--surface);
