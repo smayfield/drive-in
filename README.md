@@ -136,6 +136,20 @@ invitee sets a password or continues with Google using the invited address.
 - **Billing** is per screen for each calendar month the operating season touches (every month without a season); the
   manage page shows the estimate. There's no billing processor yet: billing is handled outside the app.
 
+## Look and feel
+
+- **MudBlazor** (MIT, free for commercial use) provides the components for every signed-in page; the app shell is
+  `Components/Layout/AppLayout.razor`. Marketing pages, legal pages and the Identity account pages stay statically
+  rendered (fast, indexable, and Identity needs the HTTP response) with plain CSS; they are marked
+  `[ExcludeFromInteractiveRouting]`.
+- **Light and dark** follow the visitor's browser or OS setting, with no toggle. `wwwroot/theme.js` runs before first paint and
+  remembers the choice in a `di-scheme` cookie, so the server prerenders the right palette next time (the first-ever visit
+  from a dark device may flash light for a moment). The palettes live in `Layout/DriveInTheme.cs` (MudBlazor) and at the
+  top of `wwwroot/app.css`; `marketing.css` has its own copy.
+- **Public pages** (theaters, showings, tickets) are the showy ones: a bulb-lit marquee header per theater and
+  ticket-stub showings and tickets (`wwwroot/public.css`, `Components/Shared/Stub.razor`). **Manage and admin pages** are meant to stay plain and dense.
+- Fonts: Bungee for display headings, Barlow for everything else (both from Google Fonts).
+
 ## Local development
 
 Needs Docker and the .NET 10 SDK.

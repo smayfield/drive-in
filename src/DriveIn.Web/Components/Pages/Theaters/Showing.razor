@@ -1,6 +1,5 @@
 @page "/theaters/{Slug}/showings/{ShowtimeId:int}"
 @attribute [Authorize]
-@rendermode InteractiveServer
 @inherits AppComponentBase
 @implements IDisposable
 @inject TicketSalesService Sales
@@ -9,152 +8,146 @@
 
 <PageTitle>@(sale?.Showing.Title ?? "Showing") · Tickets · Drive-In Online</PageTitle>
 
-<p><a href="theaters/@Slug">&larr; @(sale?.Theater.Name ?? "Theater")</a></p>
+<MudLink Href="@($"theaters/{Slug}")" Class="d-inline-block mb-3">&larr; @(sale?.Theater.Name ?? "Theater")</MudLink>
 
 @if (sale is null || availability is null)
 {
     <Alerts Error="@Error" />
-    @if (Error is null) { <p>Loading…</p> }
+    @if (Error is null) { <MudProgressCircular Indeterminate Size="Size.Small" aria-label="Loading showing" /> }
 }
 else
 {
     var s = sale.Showing;
-    <h1 class="mb-1">@s.Title</h1>
-    <p class="text-muted">
-        @s.StartsLocal.ToString("dddd, MMMM d · h:mm tt") · @s.ScreenName · ends about @s.EndsLocal.ToString("h:mm tt")
-        @if (s.IsMultiFeature)
+    <div class="d-flex gap-3 mb-4">
+        @foreach (var f in s.Features.Where(f => f.PosterUrl is not null))
         {
-            <br />
-            @string.Join(" · ", s.Features.Select(f => $"{f.StartsLocal:h:mm tt} {f.Title}{(f.Rating is null ? "" : $" ({f.Rating})")}"))
-            @($" · {s.IntermissionMinutes} min intermission")
+            <img src="@f.PosterUrl" alt="Poster for @f.Title" width="80" height="120" style="object-fit: cover; border-radius: 4px" />
         }
-        else if (s.Features.FirstOrDefault()?.Rating is string rating)
-        {
-            @($" · {rating}")
-        }
-    </p>
+        <div>
+            <MudText Typo="Typo.h3" Component="h1">@s.Title</MudText>
+            <MudText Class="muted ">
+                @s.StartsLocal.ToString("dddd, MMMM d · h:mm tt") · @s.ScreenName · ends about @s.EndsLocal.ToString("h:mm tt")
+                @if (s.IsMultiFeature)
+                {
+                    <br />
+                    @string.Join(" · ", s.Features.Select(f => $"{f.StartsLocal:h:mm tt} {f.Title}{(f.Rating is null ? "" : $" ({f.Rating})")}"))
+                    @($" · {s.IntermissionMinutes} min intermission")
+                }
+                else if (s.Features.FirstOrDefault()?.Rating is string rating)
+                {
+                    @($" · {rating}")
+                }
+            </MudText>
+        </div>
+    </div>
 
     <Alerts Error="@Error" Success="@Success" />
     @if (notice is not null)
     {
-        <div class="alert alert-warning" role="alert">@notice</div>
+        <MudAlert Severity="Severity.Warning" Class="mb-3">@notice</MudAlert>
     }
     @if (!sale.OnSale)
     {
-        <div class="alert alert-info">@sale.NotOnSaleReason</div>
+        <MudAlert Severity="Severity.Info" Class="mb-3">@sale.NotOnSaleReason</MudAlert>
     }
 
-    <div class="row g-4">
-        <div class="col-lg-7">
-            <h2 class="h5">
-                @(Hold is null ? "Choose your spot" : $"Spot {Hold.SpotLabel}")
-                <small class="text-muted">@AvailableCount of @sale.Screen.SpotCount available</small>
-            </h2>
+    <MudGrid Spacing="4">
+        <MudItem xs="12" md="7">
+            <div class="d-flex flex-wrap align-items-baseline gap-2 mb-2">
+                <MudText Typo="Typo.h4">@(Hold is null ? "Choose your spot" : $"Spot {Hold.SpotLabel}")</MudText>
+                <MudText Typo="Typo.body2" Class="muted ">@AvailableCount of @sale.Screen.SpotCount available</MudText>
+            </div>
             <SeatMap Screen="sale.Screen" Availability="availability" CanPick="sale.OnSale && !busy" OnPick="HoldAsync" />
-            <p class="small text-muted mt-2">
+            <MudText Typo="Typo.caption" Class="muted d-block mt-2">
                 The screen is at the top; the first row is nearest it. Spots update live as others buy.
                 Spots on hold come back if the buyer doesn't finish within @Ticket.HoldMinutes minutes.
-            </p>
-        </div>
+            </MudText>
+        </MudItem>
 
-        <div class="col-lg-5">
+        <MudItem xs="12" md="5">
             @if (Hold is null)
             {
-                <section class="card">
-                    <div class="card-body">
-                        <h2 class="h5">Tickets</h2>
-                        @if (sale.Prices.Options.Count == 0)
-                        {
-                            <p class="text-muted mb-0">Prices haven't been set for this showing yet.</p>
-                        }
-                        else
-                        {
-                            <ul class="list-unstyled mb-2">
-                                @foreach (var o in sale.Prices.Options)
-                                {
-                                    <li><strong>@Money.Format(o.Price)</strong> @o.Name @if (o.Description is not null) { <span class="text-muted small ms-1">— @o.Description</span> }</li>
-                                }
-                            </ul>
-                            <p class="mb-0 small text-muted">
-                                @(sale.OnSale ? "Pick a green spot on the map to hold it while you pay." : "")
-                                A ticket admits one car to this showing only.
-                            </p>
-                        }
-                    </div>
-                </section>
+                <MudPaper Outlined Class="pa-4">
+                    <MudText Typo="Typo.h5" Class="mb-2">Tickets</MudText>
+                    @if (sale.Prices.Options.Count == 0)
+                    {
+                        <MudText Class="muted ">Prices haven't been set for this showing yet.</MudText>
+                    }
+                    else
+                    {
+                        <ul class="list-unstyled mb-2">
+                            @foreach (var o in sale.Prices.Options)
+                            {
+                                <li><strong>@Money.Format(o.Price)</strong> @o.Name @if (o.Description is not null) { <span class="muted small ms-1">— @o.Description</span> }</li>
+                            }
+                        </ul>
+                        <MudText Typo="Typo.body2" Class="muted ">
+                            @(sale.OnSale ? "Pick a green spot on the map to hold it while you pay." : "")
+                            A ticket admits one car to this showing only.
+                        </MudText>
+                    }
+                </MudPaper>
             }
             else
             {
-                <section class="card border-warning">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-start gap-2">
-                            <h2 class="h5 mb-1">Spot @Hold.SpotLabel is yours for</h2>
-                            <span class="badge text-bg-warning fs-6" role="timer" aria-live="off">@Remaining</span>
-                        </div>
-                        <p class="small text-muted">Finish before the timer runs out or the spot goes back on sale.</p>
-
-                        <TicketChoices Prices="sale.Prices" AddOns="sale.AddOns" @bind-OptionId="optionId" @bind-AddOnIds="addOnIds" />
-
-                        @if (Quote is TicketQuote quote)
-                        {
-
-                            @if (quote.Total > 0)
-                            {
-                                <fieldset class="mb-3">
-                                    <legend class="form-label fs-6 fw-semibold">Credit card</legend>
-                                    <div class="mb-2">
-                                        <label class="form-label small" for="cc-name">Name on card</label>
-                                        <input id="cc-name" class="form-control" autocomplete="cc-name" maxlength="100" @bind="cardName" />
-                                    </div>
-                                    <div class="mb-2">
-                                        <label class="form-label small" for="cc-number">Card number</label>
-                                        <input id="cc-number" class="form-control" inputmode="numeric" autocomplete="cc-number" maxlength="23" @bind="cardNumber" />
-                                    </div>
-                                    <div class="row g-2">
-                                        <div class="col-4">
-                                            <label class="form-label small" for="cc-month">Month</label>
-                                            <select id="cc-month" class="form-select" autocomplete="cc-exp-month" @bind="expMonth">
-                                                <option value="0">MM</option>
-                                                @for (var m = 1; m <= 12; m++)
-                                                {
-                                                    <option value="@m">@m.ToString("00")</option>
-                                                }
-                                            </select>
-                                        </div>
-                                        <div class="col-4">
-                                            <label class="form-label small" for="cc-year">Year</label>
-                                            <select id="cc-year" class="form-select" autocomplete="cc-exp-year" @bind="expYear">
-                                                <option value="0">YYYY</option>
-                                                @for (var y = ThisYear; y <= ThisYear + 15; y++)
-                                                {
-                                                    <option value="@y">@y</option>
-                                                }
-                                            </select>
-                                        </div>
-                                        <div class="col-4">
-                                            <label class="form-label small" for="cc-cvc">Security code</label>
-                                            <input id="cc-cvc" class="form-control" inputmode="numeric" autocomplete="cc-csc" maxlength="4" @bind="cvc" />
-                                        </div>
-                                    </div>
-                                </fieldset>
-                            }
-                        }
-
-                        <p class="small text-muted">
-                            This ticket is good only for this showing on @s.StartsLocal.ToString("MMMM d") and can't be used on a later date.
-                            <strong>All sales are final:</strong> no refunds or exchanges for any reason, including bad weather.
-                        </p>
-                        <div class="d-flex flex-wrap gap-2">
-                            <button class="btn btn-primary" disabled="@(busy || Quote is null)" @onclick="PayAsync">
-                                @(busy ? "Processing…" : Quote is { Total: > 0 } q ? $"Pay {Money.Format(q.Total)}" : "Get ticket")
-                            </button>
-                            <button class="btn btn-outline-secondary" disabled="@busy" @onclick="ReleaseAsync">Choose a different spot</button>
-                        </div>
+                <MudPaper Outlined Class="pa-4" Style="border-color: var(--mud-palette-warning)">
+                    <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
+                        <MudText Typo="Typo.h5">Spot @Hold.SpotLabel is yours for</MudText>
+                        <MudChip T="string" Color="Color.Warning" Size="Size.Medium" role="timer" aria-live="off">@Remaining</MudChip>
                     </div>
-                </section>
+                    <MudText Typo="Typo.body2" Class="muted mb-3">Finish before the timer runs out or the spot goes back on sale.</MudText>
+
+                    <TicketChoices Prices="sale.Prices" AddOns="sale.AddOns" @bind-OptionId="optionId" @bind-AddOnIds="addOnIds" />
+
+                    @if (Quote is TicketQuote quote && quote.Total > 0)
+                    {
+                        <fieldset class="mb-3 border-0 p-0">
+                            <legend class="mud-typography mud-typography-h6 mb-2">Credit card</legend>
+                            <MudTextField T="string" @bind-Value="cardName" Label="Name on card" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                          MaxLength="100" autocomplete="cc-name" Class="mb-2" />
+                            <MudTextField T="string" @bind-Value="cardNumber" Label="Card number" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                          MaxLength="23" InputMode="InputMode.numeric" autocomplete="cc-number" Class="mb-2" />
+                            <MudGrid Spacing="2">
+                                <MudItem xs="4">
+                                    <MudSelect T="int" @bind-Value="expMonth" ToStringFunc="@(v => v == 0 ? "" : v.ToString("00"))" Label="Month" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                        @for (var m = 1; m <= 12; m++)
+                                        {
+                                            var month = m; // a copy: the item's content is rendered later, after the loop variable has moved on
+                                            <MudSelectItem T="int" Value="@month">@month.ToString("00")</MudSelectItem>
+                                        }
+                                    </MudSelect>
+                                </MudItem>
+                                <MudItem xs="4">
+                                    <MudSelect T="int" @bind-Value="expYear" ToStringFunc="@(v => v == 0 ? "" : v.ToString())" Label="Year" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                        @for (var y = ThisYear; y <= ThisYear + 15; y++)
+                                        {
+                                            var year = y;
+                                            <MudSelectItem T="int" Value="@year">@year</MudSelectItem>
+                                        }
+                                    </MudSelect>
+                                </MudItem>
+                                <MudItem xs="4">
+                                    <MudTextField T="string" @bind-Value="cvc" Label="Security code" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                  MaxLength="4" InputMode="InputMode.numeric" autocomplete="cc-csc" />
+                                </MudItem>
+                            </MudGrid>
+                        </fieldset>
+                    }
+
+                    <MudText Typo="Typo.body2" Class="muted mb-3">
+                        This ticket is good only for this showing on @s.StartsLocal.ToString("MMMM d") and can't be used on a later date.
+                        <strong>All sales are final:</strong> no refunds or exchanges for any reason, including bad weather.
+                    </MudText>
+                    <div class="d-flex flex-wrap gap-2">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(busy || Quote is null)" OnClick="PayAsync">
+                            @(busy ? "Processing…" : Quote is { Total: > 0 } q ? $"Pay {Money.Format(q.Total)}" : "Get ticket")
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Default" Disabled="@busy" OnClick="ReleaseAsync">Choose a different spot</MudButton>
+                    </div>
+                </MudPaper>
             }
-        </div>
-    </div>
+        </MudItem>
+    </MudGrid>
 }
 
 @code {

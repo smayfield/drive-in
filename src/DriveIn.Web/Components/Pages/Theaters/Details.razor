@@ -6,120 +6,149 @@
 @if (theater is null)
 {
     <PageTitle>Theater not found · Drive-In Online</PageTitle>
-    <h1>Theater not found</h1>
-    <p><a href="theaters">Back to all theaters</a></p>
+    <MudText Typo="Typo.h3" Component="h1" Class="mb-2">Theater not found</MudText>
+    <MudLink Href="theaters">Back to all theaters</MudLink>
 }
 else
 {
     <PageTitle>@theater.Name · Drive-In Online</PageTitle>
 
-    <p><a href="theaters">&larr; All theaters</a></p>
-    <div class="d-flex align-items-center gap-3 mb-2">
-        @if (theater.LogoUrl is not null)
-        {
-            <img src="@theater.LogoUrl" alt="@theater.Name logo" style="max-height: 6rem; max-width: 12rem; object-fit: contain" />
-        }
-        <h1 class="mb-0">@theater.Name</h1>
-    </div>
-    @if (theater.SeasonOpensOn is not null || theater.SeasonClosesOn is not null)
-    {
-        <p class="text-muted">Season: @Seasons.Describe(theater)</p>
-    }
+    <MudLink Href="theaters" Class="d-inline-block mb-3">&larr; All theaters</MudLink>
 
-    <div class="row g-4">
-        <div class="col-md-7">
+    <header class="marquee-header">
+        <div class="marquee-body">
+            @if (theater.LogoUrl is not null)
+            {
+                <img class="marquee-logo" src="@theater.LogoUrl" alt="@theater.Name logo" />
+            }
+            <div>
+                <h1 class="marquee-title">@theater.Name</h1>
+                <p class="marquee-sub">
+                    @Index.Location(theater)
+                    @if (theater.SeasonOpensOn is not null || theater.SeasonClosesOn is not null)
+                    {
+                        <span> · Season: @Seasons.Describe(theater)</span>
+                    }
+                </p>
+            </div>
+        </div>
+    </header>
+
+    <MudGrid Spacing="4">
+        <MudItem xs="12" md="8">
             @if (!string.IsNullOrWhiteSpace(theater.Description))
             {
-                <p style="white-space: pre-line">@theater.Description</p>
+                <MudText Class="mb-4" Style="white-space: pre-line">@theater.Description</MudText>
             }
 
-            <h2 class="h5 mt-4">Showings</h2>
+            <MudText Typo="Typo.h4" Class="mb-2">Showings</MudText>
             @if (showings.Count == 0)
             {
-                <p class="text-muted">No upcoming showings are scheduled.</p>
+                <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined">No upcoming showings are scheduled. Check back soon.</MudAlert>
             }
             @foreach (var day in showings.GroupBy(s => s.StartsLocal.Date))
             {
-                <h3 class="h6 mt-3">@day.Key.ToString("dddd, MMMM d")</h3>
-                <ul class="list-group mb-2">
-                    @foreach (var s in day)
-                    {
-                        <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2">
-                            <div class="d-flex gap-2">
-                                @foreach (var f in s.Features.Where(f => f.PosterUrl is not null))
+                <MudText Typo="Typo.h5" Class="mt-4 mb-2">@day.Key.ToString("dddd, MMMM d")</MudText>
+                @foreach (var s in day)
+                {
+                    <Stub>
+                        <Poster>
+                            @foreach (var f in s.Features.Where(f => f.PosterUrl is not null))
+                            {
+                                <img src="@f.PosterUrl" alt="Poster for @f.Title" loading="lazy" />
+                            }
+                        </Poster>
+                        <ChildContent>
+                            @foreach (var f in s.Features)
+                            {
+                                <div class="stub-feature">
+                                <h2 class="stub-title">
+                                    @f.Title
+                                    @if (f.Year is not null) { <span class="stub-year"> (@f.Year)</span> }
+                                    @if (!string.IsNullOrWhiteSpace(f.Rating)) { <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ms-1 my-0">@f.Rating</MudChip> }
+                                </h2>
+                                @if (s.IsMultiFeature)
                                 {
-                                    <img src="@f.PosterUrl" alt="Poster for @f.Title" width="60" height="90" style="object-fit: cover" loading="lazy" />
+                                    <p class="stub-meta">@f.StartsLocal.ToString("h:mm tt")</p>
                                 }
-                            <div>
-                                <strong>@s.StartsLocal.ToString("h:mm tt")</strong> · @s.Title
-                                @foreach (var f in s.Features.Where(f => f.Directors is not null || f.Cast is not null || f.Year is not null || f.Genres is not null || f.Overview is not null))
+                                @if (f.Genres is not null || f.Directors is not null || f.Cast is not null || f.Overview is not null)
                                 {
-                                    <div class="small">
-                                        @if (s.IsMultiFeature) { <span class="fw-semibold">@f.Title</span> }
-                                        @if (f.Year is not null) { <span class="text-muted">(@f.Year)</span> }
-                                        @if (f.Genres is not null) { <span class="text-muted"> · @f.Genres</span> }
-                                        @if (f.Directors is not null) { <div class="text-muted">Directed by @f.Directors</div> }
-                                        @if (f.Cast is not null) { <div class="text-muted">Starring @f.Cast</div> }
-                                        @if (f.Overview is not null) { <div class="mt-1" style="white-space: pre-line">@f.Overview</div> }
+                                    <div class="stub-detail">
+                                        @if (f.Genres is not null) { <div>@f.Genres</div> }
+                                        @if (f.Directors is not null) { <div>Directed by @f.Directors</div> }
+                                        @if (f.Cast is not null) { <div>Starring @f.Cast</div> }
+                                        @if (f.Overview is not null)
+                                        {
+                                            <details>
+                                                <summary>About this film</summary>
+                                                <p>@f.Overview</p>
+                                            </details>
+                                        }
                                     </div>
                                 }
-                                <div class="small text-muted">
-                                    @s.ScreenName
-                                    @if (s.IsMultiFeature)
-                                    {
-                                        @($" · {s.Features.Count} films, {s.IntermissionMinutes} min intermission")
-                                    }
-                                    @foreach (var f in s.Features.Where(f => !string.IsNullOrWhiteSpace(f.Rating)))
-                                    {
-                                        @($" · {f.Title} ({f.Rating})")
-                                    }
-                                    · ends @s.EndsLocal.ToString("h:mm tt")
                                 </div>
-                            </div>
-                            </div>
-                            <a class="btn btn-sm btn-primary" href="theaters/@theater.Slug/showings/@s.Id">Choose a spot</a>
-                        </li>
-                    }
-                </ul>
+                            }
+                            <p class="stub-meta mt-2">
+                                @s.ScreenName
+                                @if (s.IsMultiFeature)
+                                {
+                                    @($" · {s.Features.Count} films, {s.IntermissionMinutes} min intermission")
+                                }
+                            </p>
+                        </ChildContent>
+                        <Aside>
+                            <span class="stub-time">@s.StartsLocal.ToString("h:mm tt")</span>
+                            <span class="stub-note">ends @s.EndsLocal.ToString("h:mm tt")</span>
+                            <MudButton Href="@($"theaters/{theater.Slug}/showings/{s.Id}")" Variant="Variant.Filled" Color="Color.Primary" Size="Size.Medium">Choose a spot</MudButton>
+                        </Aside>
+                    </Stub>
+                }
             }
             @if (showings.Count > 0 && !TheaterTime.IsValidZone(theater.TimeZone))
             {
-                <p class="small text-muted">Times are UTC.</p>
+                <MudText Typo="Typo.caption" Class="muted ">Times are UTC.</MudText>
             }
-            <h2 class="h5 mt-4">Screens</h2>
-            @if (theater.Screens.Count == 0)
-            {
-                <p class="text-muted">No screens listed.</p>
-            }
-            else
-            {
-                <table class="table table-sm">
-                    <thead><tr><th>Screen</th><th class="text-end">Spots</th></tr></thead>
-                    <tbody>
-                        @foreach (var s in theater.Screens)
-                        {
-                            <tr><td>@s.Name</td><td class="text-end">@s.SpotCount</td></tr>
-                        }
-                    </tbody>
-                </table>
-            }
-        </div>
-        <div class="col-md-5">
-            <address>
-                @if (!string.IsNullOrWhiteSpace(theater.AddressLine1)) { @theater.AddressLine1<br /> }
-                @if (!string.IsNullOrWhiteSpace(theater.AddressLine2)) { @theater.AddressLine2<br /> }
-                @string.Join(" ", new[] { Index.Location(theater), theater.PostalCode }.Where(s => !string.IsNullOrWhiteSpace(s)))
-            </address>
-            @if (!string.IsNullOrWhiteSpace(theater.Phone))
-            {
-                <p>Phone: <a href="tel:@theater.Phone">@theater.Phone</a></p>
-            }
-            @if (Uri.TryCreate(theater.Website, UriKind.Absolute, out var site) && (site.Scheme == "https" || site.Scheme == "http"))
-            {
-                <p><a href="@site" target="_blank" rel="noopener">@site.Host</a></p>
-            }
-        </div>
-    </div>
+        </MudItem>
+
+        <MudItem xs="12" md="4">
+            <MudPaper Outlined Class="pa-4 mb-4">
+                <MudText Typo="Typo.h6" Class="mb-2">Find us</MudText>
+                <address class="mb-2">
+                    @if (!string.IsNullOrWhiteSpace(theater.AddressLine1)) { @theater.AddressLine1<br /> }
+                    @if (!string.IsNullOrWhiteSpace(theater.AddressLine2)) { @theater.AddressLine2<br /> }
+                    @string.Join(" ", new[] { Index.Location(theater), theater.PostalCode }.Where(s => !string.IsNullOrWhiteSpace(s)))
+                </address>
+                @if (!string.IsNullOrWhiteSpace(theater.Phone))
+                {
+                    <div>Phone: <MudLink Href="@($"tel:{theater.Phone}")">@theater.Phone</MudLink></div>
+                }
+                @if (Uri.TryCreate(theater.Website, UriKind.Absolute, out var site) && (site.Scheme == "https" || site.Scheme == "http"))
+                {
+                    <div><MudLink Href="@site.ToString()" Target="_blank" rel="noopener">@site.Host</MudLink></div>
+                }
+            </MudPaper>
+
+            <MudPaper Outlined Class="pa-4">
+                <MudText Typo="Typo.h6" Class="mb-2">Screens</MudText>
+                @if (theater.Screens.Count == 0)
+                {
+                    <MudText Class="muted ">No screens listed.</MudText>
+                }
+                else
+                {
+                    <MudSimpleTable Dense Style="box-shadow: none; background: transparent">
+                        <thead><tr><th>Screen</th><th class="text-end">Spots</th></tr></thead>
+                        <tbody>
+                            @foreach (var s in theater.Screens)
+                            {
+                                <tr><td>@s.Name</td><td class="text-end">@s.SpotCount</td></tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
 }
 
 @code {

@@ -1,0 +1,20 @@
+@* A ticket stub: an optional poster, the main content, and a tear-off end with a perforated edge (styles in
+   wwwroot/public.css). Used for showings and for a guest's tickets. *@
+<article class="stub @Class">
+    @if (Poster is not null)
+    {
+        <div class="stub-poster">@Poster</div>
+    }
+    <div class="stub-main">@ChildContent</div>
+    @if (Aside is not null)
+    {
+        <div class="stub-cut">@Aside</div>
+    }
+</article>
+
+@code {
+    [Parameter] public RenderFragment? Poster { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public RenderFragment? Aside { get; set; }
+    [Parameter] public string? Class { get; set; }
+}

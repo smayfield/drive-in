@@ -1,0 +1,6 @@
+@* Signing out is a POST to the Identity endpoint, so it works from the interactive layout too. *@
+<form action="Account/Logout" method="post" class="app-signout">
+    <AntiforgeryToken />
+    <input type="hidden" name="ReturnUrl" value="" />
+    <button type="submit" class="app-link">Sign out</button>
+</form>

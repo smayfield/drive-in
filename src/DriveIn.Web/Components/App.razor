@@ -5,27 +5,47 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0a0d1f" />
+    <meta name="color-scheme" content="light dark" />
     <base href="/" />
     <ResourcePreloader />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Bungee+Shade&display=swap" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Bungee+Shade&family=Barlow:wght@400;500;600;700&display=swap" />
+    @* Sets the light/dark scheme before first paint, so there's no flash of the wrong theme. *@
+    <script src="@Assets["theme.js"]"></script>
     <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
+    <link rel="stylesheet" href="_content/MudBlazor/MudBlazor.min.css" />
     <link rel="stylesheet" href="@Assets["app.css"]" />
+    <link rel="stylesheet" href="@Assets["public.css"]" />
     <link rel="stylesheet" href="@Assets["marketing.css"]" />
     <link rel="stylesheet" href="@Assets["DriveIn.Web.styles.css"]" />
     <ImportMap />
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-    <HeadOutlet />
+    <HeadOutlet @rendermode="PageRenderMode" />
 </head>
 
 <body>
-    <Routes />
+    <Routes @rendermode="PageRenderMode" InitialDarkMode="initialDark" />
     <ReconnectModal />
     <script src="@Assets["_framework/blazor.web.js"]"></script>
+    <script src="_content/MudBlazor/MudBlazor.min.js"></script>
     <script src="@Assets["marketing.js"]" defer></script>
     <script src="@Assets["lot-map.js"]" defer></script>
     <script src="@Assets["Components/Account/Shared/PasskeySubmit.razor.js"]" type="module"></script>
 </body>
 
 </html>
+
+@code {
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    // The Identity account pages, the marketing pages and the error pages stay static (they're marked
+    // [ExcludeFromInteractiveRouting]); everything else is interactive.
+    private IComponentRenderMode? PageRenderMode =>
+        HttpContext is { } context && !context.AcceptsInteractiveRouting() ? null : InteractiveServer;
+
+    // theme.js remembers the visitor's color scheme in a cookie, so the server can render the right palette on the
+    // first paint of interactive pages. The very first visit has no cookie and starts light.
+    private bool initialDark => HttpContext?.Request.Cookies["di-scheme"] == "dark";
+}

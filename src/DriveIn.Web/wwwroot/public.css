@@ -1,0 +1,137 @@
+/* The public, guest-facing pages: theaters, showings and tickets. One bold idea, the marquee and the ticket stub;
+   everything around it stays plain. Colors come from the MudBlazor palette variables, so both themes work. */
+
+/* --- Marquee: the theater's sign. Always night, in both themes. --- */
+.marquee-header {
+    position: relative;
+    margin-bottom: 1.5rem;
+    padding: 1.5rem 1.25rem;
+    border-radius: 10px;
+    background: linear-gradient(180deg, #0a0d1f 0%, #141a3d 100%);
+    color: #efedf6;
+    overflow: hidden;
+}
+.marquee-header::before,
+.marquee-header::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 12px;
+    background: radial-gradient(circle, #ffd66b 0 3px, transparent 4px) 0 50% / 22px 12px repeat-x;
+    opacity: 0.9;
+}
+.marquee-header::before { top: 6px; }
+.marquee-header::after { bottom: 6px; }
+.marquee-body { display: flex; align-items: center; gap: 1.25rem; padding: 0.75rem 0.25rem; }
+.marquee-logo { max-height: 5.5rem; max-width: 11rem; object-fit: contain; border-radius: 4px; }
+.marquee-title {
+    margin: 0;
+    font-family: "Bungee", system-ui, sans-serif;
+    font-size: clamp(1.6rem, 4.5vw, 2.6rem);
+    line-height: 1.05;
+    font-weight: 400;
+    color: #ffd66b;
+    text-shadow: 0 0 18px rgba(255, 214, 107, 0.35);
+}
+.marquee-sub { margin: 0.35rem 0 0; color: #b9b6cf; }
+
+/* --- Ticket stub --- */
+.stub {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    margin-bottom: 0.9rem;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 10px;
+    background: var(--mud-palette-surface);
+}
+.stub:not(:has(.stub-poster)) { grid-template-columns: 1fr auto; }
+.stub:not(:has(.stub-cut)) { grid-template-columns: auto 1fr; }
+.stub:not(:has(.stub-poster)):not(:has(.stub-cut)) { grid-template-columns: 1fr; }
+
+.stub-poster { display: flex; gap: 0.4rem; padding: 0.85rem 0 0.85rem 0.85rem; }
+.stub-poster img { width: 4.5rem; height: 6.75rem; object-fit: cover; border-radius: 4px; }
+
+.stub-main { min-width: 0; padding: 0.9rem 1.1rem; }
+.stub-title { margin: 0 0 0.2rem; font-size: 1.25rem; font-weight: 700; line-height: 1.2; }
+.stub-meta { margin: 0; color: var(--mud-palette-text-secondary); }
+.stub-detail { margin-top: 0.4rem; color: var(--mud-palette-text-secondary); font-size: 0.9375rem; }
+.stub-detail details { margin-top: 0.25rem; }
+.stub-detail summary { cursor: pointer; color: var(--mud-palette-secondary); }
+.stub-detail p { margin: 0.35rem 0 0; color: var(--mud-palette-text-primary); white-space: pre-line; }
+
+/* The tear-off end: a dashed perforation with a notch at each end. */
+.stub-cut {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-width: 10rem;
+    padding: 0.9rem 1.25rem;
+    border-left: 2px dashed color-mix(in srgb, var(--mud-palette-text-secondary) 45%, transparent);
+    text-align: center;
+}
+.stub-cut::before,
+.stub-cut::after {
+    content: "";
+    position: absolute;
+    left: -0.7rem;
+    width: 1.4rem;
+    height: 1.4rem;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 50%;
+    background: var(--mud-palette-background);
+}
+.stub-cut::before { top: -0.7rem; clip-path: inset(50% 0 0 0); }
+.stub-cut::after { bottom: -0.7rem; clip-path: inset(0 0 50% 0); }
+
+.stub-time {
+    font-family: "Bungee", system-ui, sans-serif;
+    font-size: 1.5rem;
+    line-height: 1;
+    color: var(--mud-palette-primary);
+}
+.stub-note { font-size: 0.875rem; color: var(--mud-palette-text-secondary); }
+
+@media (max-width: 599.98px) {
+    .stub, .stub:not(:has(.stub-poster)), .stub:not(:has(.stub-cut)) { grid-template-columns: auto 1fr; }
+    .stub:not(:has(.stub-poster)) { grid-template-columns: 1fr; }
+    .stub-cut { grid-column: 1 / -1; flex-direction: row; justify-content: space-between; min-width: 0; border-left: 0; border-top: 2px dashed color-mix(in srgb, var(--mud-palette-text-secondary) 45%, transparent); }
+    .stub-cut::before, .stub-cut::after { top: -0.7rem; bottom: auto; }
+    .stub-cut::before { left: -0.7rem; clip-path: inset(0 0 0 50%); }
+    .stub-cut::after { left: auto; right: -0.7rem; clip-path: inset(0 50% 0 0); }
+}
+
+/* --- Theater cards on the list --- */
+.theater-card { height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+.theater-card-sign {
+    padding: 1rem 1rem 0.85rem;
+    background: linear-gradient(180deg, #0a0d1f 0%, #141a3d 100%);
+    border-bottom: 3px solid #ffd66b;
+}
+.theater-card-sign img { display: block; max-height: 3.25rem; max-width: 100%; object-fit: contain; margin-bottom: 0.5rem; }
+.theater-card-name { margin: 0; font-family: "Bungee", system-ui, sans-serif; font-weight: 400; font-size: 1.2rem; line-height: 1.15; color: #ffd66b; }
+.theater-card-name a { color: inherit; text-decoration: none; }
+.theater-card-name a:hover { text-decoration: underline; }
+.theater-card-body { flex: 1; padding: 0.9rem 1rem; }
+
+/* --- Ticket (a guest's ticket page) --- */
+.ticket-hero { text-align: center; }
+.ticket-spot { font-family: "Bungee", system-ui, sans-serif; font-size: 2.4rem; line-height: 1; color: var(--mud-palette-primary); }
+
+@media (prefers-reduced-motion: reduce) {
+    * { scroll-behavior: auto !important; }
+}
+
+.stub-feature + .stub-feature { margin-top: 1rem; padding-top: 0.9rem; border-top: 1px solid var(--mud-palette-lines-default); }
+.stub-year { font-weight: 500; color: var(--mud-palette-text-secondary); }
+
+/* Ticket options and add-ons: the label fills the row so the price sits at the right edge. */
+.tc-line { margin: 0 !important; }
+.tc-line .mud-typography { width: 100%; }
+.tc-label { width: 100%; }
+
+.muted { color: var(--mud-palette-text-secondary); }

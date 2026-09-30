@@ -5,6 +5,7 @@ using DriveIn.Web.Components;
 using DriveIn.Web.Components.Account;
 using DriveIn.Web.Data;
 using DriveIn.Web.Services;
+using MudBlazor.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -53,6 +54,7 @@ if (!string.IsNullOrEmpty(keysPath))
         .PersistKeysToFileSystem(new DirectoryInfo(keysPath));
 }
 
+builder.Services.AddMudServices();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 

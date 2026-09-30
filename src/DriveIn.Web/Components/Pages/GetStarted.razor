@@ -1,103 +1,82 @@
 @page "/get-started"
-@rendermode InteractiveServer
 @inherits AppComponentBase
 @inject OnboardingService Onboarding
 
 <PageTitle>Start your free demo · Drive-In Online</PageTitle>
 
-<div class="row justify-content-center">
-    <div class="col-lg-7">
-        <h1>Start your free demo</h1>
-        <p class="lead">
-            Set up your drive-in in demo mode: it's private and free, and you can try everything, including test ticket sales,
-            before you go live.
-        </p>
+<div class="mx-auto" style="max-width: 44rem">
+    <MudText Typo="Typo.h3" Component="h1" Class="mb-2">Start your free demo</MudText>
+    <MudText Class="muted mb-4">
+        Set up your drive-in in demo mode: it's private and free, and you can try everything, including test ticket sales,
+        before you go live.
+    </MudText>
 
-        @if (!signedIn)
-        {
-            <section class="card">
-                <div class="card-body">
-                    <h2 class="h5">First, your account</h2>
-                    <p>Create a free account (or sign in) and come back here to set up your theater.</p>
-                    <a class="btn btn-primary" href="Account/Register?ReturnUrl=%2Fget-started">Create account</a>
-                    <a class="btn btn-outline-secondary" href="Account/Login?ReturnUrl=%2Fget-started">Sign in</a>
-                </div>
-            </section>
-        }
-        else if (User.GetEmployeeTheaterId() is not null)
-        {
-            <div class="alert alert-info">
-                You're signed in with an employee account, which belongs to one theater. To sign up your own theater,
-                sign out and create a personal account.
-            </div>
-        }
-        else
-        {
-            <Alerts Error="@Error" />
-            <section class="card">
-                <div class="card-body">
-                    <EditForm Model="form" OnSubmit="CreateAsync" FormName="get-started">
-                        <div class="mb-3">
-                            <label class="form-label" for="gs-name">Theater name</label>
-                            <InputText id="gs-name" class="form-control" @bind-Value="form.Name" @bind-Value:after="NameChanged" maxlength="200" placeholder="Starlight Drive-In" />
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label" for="gs-slug">Web address</label>
-                            <div class="input-group">
-                                <span class="input-group-text">drive-in.online/theaters/</span>
-                                <InputText id="gs-slug" class="form-control" @bind-Value="form.Slug" @bind-Value:after="() => slugEdited = true" maxlength="100" />
-                            </div>
-                            <div class="form-text">Lowercase letters, digits and hyphens. You can ask us to change it later.</div>
-                        </div>
-                        <div class="row g-3 mb-3">
-                            <div class="col-sm-7">
-                                <label class="form-label" for="gs-city">City</label>
-                                <InputText id="gs-city" class="form-control" @bind-Value="form.City" maxlength="100" />
-                            </div>
-                            <div class="col-sm-5">
-                                <label class="form-label" for="gs-state">State</label>
-                                <InputText id="gs-state" class="form-control" @bind-Value="form.State" maxlength="100" />
-                            </div>
-                        </div>
-                        <div class="row g-3 mb-3">
-                            <div class="col-sm-7">
-                                <label class="form-label" for="gs-tz">Time zone</label>
-                                <InputSelect id="gs-tz" class="form-select" @bind-Value="form.TimeZone">
-                                    <option value="">Choose…</option>
-                                    @foreach (var (id, label) in TimeZones)
-                                    {
-                                        <option value="@id">@label</option>
-                                    }
-                                </InputSelect>
-                                <div class="form-text">Outside these? Pick the closest; you can enter any time zone in your profile.</div>
-                            </div>
-                            <div class="col-sm-5">
-                                <label class="form-label" for="gs-screens">Screens</label>
-                                <InputSelect id="gs-screens" class="form-select" @bind-Value="form.Screens">
-                                    @for (var n = 1; n <= OnboardingService.MaxScreens; n++)
-                                    {
-                                        <option value="@n">@n</option>
-                                    }
-                                </InputSelect>
-                            </div>
-                        </div>
-                        <div class="form-check mb-3">
-                            <InputCheckbox id="gs-terms" class="form-check-input" @bind-Value="form.AcceptTerms" />
-                            <label class="form-check-label" for="gs-terms">
-                                I agree to the <a href="legal/terms" target="_blank">Terms of Service</a> and
-                                <a href="legal/privacy" target="_blank">Privacy Policy</a>.
-                            </label>
-                        </div>
-                        <button type="submit" class="btn btn-primary btn-lg" disabled="@busy">@(busy ? "Setting up…" : "Create my demo theater")</button>
-                    </EditForm>
-                </div>
-            </section>
-            <p class="text-muted small mt-3">
-                We'll start you with sample screens and prices so you can try a sale right away; you'll change them as you set up.
-                Going live (and billing) only happens when you ask. See <a href="pricing">Pricing</a>.
-            </p>
-        }
-    </div>
+    @if (!signedIn)
+    {
+        <MudPaper Outlined Class="pa-4">
+            <MudText Typo="Typo.h5" Class="mb-1">First, your account</MudText>
+            <MudText Class="mb-3">Create a free account (or sign in) and come back here to set up your theater.</MudText>
+            <MudButton Href="Account/Register?ReturnUrl=%2Fget-started" Variant="Variant.Filled" Color="Color.Primary" Class="me-2">Create account</MudButton>
+            <MudButton Href="Account/Login?ReturnUrl=%2Fget-started" Variant="Variant.Outlined">Sign in</MudButton>
+        </MudPaper>
+    }
+    else if (User.GetEmployeeTheaterId() is not null)
+    {
+        <MudAlert Severity="Severity.Info">
+            You're signed in with an employee account, which belongs to one theater. To sign up your own theater,
+            sign out and create a personal account.
+        </MudAlert>
+    }
+    else
+    {
+        <Alerts Error="@Error" />
+        <MudPaper Outlined Class="pa-4">
+            <EditForm Model="form" OnSubmit="CreateAsync" FormName="get-started">
+                <MudTextField T="string" @bind-Value="form.Name" @bind-Value:after="NameChanged" Immediate Label="Theater name" Variant="Variant.Outlined"
+                              MaxLength="200" Placeholder="Starlight Drive-In" Class="mb-3" />
+                <MudTextField T="string" @bind-Value="form.Slug" @bind-Value:after="() => slugEdited = true" Label="Web address" Variant="Variant.Outlined"
+                              MaxLength="100" Adornment="Adornment.Start" AdornmentText="drive-in.online/theaters/"
+                              HelperText="Lowercase letters, digits and hyphens. You can ask us to change it later." Class="mb-3" />
+                <MudGrid Spacing="2" Class="mb-1">
+                    <MudItem xs="12" sm="7">
+                        <MudTextField T="string" @bind-Value="form.City" Label="City" Variant="Variant.Outlined" MaxLength="100" />
+                    </MudItem>
+                    <MudItem xs="12" sm="5">
+                        <MudTextField T="string" @bind-Value="form.State" Label="State" Variant="Variant.Outlined" MaxLength="100" />
+                    </MudItem>
+                    <MudItem xs="12" sm="7">
+                        <MudSelect T="string" @bind-Value="form.TimeZone" Label="Time zone" Variant="Variant.Outlined"
+                                   HelperText="Outside these? Pick the closest; you can enter any time zone in your profile.">
+                            @foreach (var (id, label) in TimeZones)
+                            {
+                                <MudSelectItem T="string" Value="@id">@label</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="5">
+                        <MudSelect T="int" @bind-Value="form.Screens" Label="Screens" Variant="Variant.Outlined">
+                            @for (var n = 1; n <= OnboardingService.MaxScreens; n++)
+                            {
+                                var count = n; // a copy: the item's content is rendered later
+                                <MudSelectItem T="int" Value="@count">@count</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                </MudGrid>
+                <MudCheckBox T="bool" @bind-Value="form.AcceptTerms" Color="Color.Primary" Class="mb-3">
+                    I agree to the <MudLink Href="legal/terms" Target="_blank">Terms of Service</MudLink> and
+                    <MudLink Href="legal/privacy" Target="_blank">Privacy Policy</MudLink>.
+                </MudCheckBox>
+                <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large" Disabled="@busy">
+                    @(busy ? "Setting up…" : "Create my demo theater")
+                </MudButton>
+            </EditForm>
+        </MudPaper>
+        <MudText Typo="Typo.body2" Class="muted mt-3">
+            We'll start you with sample screens and prices so you can try a sale right away; you'll change them as you set up.
+            Going live (and billing) only happens when you ask. See <MudLink Href="pricing">Pricing</MudLink>.
+        </MudText>
+    }
 </div>
 
 @code {
