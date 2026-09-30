@@ -47,7 +47,7 @@ else
             else
             {
                 <MudText Typo="Typo.h4" Color="Color.Success">Valid: spot @t.SpotLabel</MudText>
-                <MudText Class="mb-3">@s.Title · @s.StartsLocal.ToString("ddd, MMM d h:mm tt") · @s.ScreenName · @t.OptionName</MudText>
+                <MudText Class="mb-3">@s.Title · @s.StartsLocal.ToString("ddd, MMM d h:mm tt") · @s.ScreenName · @(t.IsComp ? $"Free admission for {t.GuestName}" : t.OptionName)</MudText>
                 <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Large" FullWidth OnClick="AdmitAsync">Admit car</MudButton>
             }
         </MudPaper>

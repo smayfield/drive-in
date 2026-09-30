@@ -70,10 +70,9 @@ public sealed record TicketReceipt(string Subject, string Html, IReadOnlyList<In
               <tr><td style="padding: 6px 0; border-top: 1px solid #ccc"><strong>Total</strong></td>
                   <td style="text-align: right; border-top: 1px solid #ccc"><strong>{Money.Format(t.Total)}</strong></td></tr>
             </table>
-            <p style="font-size: 13px; color: #555">{E(PaidWith(t))} · Purchased {view.SoldLocal:MMM d, yyyy h:mm tt}</p>
+            <p style="font-size: 13px; color: #555">{E(t.IsComp ? $"Free admission for {t.GuestName}" : PaidWith(t))} · {(t.IsComp ? "Issued" : "Purchased")} {view.SoldLocal:MMM d, yyyy h:mm tt}</p>
             <p style="font-size: 13px; color: #555">
-              This ticket admits one car to this showing only. It can't be used for another showing or on a later date.
-              All sales are final: no refunds or exchanges for any reason, including bad weather.
+              This ticket admits one car to this showing only. It can't be used for another showing or on a later date.{(t.IsComp ? "" : " All sales are final: no refunds or exchanges for any reason, including bad weather.")}
             </p>
             </div>
             """);

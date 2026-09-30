@@ -1,0 +1,347 @@
+@page "/manage/{Id:int}/comps"
+@attribute [Authorize]
+@inherits AppComponentBase
+@implements IDisposable
+@inject TheaterService Theaters
+@inject TheaterAccess Access
+@inject TicketSalesService Sales
+@inject SpotEvents Events
+
+<PageTitle>Free admission · Manage · Drive-In Online</PageTitle>
+
+@if (theater is null)
+{
+    <Alerts Error="@Error" />
+    @if (Error is null) { <MudProgressCircular Indeterminate Size="Size.Small" aria-label="Loading free admission" /> }
+}
+else
+{
+    <ManageHeader Theater="theater" Title="Free admission" Current="comps" />
+
+    <Alerts Error="@Error" Success="@Success" />
+
+    @if (!theater.FreeAdmissionEnabled)
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-3">
+            This theater isn't offering free admission right now. @(Can(TheaterPermissions.EditProfile) ? "Turn it on under Free admission on the Overview page." : "The owner can turn it on in the theater's setup.")
+        </MudAlert>
+    }
+
+    <MudGrid Spacing="4">
+        @if (canOffer && theater.FreeAdmissionEnabled)
+        {
+            <MudItem xs="12">
+                <MudPaper Outlined Class="pa-3">
+                    <MudText Typo="Typo.h5" Class="mb-1">Reserve a free spot</MudText>
+                    <MudText Typo="Typo.body2" Class="muted mb-2">
+                        Reserve a spot for a guest, such as a friend or family member.
+                        @(theater.FreeAdmissionRequiresApproval && !canApprove ? "A manager has to approve it before the guest's ticket is issued; the spot is held meanwhile." : "The guest's ticket is issued right away.")
+                        @if (theater.FreeAdmissionMaxPerShowing is int m) { <span> Up to @m per showing.</span> }
+                        @if (theater.FreeAdmissionMaxPerEmployeePerShowing is int e) { <span> Up to @e per person per showing.</span> }
+                    </MudText>
+                    @if (showings.Count == 0)
+                    {
+                        <MudText Class="muted">No showings are scheduled.</MudText>
+                    }
+                    <div class="d-flex flex-wrap gap-2 mb-3">
+                        @foreach (var g in showings)
+                        {
+                            var showingId = g.Showing.Id;
+                            var selected = showingId == screenShowingId;
+                            <MudButton Variant="@(selected ? Variant.Filled : Variant.Outlined)" Color="Color.Primary" Class="gate-showing" Disabled="@busy"
+                                       OnClick="() => SelectAsync(showingId)" @key="showingId">
+                                <span class="text-start">
+                                    <strong>@g.Showing.StartsLocal.ToString("ddd MMM d · h:mm tt")</strong> @g.Showing.Title
+                                    <span class="d-block small">@g.Showing.ScreenName · @g.Open open</span>
+                                </span>
+                            </MudButton>
+                        }
+                    </div>
+
+                    @if (screen is not null && availability is not null)
+                    {
+                        <MudGrid Spacing="3">
+                            <MudItem xs="12" xl="7">
+                                <SeatMap Screen="screen" Availability="availability" CanPick="!busy" OnPick="PickSpot" MineLabel="Chosen" />
+                            </MudItem>
+                            <MudItem xs="12" xl="5">
+                                @if (pickedLabel is null)
+                                {
+                                    <MudText Class="muted">Pick a green spot for the guest's car.</MudText>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.h6" Class="mb-2">Spot @pickedLabel</MudText>
+                                    <MudTextField T="string" @bind-Value="guestName" Label="Guest name" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="100" Class="mb-2" />
+                                    <MudTextField T="string" @bind-Value="guestEmail" Label="Guest email (optional, to send the ticket)" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="256" InputType="InputType.Email" Class="mb-2" />
+                                    <MudTextField T="string" @bind-Value="reason"
+                                                  Label="@(theater.FreeAdmissionRequiresReason ? "Reason" : "Reason (optional)")" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="500" Lines="2" Class="mb-2" />
+                                    <div class="d-flex flex-wrap gap-2">
+                                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@busy" OnClick="OfferAsync">
+                                            @(theater.FreeAdmissionRequiresApproval && !canApprove ? "Request free admission" : "Give free admission")
+                                        </MudButton>
+                                        <MudButton Variant="Variant.Outlined" Disabled="@busy" OnClick="ClearPick">Cancel</MudButton>
+                                    </div>
+                                }
+                                @if (issued is TicketView v)
+                                {
+                                    <MudAlert Severity="Severity.Success" Class="mt-3">
+                                        <div><strong>@v.Ticket.GuestName</strong>: spot @v.Ticket.SpotLabel on @v.Showing.ScreenName</div>
+                                        <div>Gate code <span class="font-monospace">@v.Ticket.ShortCode</span>@(string.IsNullOrEmpty(v.Ticket.Email) ? " (tell the guest, or share the ticket link)" : $" · ticket emailed to {v.Ticket.Email}")</div>
+                                    </MudAlert>
+                                }
+                            </MudItem>
+                        </MudGrid>
+                    }
+                </MudPaper>
+            </MudItem>
+        }
+
+        @if (canApprove && pending.Count > 0)
+        {
+            <MudItem xs="12">
+                <MudText Typo="Typo.h5" Class="mb-1">Waiting for approval</MudText>
+                <MudSimpleTable Dense Outlined Class="manage-table">
+                    <thead><tr><th>Guest</th><th>Showing</th><th>Spot</th><th>Requested by</th><th>Reason</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var p in pending)
+                        {
+                            var ticketId = p.TicketId;
+                            <tr @key="ticketId">
+                                <td>@p.GuestName</td>
+                                <td>@p.ShowingTitle<br /><span class="small muted">@p.ShowingStartsLocal.ToString("ddd MMM d · h:mm tt") · @p.ScreenName</span></td>
+                                <td>@p.SpotLabel</td>
+                                <td>@p.OfferedBy</td>
+                                <td>@p.Reason</td>
+                                <td class="text-end text-nowrap">
+                                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success" Disabled="@busy" OnClick="() => ApproveAsync(ticketId)">Approve</MudButton>
+                                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" Disabled="@busy" OnClick="() => DenyAsync(ticketId)">Deny</MudButton>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </MudItem>
+        }
+
+        @if (canOffer && mine.Count > 0)
+        {
+            <MudItem xs="12">
+                <MudText Typo="Typo.h5" Class="mb-1">My free admissions</MudText>
+                <MudSimpleTable Dense Outlined Class="manage-table">
+                    <thead><tr><th>Guest</th><th>Showing</th><th>Spot</th><th>Status</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var c in mine)
+                        {
+                            var ticketId = c.TicketId;
+                            <tr @key="ticketId">
+                                <td>@c.GuestName</td>
+                                <td>@c.ShowingTitle<br /><span class="small muted">@c.ShowingStartsLocal.ToString("ddd MMM d · h:mm tt")</span></td>
+                                <td>@c.SpotLabel</td>
+                                <td>@(c.Pending ? "Waiting for approval" : c.Admitted ? "Admitted" : "Issued")</td>
+                                <td class="text-end">
+                                    @if (!c.Admitted && (c.Pending || canApprove))
+                                    {
+                                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" Disabled="@busy" OnClick="() => CancelAsync(ticketId)">Withdraw</MudButton>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </MudItem>
+        }
+
+        @if (canView && log is not null)
+        {
+            <MudItem xs="12">
+                <MudText Typo="Typo.h5" Class="mb-1">Log</MudText>
+                @if (log.Rows.Count == 0)
+                {
+                    <MudText Class="muted">Nothing yet.</MudText>
+                }
+                else
+                {
+                    <div class="mb-2 d-flex flex-wrap gap-2">
+                        @foreach (var (name, count) in log.ByEmployee)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@name: @count</MudChip>
+                        }
+                    </div>
+                    <MudSimpleTable Dense Outlined Class="manage-table">
+                        <thead><tr><th>When</th><th>What</th><th>By</th><th>Guest</th><th>Showing</th><th>Spot</th><th>Reason / note</th></tr></thead>
+                        <tbody>
+                            @foreach (var r in log.Rows)
+                            {
+                                var e = r.Event;
+                                <tr @key="e.Id">
+                                    <td class="text-nowrap">@r.AtLocal.ToString("MMM d, h:mm tt")</td>
+                                    <td>@Describe(e.Action)@(e.IsTest ? " (test)" : "")</td>
+                                    <td>@e.ActorName@(e.OfferedByName is string by ? $" (asked by {by})" : "")</td>
+                                    <td>@e.GuestName</td>
+                                    <td>@e.ShowingTitle<br /><span class="small muted">@r.ShowingStartsLocal.ToString("ddd MMM d · h:mm tt")</span></td>
+                                    <td>@e.SpotLabel</td>
+                                    <td>@e.Reason@(e.Note is string n ? $" ({n})" : "")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                    @if (log.Rows.Count >= TicketSalesService.MaxCompLogRows)
+                    {
+                        <MudText Typo="Typo.caption" Class="muted">Showing the latest @TicketSalesService.MaxCompLogRows entries.</MudText>
+                    }
+                }
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private Theater? theater;
+    private IReadOnlySet<string> permissions = new HashSet<string>();
+    private bool busy;
+
+    private List<CompShowing> showings = [];
+    private Screen? screen;
+    private SpotAvailability? availability;
+    private int screenShowingId;
+    private int pickedRow, pickedSpot;
+    private string? pickedLabel;
+    private string guestName = "", guestEmail = "", reason = "";
+    private TicketView? issued;
+
+    private List<CompEntry> pending = [];
+    private List<CompEntry> mine = [];
+    private CompLog? log;
+
+    // UI only; every action is re-checked by the service.
+    private bool Can(string permission) => permissions.Contains(permission);
+    private bool canOffer => Can(TheaterPermissions.OfferFreeAdmission);
+    private bool canApprove => Can(TheaterPermissions.ApproveFreeAdmission);
+    private bool canView => Can(TheaterPermissions.ViewFreeAdmission);
+
+    protected override void OnInitialized() => Events.Changed += OnSpotsChanged;
+
+    protected override async Task LoadAsync()
+    {
+        theater = await Theaters.GetForManageAsync(User, Id);
+        permissions = await Access.GetPermissionsAsync(User, theater);
+        if (!canOffer && !canApprove && !canView)
+            throw new AccessDeniedException();
+        await RefreshAsync();
+    }
+
+    private async Task RefreshAsync()
+    {
+        if (canOffer)
+        {
+            if (theater!.FreeAdmissionEnabled)
+                showings = await Sales.ListCompShowingsAsync(User, Id);
+            mine = await Sales.ListMyFreeAdmissionAsync(User, Id);
+            if (screenShowingId != 0)
+                availability = await Sales.GetAvailabilityAsync(User, screenShowingId);
+        }
+        pending = canApprove ? await Sales.ListPendingFreeAdmissionAsync(User, Id) : [];
+        log = canView ? await Sales.GetFreeAdmissionLogAsync(User, Id) : null;
+    }
+
+    private Task SelectAsync(int showtimeId) => RunAsync(async () =>
+    {
+        issued = null;
+        ClearPick();
+        screen = await Sales.GetCompScreenAsync(User, showtimeId);
+        screenShowingId = showtimeId;
+        availability = await Sales.GetAvailabilityAsync(User, showtimeId);
+    });
+
+    private void PickSpot(LotSpot spot)
+    {
+        issued = null;
+        pickedRow = spot.Row;
+        pickedSpot = spot.Number;
+        pickedLabel = SpotLabels.Spot(screen!.LabelScheme, spot.Row, spot.Number);
+    }
+
+    private void ClearPick()
+    {
+        pickedLabel = null;
+        pickedRow = pickedSpot = 0;
+    }
+
+    private Task OfferAsync() => Do(async () =>
+    {
+        var result = await Sales.OfferFreeAdmissionAsync(User, screenShowingId, pickedRow, pickedSpot, guestName, guestEmail, reason, BaseUri);
+        var name = guestName.Trim();
+        issued = result;
+        ClearPick();
+        guestName = guestEmail = reason = "";
+        Success = result is null ? $"Requested a free spot for {name}. It's held until a manager approves it." : $"Free admission given to {name}.";
+    });
+
+    private Task ApproveAsync(int ticketId) => Do(async () =>
+    {
+        var v = await Sales.ApproveFreeAdmissionAsync(User, ticketId, BaseUri);
+        Success = $"Approved: {v.Ticket.GuestName}, spot {v.Ticket.SpotLabel} (gate code {v.Ticket.ShortCode}).";
+    });
+
+    private Task DenyAsync(int ticketId) => Do(async () =>
+    {
+        await Sales.DenyFreeAdmissionAsync(User, ticketId, note: null);
+        Success = "Denied. The spot is back on sale.";
+    });
+
+    private Task CancelAsync(int ticketId) => Do(async () =>
+    {
+        await Sales.CancelFreeAdmissionAsync(User, ticketId, note: null);
+        Success = "Withdrawn. The spot is back on sale.";
+    });
+
+    // Runs an action, then refreshes the lists even if it failed (someone else may have changed things).
+    private async Task Do(Func<Task> action)
+    {
+        busy = true;
+        try
+        {
+            await RunAsync(action);
+            var (success, error) = (Success, Error);
+            await RunAsync(RefreshAsync);
+            (Success, Error) = (success, error ?? Error);
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private static string Describe(CompAction action) => action switch
+    {
+        CompAction.Requested => "Requested",
+        CompAction.Issued => "Given",
+        CompAction.Approved => "Approved",
+        CompAction.Denied => "Denied",
+        CompAction.Cancelled => "Withdrawn",
+        _ => action.ToString(),
+    };
+
+    private void OnSpotsChanged(int showtimeId)
+    {
+        if (showtimeId != screenShowingId)
+            return;
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                availability = await Sales.GetAvailabilityAsync(User, showtimeId);
+                StateHasChanged();
+            }
+            catch (Exception)
+            {
+                // The circuit may be going away; the next action refreshes again.
+            }
+        });
+    }
+
+    public void Dispose() => Events.Changed -= OnSpotsChanged;
+}

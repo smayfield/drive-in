@@ -54,8 +54,16 @@ else
                             <div class="mb-1">@s.Title</div>
                             <div class="mb-1 small">@s.StartsLocal.ToString("ddd, MMM d · h:mm tt") · gate code <span class="font-monospace">@t.ShortCode</span></div>
                             <div class="mb-2 small muted">
-                                @t.OptionName@foreach (var a in t.AddOns) { @($" · {a.Name}") }
-                                · @(t.SoldAtGate ? "sold at the gate" : "bought online")@(t.IsTest ? " · test ticket" : "")
+                                @if (t.IsComp)
+                                {
+                                    @($"Free admission for {t.GuestName}")
+                                }
+                                else
+                                {
+                                    @t.OptionName@foreach (var a in t.AddOns) { @($" · {a.Name}") }
+                                    @(t.SoldAtGate ? " · sold at the gate" : " · bought online")
+                                }
+                                @(t.IsTest ? " · test ticket" : "")
                             </div>
                             @if (valid)
                             {

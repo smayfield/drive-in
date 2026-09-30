@@ -35,7 +35,7 @@
     [Parameter, EditorRequired] public Theater Theater { get; set; } = default!;
     [Parameter, EditorRequired] public string Title { get; set; } = "";
 
-    // Which tab is active: "overview", "schedule", "pricing", "lot", "gate", "employees" or "roles". Leave null on
+    // Which tab is active: "overview", "schedule", "pricing", "lot", "gate", "comps", "employees" or "roles". Leave null on
     // pages that aren't a tab (a screen's setup).
     [Parameter] public string? Current { get; set; } = "overview";
 
@@ -55,6 +55,8 @@
             yield return new("lot", $"manage/{Theater.Id}/lot", "Lot map");
             if (Can(TheaterPermissions.AdmitGuests) || Can(TheaterPermissions.SellAtGate))
                 yield return new("gate", $"manage/{Theater.Id}/gate", "Gate");
+            if (Can(TheaterPermissions.OfferFreeAdmission) || Can(TheaterPermissions.ApproveFreeAdmission) || Can(TheaterPermissions.ViewFreeAdmission))
+                yield return new("comps", $"manage/{Theater.Id}/comps", "Free admission");
             if (EmployeeService.ListingPermissions.Any(Can) || Can(TheaterPermissions.InviteEmployees))
                 yield return new("employees", $"manage/{Theater.Id}/employees", "Employees");
             if (Can(TheaterPermissions.ManageRoles))
