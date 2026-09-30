@@ -56,3 +56,11 @@
 
 /* A form field that grows to fit a row but stops at a sensible width. Class (not Style) so it lands on the control. */
 .field-grow { flex: 1 1 14rem; min-width: 0; max-width: 24rem; }
+
+/* Reports: headline figures above the tables. */
+.report-date { flex: 0 1 11rem; }
+.report-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: 0.75rem; }
+.report-tile { display: flex; flex-direction: column; gap: 0.15rem; padding: 0.75rem 1rem; }
+.report-tile-label { color: var(--mud-palette-text-secondary); font-size: 0.85rem; font-weight: 500; }
+.report-tile-value { font-size: 1.6rem; font-weight: 600; line-height: 1.2; }
+.report-ledger { max-width: 32rem; }

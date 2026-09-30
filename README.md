@@ -147,6 +147,10 @@ invitee sets a password or continues with Google using the invited address.
     DB check (`0 <= balance <= initial_amount`), so it can't be spent twice. If the card is then declined, the money
     is put back (a `Restore` transaction). Every change is a row in `gift_card_transactions`. Turning sales off leaves
     cards already sold spendable. Demo theaters' test cards are cleared on go-live with their test tickets.
+- **Reports** (Manage → Reports, *View reports*): pick a date range (or a preset) to see ticket sales and attendance
+  by channel, payment, day, showing and film, ticket options and add-ons, and gift cards sold, spent and still owed
+  (with every card that has a balance left). Each table downloads as CSV. Only Managers get it by default (a migration
+  adds it to existing Managers). Details in [features.md](features.md).
 
 ## Marketing site and onboarding
 

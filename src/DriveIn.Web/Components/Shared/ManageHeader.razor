@@ -35,8 +35,8 @@
     [Parameter, EditorRequired] public Theater Theater { get; set; } = default!;
     [Parameter, EditorRequired] public string Title { get; set; } = "";
 
-    // Which tab is active: "overview", "schedule", "pricing", "lot", "gate", "comps", "giftcards", "employees" or "roles". Leave null on
-    // pages that aren't a tab (a screen's setup).
+    // Which tab is active: "overview", "schedule", "pricing", "lot", "gate", "comps", "giftcards", "reports", "employees" or
+    // "roles". Leave null on pages that aren't a tab (a screen's setup).
     [Parameter] public string? Current { get; set; } = "overview";
 
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
@@ -59,6 +59,8 @@
                 yield return new("comps", $"manage/{Theater.Id}/comps", "Free admission");
             if (Can(TheaterPermissions.ManageGiftCards) || Can(TheaterPermissions.ViewGiftCards))
                 yield return new("giftcards", $"manage/{Theater.Id}/giftcards", "Gift cards");
+            if (Can(TheaterPermissions.ViewReports))
+                yield return new("reports", $"manage/{Theater.Id}/reports", "Reports");
             if (EmployeeService.ListingPermissions.Any(Can) || Can(TheaterPermissions.InviteEmployees))
                 yield return new("employees", $"manage/{Theater.Id}/employees", "Employees");
             if (Can(TheaterPermissions.ManageRoles))
