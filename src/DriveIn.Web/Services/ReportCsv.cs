@@ -43,7 +43,15 @@ public static class ReportCsv
         return sb.ToString();
     }
 
-    public static byte[] ToBytes(string csv) => Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv)).ToArray();
+    // The byte order mark then the text, written into one buffer.
+    public static byte[] ToBytes(string csv)
+    {
+        var bom = Encoding.UTF8.Preamble;
+        var bytes = new byte[bom.Length + Encoding.UTF8.GetByteCount(csv)];
+        bom.CopyTo(bytes);
+        Encoding.UTF8.GetBytes(csv, bytes.AsSpan(bom.Length));
+        return bytes;
+    }
 
     public static string Cell(object? value)
     {

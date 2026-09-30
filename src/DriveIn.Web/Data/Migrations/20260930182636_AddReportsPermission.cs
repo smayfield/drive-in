@@ -16,7 +16,7 @@ namespace DriveIn.Web.Data.Migrations
                 INSERT INTO theater_role_permissions (role_id, permission)
                 SELECT tr.id, 'reports.view'
                 FROM theater_roles tr
-                WHERE tr.name = 'Manager'
+                WHERE tr.normalized_name = 'MANAGER'
                   AND NOT EXISTS (SELECT 1 FROM theater_role_permissions x WHERE x.role_id = tr.id AND x.permission = 'reports.view');
                 """);
         }

@@ -268,6 +268,8 @@ public class ReportTests
             "'@sum,3,2026-09-05\r\n" +
             "'  +1,0,'\tplain\r\n",
             csv);
-        Assert.Equal([0xEF, 0xBB, 0xBF], ReportCsv.ToBytes(csv)[..3]);
+        var bytes = ReportCsv.ToBytes(csv + "é");
+        Assert.Equal([0xEF, 0xBB, 0xBF], bytes[..3]);
+        Assert.Equal(csv + "é", System.Text.Encoding.UTF8.GetString(bytes[3..]));
     }
 }
