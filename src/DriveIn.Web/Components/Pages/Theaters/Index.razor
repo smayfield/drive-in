@@ -4,7 +4,7 @@
 
 <PageTitle>Theaters · Drive-In Online</PageTitle>
 
-<MudText Typo="Typo.h3" Component="h1" Class="mb-4">Drive-in theaters</MudText>
+<MudText Typo="Typo.h3" HtmlTag="h1" Class="mb-4">Drive-in theaters</MudText>
 
 @if (theaters is null)
 {
@@ -30,12 +30,12 @@ else
                     </div>
                     <div class="theater-card-body">
                         <MudText>@Location(t)</MudText>
-                        <MudText Typo="Typo.body2" Class="muted ">
+                        <MudText Typo="Typo.body2" Class="muted">
                             @t.Screens.Count screen@(t.Screens.Count == 1 ? "" : "s") · @t.Screens.Sum(s => s.SpotCount) spots
                         </MudText>
                         @if (t.SeasonOpensOn is not null || t.SeasonClosesOn is not null)
                         {
-                            <MudText Typo="Typo.body2" Class="muted ">Season: @Seasons.Describe(t)</MudText>
+                            <MudText Typo="Typo.body2" Class="muted">Season: @Seasons.Describe(t)</MudText>
                         }
                     </div>
                     <div class="pa-3 pt-0">

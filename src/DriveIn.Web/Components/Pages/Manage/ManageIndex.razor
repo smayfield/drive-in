@@ -5,7 +5,7 @@
 
 <PageTitle>Manage · Drive-In Online</PageTitle>
 
-<MudText Typo="Typo.h4" Component="h1" Class="mb-3">Manage</MudText>
+<MudText Typo="Typo.h4" HtmlTag="h1" Class="mb-3">Manage</MudText>
 
 @if (theaters is null)
 {
@@ -22,7 +22,7 @@ else if (theaters.Count == 0)
 else
 {
     <MudPaper Outlined>
-        <MudList T="string" Dense Clickable>
+        <MudList T="string" Dense>
             @foreach (var t in theaters)
             {
                 <MudListItem Href="@($"manage/{t.Id}")" @key="t.Id">

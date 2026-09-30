@@ -116,9 +116,9 @@ else
                         <span class="muted">No logo yet.</span>
                     }
                     <MudFileUpload T="IBrowserFile" Accept=".jpg,.jpeg,.png,.gif" FilesChanged="UploadLogoAsync">
-                        <ActivatorContent>
-                            <MudButton Variant="Variant.Outlined" Size="Size.Small">@(theater.LogoUrl is null ? "Upload logo" : "Replace logo")</MudButton>
-                        </ActivatorContent>
+                        <CustomContent>
+                            <MudButton OnClick="@context.OpenFilePickerAsync" Variant="Variant.Outlined" Size="Size.Small">@(theater.LogoUrl is null ? "Upload logo" : "Replace logo")</MudButton>
+                        </CustomContent>
                     </MudFileUpload>
                     @if (theater.LogoUrl is not null)
                     {
