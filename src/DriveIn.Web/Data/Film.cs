@@ -22,7 +22,36 @@ public class Film
     [Range(1, MaxRuntimeMinutes)]
     public int RuntimeMinutes { get; set; }
 
+    // Optional details the theater enters, shown on the public theater page.
+    public const int MinReleaseYear = 1880;
+    public int? ReleaseYear { get; set; }
+    [MaxLength(2000)] public string? Overview { get; set; }
+    [MaxLength(300)] public string? Directors { get; set; }
+    [MaxLength(500)] public string? Cast { get; set; }
+    [MaxLength(200)] public string? Genres { get; set; }
+
+    // When the poster was last uploaded; null when there is none. See FilmPoster.
+    public DateTimeOffset? PosterUpdatedAt { get; set; }
+
+    // Served by the /films/{id}/poster endpoint; the version keeps browsers from showing a replaced poster.
+    public string? PosterUrl => PosterUpdatedAt is DateTimeOffset at ? $"films/{Id}/poster?v={at.UtcTicks}" : null;
+
     public List<ShowtimeFeature> Features { get; set; } = [];
+}
+
+// A film's uploaded poster (JPEG, GIF or PNG), kept apart from Film so listing films never loads the bytes.
+public class FilmPoster
+{
+    public const int MaxBytes = 2 * 1024 * 1024;
+
+    public int FilmId { get; set; }
+    public Film? Film { get; set; }
+
+    // Set from the file's own bytes, never from what the browser claimed.
+    [Required, MaxLength(30)]
+    public string ContentType { get; set; } = "";
+
+    public byte[] Data { get; set; } = [];
 }
 
 // One ticketed showing on a screen: one film, or several back to back (a double feature) with an intermission

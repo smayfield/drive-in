@@ -53,6 +53,12 @@ public class Theater
     // Listed, and selling real tickets, to everyone. Demo theaters are only visible to their members.
     public bool IsPublic => IsActive && Mode == TheaterMode.Live;
 
+    // When the logo was last uploaded; null when there is none. See TheaterLogo.
+    public DateTimeOffset? LogoUpdatedAt { get; set; }
+
+    // Served by the /theaters/{slug}/logo endpoint; the version keeps browsers from showing a replaced logo.
+    public string? LogoUrl => LogoUpdatedAt is DateTimeOffset at ? $"theaters/{Slug}/logo?v={at.UtcTicks}" : null;
+
     // Nullable only so an admin can create a theater before its owner accepts an invite.
     public string? OwnerId { get; set; }
     public ApplicationUser? Owner { get; set; }

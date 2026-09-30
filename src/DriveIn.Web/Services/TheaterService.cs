@@ -10,6 +10,18 @@ public sealed record TheaterSummary(
     int Id, string Name, string Slug, string? City, string? State, bool IsActive,
     string? OwnerEmail, int ScreenCount, int EmployeeCount, TheaterMode Mode = TheaterMode.Live, DateTimeOffset? GoLiveRequestedAt = null);
 
+internal static class UploadedImages
+{
+    // The MIME type if the bytes start like a JPEG, GIF or PNG, else null.
+    public static string? Sniff(ReadOnlySpan<byte> d) => d switch
+    {
+        [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, ..] => "image/png",
+        [0xFF, 0xD8, 0xFF, ..] => "image/jpeg",
+        [(byte)'G', (byte)'I', (byte)'F', (byte)'8', (byte)'7' or (byte)'9', (byte)'a', ..] => "image/gif",
+        _ => null,
+    };
+}
+
 public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFactory, IAuthorizationService auth, TimeProvider time)
 {
     // --- Browsing (any signed-in user) ---
@@ -84,6 +96,55 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
         await EnsureSeasonCoversShowingsAsync(db, theater);
         theater.UpdatedAt = time.GetUtcNow();
         await db.SaveChangesAsync();
+    }
+
+    // --- Logo ---
+
+    // Requires EditProfile. Replaces any existing logo. The type is taken from the file's bytes, and only JPEG, GIF
+    // and PNG are accepted (not SVG, which can carry script).
+    public async Task SetLogoAsync(ClaimsPrincipal user, int theaterId, byte[] data)
+    {
+        if (data.Length == 0)
+            throw new AppValidationException("Choose an image file.");
+        if (data.Length > TheaterLogo.MaxBytes)
+            throw new AppValidationException($"Logos can be at most {TheaterLogo.MaxBytes / (1024 * 1024)} MB.");
+        var contentType = UploadedImages.Sniff(data)
+            ?? throw new AppValidationException("Logos must be JPG, GIF or PNG images.");
+
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var theater = await db.Theaters.FirstOrDefaultAsync(t => t.Id == theaterId)
+            ?? throw new NotFoundException("Theater not found.");
+        await auth.RequireAsync(user, theater, TheaterPermissions.EditProfile);
+        var logo = await db.TheaterLogos.FirstOrDefaultAsync(l => l.TheaterId == theaterId);
+        if (logo is null)
+            db.TheaterLogos.Add(logo = new TheaterLogo { TheaterId = theaterId });
+        logo.ContentType = contentType;
+        logo.Data = data;
+        theater.LogoUpdatedAt = time.GetUtcNow();
+        theater.UpdatedAt = theater.LogoUpdatedAt.Value;
+        await db.SaveChangesAsync();
+    }
+
+    public async Task RemoveLogoAsync(ClaimsPrincipal user, int theaterId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var theater = await db.Theaters.FirstOrDefaultAsync(t => t.Id == theaterId)
+            ?? throw new NotFoundException("Theater not found.");
+        await auth.RequireAsync(user, theater, TheaterPermissions.EditProfile);
+        db.TheaterLogos.RemoveRange(db.TheaterLogos.Where(l => l.TheaterId == theaterId));
+        theater.LogoUpdatedAt = null;
+        theater.UpdatedAt = time.GetUtcNow();
+        await db.SaveChangesAsync();
+    }
+
+    // The logo of a theater the user may browse (see CanBrowse); null when there's none or it isn't visible to them.
+    public async Task<TheaterLogo?> GetLogoAsync(ClaimsPrincipal user, string slug)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var theater = await db.Theaters.AsNoTracking().FirstOrDefaultAsync(t => t.Slug == slug);
+        if (theater is null || theater.LogoUpdatedAt is null || !CanBrowse(user, theater))
+            return null;
+        return await db.TheaterLogos.AsNoTracking().FirstOrDefaultAsync(l => l.TheaterId == theater.Id);
     }
 
     // --- Admin ---
@@ -187,7 +248,9 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
         db.Tickets.RemoveRange(db.Tickets.Where(t => t.Showtime!.Screen!.TheaterId == id));
         db.ShowtimeFeatures.RemoveRange(db.ShowtimeFeatures.Where(f => f.Showtime!.Screen!.TheaterId == id));
         db.Showtimes.RemoveRange(db.Showtimes.Where(s => s.Screen!.TheaterId == id));
+        db.FilmPosters.RemoveRange(db.FilmPosters.Where(p => p.Film!.TheaterId == id));
         db.Films.RemoveRange(db.Films.Where(f => f.TheaterId == id));
+        db.TheaterLogos.RemoveRange(db.TheaterLogos.Where(l => l.TheaterId == id));
         db.AddOns.RemoveRange(db.AddOns.Where(a => a.TheaterId == id));
         db.PriceOptions.RemoveRange(db.PriceOptions.Where(o => o.Schedule!.TheaterId == id));
         db.PriceSchedules.RemoveRange(db.PriceSchedules.Where(s => s.TheaterId == id));

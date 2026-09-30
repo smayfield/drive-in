@@ -174,6 +174,29 @@ app.MapRazorComponents<App>()
 // Add additional endpoints required by the Identity /Account Razor components.
 app.MapAdditionalIdentityEndpoints();
 
+// A theater's logo. Signed-in users only, like the theater pages, and only for theaters they may browse.
+app.MapGet("/theaters/{slug}/logo", async (string slug, HttpContext http, TheaterService theaters) =>
+{
+    var logo = await theaters.GetLogoAsync(http.User, slug);
+    if (logo is null)
+        return Results.NotFound();
+    http.Response.Headers.XContentTypeOptions = "nosniff";
+    // The page URL carries a version (?v=) that changes with each upload, so a browser can keep it for a day.
+    http.Response.Headers.CacheControl = "private, max-age=86400";
+    return Results.File(logo.Data, logo.ContentType);
+}).RequireAuthorization();
+
+// A film's poster, visible to whoever may browse the film's theater.
+app.MapGet("/films/{filmId:int}/poster", async (int filmId, HttpContext http, ScheduleService schedule) =>
+{
+    var poster = await schedule.GetPosterAsync(http.User, filmId);
+    if (poster is null)
+        return Results.NotFound();
+    http.Response.Headers.XContentTypeOptions = "nosniff";
+    http.Response.Headers.CacheControl = "private, max-age=86400";
+    return Results.File(poster.Data, poster.ContentType);
+}).RequireAuthorization();
+
 await DbSeeder.SeedAsync(app.Services);
 
 app.Run();
