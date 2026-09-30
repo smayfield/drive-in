@@ -52,7 +52,7 @@ else
                                 }
                             <div>
                                 <strong>@s.StartsLocal.ToString("h:mm tt")</strong> · @s.Title
-                                @foreach (var f in s.Features.Where(f => f.Directors is not null || f.Cast is not null || f.Year is not null))
+                                @foreach (var f in s.Features.Where(f => f.Directors is not null || f.Cast is not null || f.Year is not null || f.Genres is not null || f.Overview is not null))
                                 {
                                     <div class="small">
                                         @if (s.IsMultiFeature) { <span class="fw-semibold">@f.Title</span> }
@@ -60,6 +60,7 @@ else
                                         @if (f.Genres is not null) { <span class="text-muted"> · @f.Genres</span> }
                                         @if (f.Directors is not null) { <div class="text-muted">Directed by @f.Directors</div> }
                                         @if (f.Cast is not null) { <div class="text-muted">Starring @f.Cast</div> }
+                                        @if (f.Overview is not null) { <div class="mt-1" style="white-space: pre-line">@f.Overview</div> }
                                     </div>
                                 }
                                 <div class="small text-muted">

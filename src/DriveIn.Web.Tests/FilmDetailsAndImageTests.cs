@@ -43,7 +43,9 @@ public class FilmDetailsAndImageTests
         var user = Principals.For(owner);
 
         await Assert.ThrowsAsync<AppValidationException>(() => service.AddFilmAsync(user, theater.Id, JawsInput with { ReleaseYear = 1700 }));
-        await Assert.ThrowsAsync<AppValidationException>(() => service.AddFilmAsync(user, theater.Id, JawsInput with { ReleaseYear = 3000 }));
+        // Up to five years past the (fake) clock's year, 2026.
+        await service.AddFilmAsync(user, theater.Id, JawsInput with { ReleaseYear = 2031 });
+        await Assert.ThrowsAsync<AppValidationException>(() => service.AddFilmAsync(user, theater.Id, JawsInput with { ReleaseYear = 2032 }));
         await Assert.ThrowsAsync<AppValidationException>(() => service.AddFilmAsync(user, theater.Id, JawsInput with { Overview = new string('x', 2001) }));
         await Assert.ThrowsAsync<AppValidationException>(() => service.AddFilmAsync(user, theater.Id, JawsInput with { Cast = new string('x', 501) }));
     }

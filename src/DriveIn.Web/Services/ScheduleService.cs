@@ -52,7 +52,7 @@ public sealed class ScheduleService(IDbContextFactory<ApplicationDbContext> dbFa
         await using var db = await dbFactory.CreateDbContextAsync();
         await auth.RequireAsync(user, await FindTheaterAsync(db, theaterId), TheaterPermissions.ManageSchedule);
         var film = new Film { TheaterId = theaterId };
-        Apply(input, film);
+        Apply(input, film, time.GetUtcNow().Year);
         db.Films.Add(film);
         await db.SaveChangesAsync();
         return film;
@@ -64,7 +64,7 @@ public sealed class ScheduleService(IDbContextFactory<ApplicationDbContext> dbFa
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var film = await LoadFilmAuthorizedAsync(db, user, filmId);
-        Apply(input, film);
+        Apply(input, film, time.GetUtcNow().Year);
         var now = time.GetUtcNow();
         var showtimes = await WithFeatures(db.Showtimes).Include(s => s.Screen)
             .Where(s => s.Features.Any(f => f.FilmId == filmId))
@@ -350,7 +350,7 @@ public sealed class ScheduleService(IDbContextFactory<ApplicationDbContext> dbFa
         return text;
     }
 
-    private static void Apply(FilmInput input, Film film)
+    private static void Apply(FilmInput input, Film film, int currentYear)
     {
         var title = (input.Title ?? "").Trim();
         if (title.Length == 0)
@@ -362,8 +362,8 @@ public sealed class ScheduleService(IDbContextFactory<ApplicationDbContext> dbFa
             throw new AppValidationException("Ratings can be at most 10 characters.");
         if (input.RuntimeMinutes is < 1 or > Film.MaxRuntimeMinutes)
             throw new AppValidationException($"Runtime must be 1 to {Film.MaxRuntimeMinutes} minutes.");
-        if (input.ReleaseYear is int year && (year < Film.MinReleaseYear || year > DateTime.UtcNow.Year + 5))
-            throw new AppValidationException($"The year must be between {Film.MinReleaseYear} and {DateTime.UtcNow.Year + 5}.");
+        if (input.ReleaseYear is int year && (year < Film.MinReleaseYear || year > currentYear + 5))
+            throw new AppValidationException($"The year must be between {Film.MinReleaseYear} and {currentYear + 5}.");
         film.Title = title;
         film.Rating = rating;
         film.RuntimeMinutes = input.RuntimeMinutes;
