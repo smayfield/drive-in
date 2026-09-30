@@ -24,7 +24,8 @@ namespace DriveIn.Web.Data.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.Sql("DELETE FROM theater_role_permissions WHERE permission = 'reports.view';");
+            // Deliberately leaves the grants: Down can't tell the rows Up added from ones owners granted since, and code
+            // without this permission ignores keys it doesn't know (TheaterAccess), so they do nothing until re-applied.
         }
     }
 }
