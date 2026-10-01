@@ -81,8 +81,9 @@ public sealed class MeteredEmailSender(IAppEmailSender inner, DriveInMetrics met
         {
             await inner.SendAsync(to, subject, htmlBody, images, ct);
         }
-        catch
+        catch when (!ct.IsCancellationRequested)
         {
+            // A send the caller called off (shutdown, a closed request) isn't a failure; an SES timeout is.
             metrics.Email(sent: false);
             throw;
         }

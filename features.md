@@ -321,8 +321,9 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   `drivein.theaters.go_live_requested`, `drivein.theaters.activated{how=go_live|admin_created}`,
   `drivein.tickets.sold` and `drivein.tickets.revenue` (dollars) `{channel=online|gate|comp, test}`,
   `drivein.tickets.admitted{how=scan|sold_at_gate}`, `drivein.tickets.moved`, `drivein.holds.expired`,
-  `drivein.payments{for=ticket|gift_card, result=approved|declined|error, test}`, `drivein.gift_cards.sold` and
-  `drivein.gift_cards.revenue {test}`, `drivein.emails{result=sent|failed}` (every sender is wrapped in `MeteredEmailSender`),
+  `drivein.payments{for=ticket|gift_card, result=approved|declined|error, test}`, `drivein.gift_cards.sold{test}` and
+  `drivein.gift_cards.revenue{test}` (dollars), `drivein.emails{result=sent|failed}` (every sender is wrapped in `MeteredEmailSender`; a send the caller
+  cancels isn't counted),
   `drivein.jobs.failures{job=hold_expiry|billing|geocoding|business_gauges}`, `drivein.invoices.issued`,
   `drivein.invoices.payments` (dollars), and `drivein.errors.logged{category, level}` (every Error/Critical log message,
   `ErrorCountingLoggerProvider`: failures inside Blazor circuits never become 5xx responses).

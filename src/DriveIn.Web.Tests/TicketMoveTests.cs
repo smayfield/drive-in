@@ -1,7 +1,9 @@
+using System.Diagnostics.Metrics;
 using System.Security.Claims;
 using DriveIn.Web.Data;
 using DriveIn.Web.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.Metrics.Testing;
 using static DriveIn.Web.Authorization.TheaterPermissions;
 using static DriveIn.Web.Tests.TicketSalesTests;
 using static DriveIn.Web.Tests.VehicleSizeTests;
@@ -12,6 +14,18 @@ public class TicketMoveTests
 {
     // 5 PM in Chicago on the day of the 8 PM showing (see TicketSalesTests.SetUpAsync).
     private static readonly DateTimeOffset ShowDayAfternoon = new(2026, 9, 5, 22, 0, 0, TimeSpan.Zero);
+
+    [Fact]
+    public async Task A_move_is_counted()
+    {
+        var (s, sold) = await SetUpWithSaleAsync();
+        await using var _ = s;
+        using var moved = new MetricCollector<long>(s.App.Get<IMeterFactory>(), DriveInMetrics.MeterName, "drivein.tickets.moved");
+
+        await s.Sales.MoveAsync(s.OwnerPrincipal, sold.Code, 1, 3, VehicleSize.Standard);
+
+        Assert.Equal(1, Assert.Single(moved.GetMeasurementSnapshot()).Value);
+    }
 
     // Row B takes large vehicles; a buyer's car has spot A1, sold online.
     private static async Task<(Setup S, TicketView Ticket)> SetUpWithSaleAsync()

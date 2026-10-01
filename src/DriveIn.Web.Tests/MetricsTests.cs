@@ -138,6 +138,12 @@ public class MetricsTests
         app.Email.FailWith = new EmailSendException("rejected");
         await Assert.ThrowsAsync<EmailSendException>(() => sender.SendAsync("b@example.com", "Hi", "<p>Hi</p>"));
 
+        // Called off by the caller (e.g. shutting down): not an email failure.
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+        app.Email.FailWith = new OperationCanceledException(cancelled.Token);
+        await Assert.ThrowsAsync<OperationCanceledException>(() => sender.SendAsync("c@example.com", "Hi", "<p>Hi</p>", ct: cancelled.Token));
+
         Assert.Equal(["sent", "failed"], emails.GetMeasurementSnapshot().Select(m => Tag(m, "result")));
     }
 
