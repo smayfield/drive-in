@@ -19,7 +19,7 @@ For the full list of features and behaviors (rules, limits, routes, permission k
 | `infra/dns.yml` | CloudFormation: Route 53 hosted zone. |
 | `infra/email.yml` | CloudFormation: SES domain identity (DKIM, MAIL FROM). |
 | `infra/mail.yml` | CloudFormation: inbound mail. Any address at the domain is forwarded to one mailbox (SES receiving, S3, a small Lambda). |
-| `infra/app.yml` | CloudFormation: VPC, EC2, EIP, ECR, ops bucket, snapshots, DNS records, alerts topic and alarms, GitHub deploy role. |
+| `infra/app.yml` | CloudFormation: VPC, EC2, EIP, ECR, ops bucket, snapshots, container log group, DNS records, alerts topic and alarms, GitHub deploy role. |
 | `.github/workflows/deploy.yml` | On merge to `main`: test, build ARM64 images, deploy via SSM. |
 
 ## Accounts and permissions
@@ -353,7 +353,17 @@ before redeploying. Patches within the image come from `dnf upgrade` on the serv
   `drive-in-alerts` SNS topic; to check delivery, open Alerting → Contact points → SNS email → Test.
 
 - Shell on the server: `aws ssm start-session --target <InstanceId>`; the stack lives in `/opt/drive-in`.
-- Logs: `docker compose logs web` there (lost when the container is recreated on deploy). Production logs include
-  scopes, so a request ID from the error page (`00-<trace id>-<span id>-00`) can be found by grepping for its trace id.
+- Logs: every container's output goes to CloudWatch Logs, log group `/drive-in/containers` (kept 30 days), one stream
+  per container (`drive-in-web-1/<container id>`, ...), so it survives redeploys. `docker compose logs web` on the server
+  still shows the current container's. The web app logs JSON with scopes, so a request ID from the error page
+  (`00-<trace id>-<span id>-00`) is found with CloudWatch → Logs Insights on `/drive-in/containers`:
+  ```
+  fields @timestamp, LogLevel, Category, Message, Exception
+  | filter @message like "<trace id>"
+  | sort @timestamp asc
+  ```
+  Recent errors: `fields @timestamp, Category, Message, Exception | filter LogLevel in ["Error", "Critical"] | sort @timestamp desc`.
+  The Grafana alerts already cover error rates (`drivein.errors.logged`), so there's no CloudWatch metric filter on top.
+  If CloudWatch can't be reached, Docker buffers then drops lines rather than stalling the app.
 - Backups: nightly `pg_dump` to `s3://<OpsBucket>/backups/` (30 days), plus daily EBS snapshots (7).
   Run one now with `sudo drive-in-backup <OpsBucket>`.

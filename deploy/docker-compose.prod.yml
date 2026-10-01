@@ -4,9 +4,22 @@
 # docker-compose.yml at the repo root.
 name: drive-in
 
+# Console output goes to CloudWatch Logs (log group /drive-in/containers, kept 30 days; infra/app.yml), one stream per
+# container, so it outlives the container. Docker keeps a local copy too ("dual logging"), so `docker compose logs`
+# still works. Non-blocking: if CloudWatch can't be reached, lines are buffered (then dropped) rather than stalling the app.
+x-logging: &awslogs
+  driver: awslogs
+  options:
+    awslogs-region: us-east-1
+    awslogs-group: /drive-in/containers
+    tag: "{{.Name}}/{{.ID}}"
+    mode: non-blocking
+    max-buffer-size: 4m
+
 services:
   caddy:
     image: caddy:2
+    logging: *awslogs
     restart: unless-stopped
     ports:
       - "80:80"
@@ -25,6 +38,7 @@ services:
 
   web:
     image: ${REGISTRY}/drive-in-web:${TAG}
+    logging: *awslogs
     restart: unless-stopped
     environment:
       ASPNETCORE_ENVIRONMENT: Production
@@ -53,6 +67,7 @@ services:
 
   postgres:
     image: postgres:17
+    logging: *awslogs
     restart: unless-stopped
     environment:
       POSTGRES_DB: drivein
@@ -72,6 +87,7 @@ services:
   # Bound to the host's loopback too, so backup.sh can record its last success.
   victoriametrics:
     image: victoriametrics/victoria-metrics:v1.153.0
+    logging: *awslogs
     restart: unless-stopped
     command:
       - -storageDataPath=/storage
@@ -92,6 +108,7 @@ services:
   # email in X-WEBAUTH-USER. Everything (data sources, dashboards, alerts) is provisioned from ./grafana.
   grafana:
     image: grafana/grafana-oss:13.0.2
+    logging: *awslogs
     restart: unless-stopped
     environment:
       GF_SERVER_ROOT_URL: https://${PUBLIC_HOST}/grafana/
@@ -169,6 +186,7 @@ services:
   # One-shot EF Core migration bundle; run explicitly by deploy.sh before the app restarts.
   migrate:
     image: ${REGISTRY}/drive-in-migrate:${TAG}
+    logging: *awslogs
     profiles: ["migrate"]
     command:
       - --connection

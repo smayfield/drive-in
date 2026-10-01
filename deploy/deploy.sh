@@ -59,6 +59,13 @@ aws ecr get-login-password --region "$REGION" | docker login --username AWS --pa
 log "Pulling images for $TAG"
 compose --profile migrate pull
 
+# Containers log to CloudWatch (the awslogs driver), and one that can't won't start. Check now, while the old version
+# is still running: this fails if the stack's log group or the instance role's log permissions aren't there yet.
+log "Checking CloudWatch Logs access"
+docker run --rm --log-driver awslogs --log-opt awslogs-region="$REGION" --log-opt awslogs-group=/drive-in/containers \
+  --log-opt tag=deploy-check caddy:2 true \
+  || { echo "Can't write to the /drive-in/containers log group. Apply infra/app.yml first (see the README)." >&2; exit 1; }
+
 log "Starting PostgreSQL"
 compose up -d --wait postgres
 
