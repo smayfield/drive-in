@@ -4,6 +4,7 @@ using DriveIn.Web.Authorization;
 using DriveIn.Web.Data;
 using DriveIn.Web.Services;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -61,7 +62,7 @@ public sealed class TestApp : IAsyncDisposable
         services.AddLogging();
         services.AddMetrics();
         services.AddSingleton<DriveInMetrics>();
-        services.AddDataProtection();
+        services.AddDataProtection().UseEphemeralDataProtectionProvider(); // per app, not the machine key ring
         services.AddSingleton<IConfiguration>(new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["Seed:AdminEmail"] = adminEmail })
             .Build());
@@ -76,9 +77,16 @@ public sealed class TestApp : IAsyncDisposable
             })
             .AddRoles<IdentityRole>()
             .AddEntityFrameworkStores<ApplicationDbContext>()
+            .AddSignInManager()
             .AddClaimsPrincipalFactory<AppClaimsPrincipalFactory>()
             .AddDefaultTokenProviders();
-        services.AddAuthorizationCore();
+        services.AddAuthentication(o =>
+            {
+                o.DefaultScheme = IdentityConstants.ApplicationScheme;
+                o.DefaultSignInScheme = IdentityConstants.ExternalScheme;
+            })
+            .AddIdentityCookies();
+        services.AddAuthorizationCore(o => o.AddPolicy(Policies.Admin, p => p.RequireRole(Roles.Admin)));
         services.AddScoped<TheaterAccess>();
         services.AddScoped<IAuthorizationHandler, TheaterAuthorizationHandler>();
         services.AddSingleton<IAppEmailSender>(Email);

@@ -50,5 +50,9 @@ See README.md for the full picture. Conventions worth knowing before changing co
   save, with low-cardinality tags only (no ids), and gets a panel in `deploy/grafana/dashboards` (and an alert rule if it's a
   failure). Grafana is provisioned from `deploy/grafana`; see features.md section 14.
 - **Tests:** `dotnet test src/DriveIn.sln`. `TestApp` in `TestHelpers.cs` builds the real DI graph with EF
-  InMemory, a fake email sender, and a fake clock; add service tests there.
+  InMemory, a fake email sender, and a fake clock; add service tests there. Pages get bUnit tests in `Pages/` through
+  `PageHost` (`PageTestHelpers.cs`): it renders against a `TestApp`, signs in with `SignIn`, and for static SSR pages
+  (`UseRequest`) cascades an `HttpContext` with real cookie auth. Helpers find MudBlazor fields by label (`SetField`,
+  `Check`, `ChooseRadio`, `host.Select`). A new or changed page gets a page test. Coverage:
+  `dotnet test src/DriveIn.sln --collect:"XPlat Code Coverage"` (`coverage.runsettings` leaves out the EF migrations).
 - Local Postgres runs on port **5433** (`docker-compose.yml`); the app on http://localhost:5280.
