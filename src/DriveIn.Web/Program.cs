@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -123,6 +124,33 @@ else
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityEmailSender>();
 
 builder.Services.AddSingleton(TimeProvider.System);
+
+// Theater coordinates and "near me" searches. Nominatim (OpenStreetMap) needs no key but allows one request a second.
+builder.Services.Configure<GeocodingOptions>(builder.Configuration.GetSection(GeocodingOptions.Section));
+var geocodingProvider = builder.Configuration[$"{GeocodingOptions.Section}:Provider"] ?? "Nominatim";
+if (geocodingProvider.Equals("Nominatim", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddHttpClient(NominatimGeocoder.HttpClientName, (sp, client) =>
+    {
+        var options = sp.GetRequiredService<IOptions<GeocodingOptions>>().Value;
+        var contact = options.ContactEmail ?? sp.GetRequiredService<IOptions<CompanyOptions>>().Value.ContactEmail;
+        // Requests are relative ("search?..."), so the base needs its trailing slash to keep any path.
+        client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
+        client.Timeout = TimeSpan.FromSeconds(5);
+        client.DefaultRequestHeaders.UserAgent.ParseAdd($"DriveInOnline/1.0{(string.IsNullOrWhiteSpace(contact) ? "" : $" ({contact})")}");
+    });
+    builder.Services.AddSingleton<IGeocoder, NominatimGeocoder>();
+    builder.Services.AddHostedService<TheaterGeocodingBackfill>();
+}
+else if (geocodingProvider.Equals("None", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddSingleton<IGeocoder, NullGeocoder>();
+}
+else
+{
+    // Fail at startup rather than quietly stop finding theaters.
+    throw new InvalidOperationException($"Unknown {GeocodingOptions.Section}:Provider '{geocodingProvider}'. Use Nominatim or None.");
+}
 builder.Services.AddScoped<TheaterService>();
 builder.Services.AddScoped<ScreenService>();
 builder.Services.AddScoped<ScheduleService>();

@@ -1,23 +1,68 @@
 @page "/theaters"
 @attribute [Authorize]
+@inherits AppComponentBase
 @inject TheaterService Theaters
+@inject IJSRuntime JS
 
 <PageTitle>Theaters · Drive-In Online</PageTitle>
 
 <MudText Typo="Typo.h3" HtmlTag="h1" Class="mb-4">Drive-in theaters</MudText>
 
+<form class="near-search mb-4" role="search" @onsubmit="Search">
+    @* Wrapped, since MudSelect puts Class on an inner element rather than the flex item. *@
+    <div class="near-search-place">
+        <MudTextField T="string" @bind-Value="placeInput" Label="ZIP code or city" Placeholder="e.g. 78701 or Austin, TX"
+                      Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="200" Clearable Immediate
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
+    </div>
+    <div class="near-search-radius">
+        <MudSelect T="int" @bind-Value="radiusInput" Label="Within" Variant="Variant.Outlined" Margin="Margin.Dense">
+            @foreach (var r in RadiusChoices)
+            {
+                <MudSelectItem Value="@r">@(r == AnyDistance ? "Any distance" : $"{r} miles")</MudSelectItem>
+            }
+        </MudSelect>
+    </div>
+    <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" Disabled="busy">Search</MudButton>
+    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.MyLocation" OnClick="UseMyLocationAsync" Disabled="busy">Use my location</MudButton>
+</form>
+
+<Alerts Error="@Error" />
+
 @if (theaters is null)
 {
     <MudProgressCircular Indeterminate Size="Size.Small" aria-label="Loading theaters" />
 }
-else if (theaters.Count == 0)
-{
-    <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined">No theaters are open yet.</MudAlert>
-}
 else
 {
+    @if (Searching)
+    {
+        <div class="d-flex flex-wrap align-items-baseline gap-2 mb-3" role="status">
+            <MudText>
+                @if (placeNotFound)
+                {
+                    @* The alert above says why. *@
+                }
+                else if (theaters.Count == 0)
+                {
+                    @($"No theaters {RadiusText} {PlaceText}.")
+                    @if (Radius != AnyDistance) { <span> Try a larger distance.</span> }
+                }
+                else
+                {
+                    @($"{theaters.Count} theater{(theaters.Count == 1 ? "" : "s")} {RadiusText} {PlaceText}, nearest first.")
+                }
+            </MudText>
+            <MudLink Href="theaters">Show all theaters</MudLink>
+        </div>
+    }
+    else if (theaters.Count == 0)
+    {
+        <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined">No theaters are open yet.</MudAlert>
+    }
+
     <MudGrid Spacing="3">
-        @foreach (var t in theaters)
+        @foreach (var (t, miles) in theaters)
         {
             <MudItem xs="12" sm="6" md="4" @key="t.Id">
                 <MudPaper Outlined Class="theater-card">
@@ -29,7 +74,13 @@ else
                         <h2 class="theater-card-name"><a href="theaters/@t.Slug">@t.Name</a></h2>
                     </div>
                     <div class="theater-card-body">
-                        <MudText>@Location(t)</MudText>
+                        <MudText>
+                            @Location(t)
+                            @if (miles is double m)
+                            {
+                                <span class="theater-card-distance">@DistanceText(m)</span>
+                            }
+                        </MudText>
                         <MudText Typo="Typo.body2" Class="muted">
                             @t.Screens.Count screen@(t.Screens.Count == 1 ? "" : "s") · @t.Screens.Sum(s => s.SpotCount) spots
                         </MudText>
@@ -48,12 +99,118 @@ else
 }
 
 @code {
-    private List<Theater>? theaters;
+    private const int AnyDistance = 0;
+    private const int DefaultRadius = 100;
+    private static readonly int[] RadiusChoices = [25, 50, 100, 250, AnyDistance];
 
-    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+    // The search lives in the query string, so results can be linked to and Back works.
+    [SupplyParameterFromQuery(Name = "near")] public string? Near { get; set; }
+    [SupplyParameterFromQuery(Name = "lat")] public double? Lat { get; set; }
+    [SupplyParameterFromQuery(Name = "lon")] public double? Lon { get; set; }
+    [SupplyParameterFromQuery(Name = "radius")] public int? RadiusParam { get; set; }
 
-    protected override async Task OnInitializedAsync() => theaters = await Theaters.ListActiveAsync((await AuthState).User);
+    private List<(Theater Theater, double? Miles)>? theaters;
+    private string? placeInput;
+    private int radiusInput = DefaultRadius;
+    private bool busy;
+    private bool placeNotFound;
+
+    private bool UsingPosition => Lat is not null && Lon is not null;
+    // Only one of lat/lon: a truncated or hand-edited link, shown as an invalid location rather than ignored.
+    private bool PartialPosition => (Lat is null) != (Lon is null);
+    private bool Searching => UsingPosition || PartialPosition || !string.IsNullOrWhiteSpace(Near);
+    private int Radius => RadiusParam is int r && RadiusChoices.Contains(r) ? r : DefaultRadius;
+    private string RadiusText => Radius == AnyDistance ? "near" : $"within {Radius} miles of";
+    private string PlaceText => UsingPosition ? "your location" : Near?.Trim() ?? "";
+
+    protected override async Task LoadAsync()
+    {
+        placeInput = UsingPosition ? null : Near;
+        radiusInput = Radius;
+        theaters = null;
+        placeNotFound = false;
+        double? radius = Radius == AnyDistance ? null : Radius;
+        try
+        {
+            if (PartialPosition)
+            {
+                throw new AppValidationException("That location isn't valid.");
+            }
+            if (UsingPosition)
+            {
+                theaters = Nearest(await Theaters.ListNearAsync(User, new GeoPoint(Lat!.Value, Lon!.Value), radius));
+            }
+            else if (!string.IsNullOrWhiteSpace(Near))
+            {
+                var from = await Theaters.FindPlaceAsync(User, Near)
+                    ?? throw new AppValidationException($"We couldn't find \"{Near.Trim()}\". Try a ZIP code, or a city and state.");
+                theaters = Nearest(await Theaters.ListNearAsync(User, from, radius));
+            }
+            else
+            {
+                theaters = (await Theaters.ListActiveAsync(User)).Select(t => (t, (double?)null)).ToList();
+            }
+        }
+        finally
+        {
+            // A search that failed (a place that can't be found, a bad location in the link) shows its error, not a
+            // spinner; placeNotFound keeps the "no theaters" line from repeating it.
+            if (theaters is null)
+                (theaters, placeNotFound) = ([], true);
+        }
+    }
+
+    private static List<(Theater, double?)> Nearest(List<(Theater Theater, double Miles)> found) =>
+        found.Select(x => (x.Theater, (double?)x.Miles)).ToList();
+
+    private void Search()
+    {
+        Error = null;
+        if (string.IsNullOrWhiteSpace(placeInput))
+        {
+            Nav.NavigateTo("theaters");
+            return;
+        }
+        Nav.NavigateTo(Nav.GetUriWithQueryParameters(Nav.ToAbsoluteUri("theaters").ToString(), new Dictionary<string, object?>
+        {
+            ["near"] = placeInput.Trim(), ["radius"] = radiusInput,
+        }));
+    }
+
+    private async Task UseMyLocationAsync()
+    {
+        Error = null;
+        busy = true;
+        try
+        {
+            var position = await JS.InvokeAsync<BrowserPosition>("driveIn.getPosition");
+            if (position.Error is not null || position.Lat is not double lat || position.Lon is not double lon)
+            {
+                Error = position.Error switch
+                {
+                    "denied" => "Your browser didn't share your location. Allow it for this site, or type a ZIP code or city.",
+                    "unsupported" => "Your browser can't share your location. Type a ZIP code or city instead.",
+                    _ => "We couldn't get your location. Try again, or type a ZIP code or city.",
+                };
+                return;
+            }
+            // Two decimals is about a kilometer: close enough to sort theaters, and it keeps the exact spot out of the URL.
+            Nav.NavigateTo(Nav.GetUriWithQueryParameters(Nav.ToAbsoluteUri("theaters").ToString(), new Dictionary<string, object?>
+            {
+                ["lat"] = Math.Round(lat, 2), ["lon"] = Math.Round(lon, 2), ["radius"] = radiusInput,
+            }));
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private sealed record BrowserPosition(double? Lat, double? Lon, string? Error);
 
     internal static string Location(Theater t) =>
         string.Join(", ", new[] { t.City, t.State }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+    private static string DistanceText(double miles) =>
+        miles < 1 ? "under a mile away" : $"{miles:0} mile{(Math.Round(miles) == 1 ? "" : "s")} away";
 }

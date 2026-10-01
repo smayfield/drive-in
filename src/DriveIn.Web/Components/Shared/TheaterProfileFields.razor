@@ -25,6 +25,29 @@
     <MudItem xs="12" md="3">
         <MudTextField T="string" @bind-Value="Model.Country" Label="Country" Variant="Variant.Outlined" Margin="Margin.Dense" />
     </MudItem>
+    <MudItem xs="6" md="3">
+        <MudNumericField T="double?" @bind-Value="Model.Latitude" For="() => Model.Latitude" Label="Latitude" Min="-90" Max="90" HideSpinButtons
+                         Variant="Variant.Outlined" Margin="Margin.Dense" />
+    </MudItem>
+    <MudItem xs="6" md="3">
+        <MudNumericField T="double?" @bind-Value="Model.Longitude" For="() => Model.Longitude" Label="Longitude" Min="-180" Max="180" HideSpinButtons
+                         Variant="Variant.Outlined" Margin="Margin.Dense" />
+    </MudItem>
+    <MudItem xs="12" md="6" Class="d-flex align-items-center">
+        @if (Geo.Of(Model) is null && Model.Id != 0 && Geo.AddressQuery(Model) is not null)
+        {
+            <MudText Typo="Typo.body2" Color="Color.Warning">
+                This theater isn't on the map yet, so it won't show up when customers search near them. Saving tries to look it up
+                from the address; if it still isn't found, check the address or enter the coordinates yourself.
+            </MudText>
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Class="muted">
+                Used for "near me" searches and the weather. Saving looks them up from the address when it can, unless you enter them yourself; clear them to look them up again.
+            </MudText>
+        }
+    </MudItem>
     <MudItem xs="12" md="6">
         <MudTextField T="string" @bind-Value="Model.Phone" For="() => Model.Phone" Label="Phone" InputType="InputType.Telephone" Variant="Variant.Outlined" Margin="Margin.Dense" />
     </MudItem>

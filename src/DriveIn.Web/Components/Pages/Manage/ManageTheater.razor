@@ -203,8 +203,10 @@ else
     private Task SaveProfileAsync() => RunAsync(async () =>
     {
         await Theaters.UpdateProfileAsync(User, profile);
-        // Reload: the plan panel's checklist and billing estimate depend on the profile (time zone, season).
+        // Reload: the plan panel's checklist and billing estimate depend on the profile (time zone, season), and the
+        // form shows the coordinates looked up from the address.
         theater = await Theaters.GetForManageAsync(User, Id);
+        profile = theater.CopyForEdit();
     }, "Profile saved.");
 
     private Task UploadLogoAsync(IBrowserFile file) => RunAsync(async () =>

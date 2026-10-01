@@ -22,7 +22,8 @@ internal static class UploadedImages
     };
 }
 
-public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFactory, IAuthorizationService auth, TimeProvider time)
+public sealed class TheaterService(
+    IDbContextFactory<ApplicationDbContext> dbFactory, IAuthorizationService auth, TimeProvider time, IGeocoder geocoder)
 {
     // --- Browsing (any signed-in user) ---
 
@@ -40,6 +41,29 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
             .Include(t => t.Screens)
             .OrderBy(t => t.Name)
             .ToListAsync();
+    }
+
+    // Theaters the user may browse (as ListActiveAsync) within radiusMiles of a point, nearest first; null radius is
+    // any distance. Theaters without coordinates can't be placed, so they're left out.
+    public async Task<List<(Theater Theater, double Miles)>> ListNearAsync(ClaimsPrincipal user, GeoPoint from, double? radiusMiles)
+    {
+        if (!GeoPoint.IsValid(from.Latitude, from.Longitude))
+            throw new AppValidationException("That location isn't valid.");
+        // Few enough theaters to measure in memory.
+        return (await ListActiveAsync(user))
+            .Select(t => (Theater: t, At: Geo.Of(t)))
+            .Where(x => x.At is not null)
+            .Select(x => (x.Theater, Miles: Geo.DistanceMiles(from, x.At!)))
+            .Where(x => radiusMiles is not double r || x.Miles <= r)
+            .OrderBy(x => x.Miles).ThenBy(x => x.Theater.Name)
+            .ToList();
+    }
+
+    // A place a customer typed ("Austin, TX", a ZIP code); null when it can't be found. Any signed-in user.
+    public async Task<GeoPoint?> FindPlaceAsync(ClaimsPrincipal user, string place, CancellationToken ct = default)
+    {
+        Guard.RequireUserId(user);
+        return string.IsNullOrWhiteSpace(place) ? null : await geocoder.GeocodeAsync(place, ct);
     }
 
     public async Task<Theater?> GetBySlugAsync(ClaimsPrincipal user, string slug)
@@ -123,8 +147,10 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
         var theater = await db.Theaters.FirstOrDefaultAsync(t => t.Id == input.Id)
             ?? throw new NotFoundException("Theater not found.");
         await auth.RequireAsync(user, theater, TheaterPermissions.EditProfile);
+        var (addressChanged, coordinatesEdited) = (!Geo.SameAddress(theater, input), CoordinatesEntered(theater, input));
         CopyProfile(input, theater);
         await EnsureSeasonCoversShowingsAsync(db, theater);
+        await LocateAsync(geocoder, theater, addressChanged, coordinatesEdited);
         theater.UpdatedAt = time.GetUtcNow();
         await db.SaveChangesAsync();
     }
@@ -211,6 +237,7 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
             Mode = TheaterMode.Live, LiveSince = time.GetUtcNow(),
         };
         CopyProfile(input, theater);
+        await LocateAsync(geocoder, theater, addressChanged: true, coordinatesEdited: Geo.Of(theater) is not null);
         AddStarterSetup(db, theater, time.GetUtcNow());
         await db.SaveChangesAsync();
         return theater;
@@ -253,8 +280,10 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
         var theater = await db.Theaters.FirstOrDefaultAsync(t => t.Id == input.Id)
             ?? throw new NotFoundException("Theater not found.");
         await EnsureSlugFreeAsync(db, input.Slug, exceptId: theater.Id);
+        var (addressChanged, coordinatesEdited) = (!Geo.SameAddress(theater, input), CoordinatesEntered(theater, input));
         CopyProfile(input, theater);
         await EnsureSeasonCoversShowingsAsync(db, theater);
+        await LocateAsync(geocoder, theater, addressChanged, coordinatesEdited);
         theater.Slug = input.Slug;
         theater.IsActive = input.IsActive;
         theater.UpdatedAt = time.GetUtcNow();
@@ -328,10 +357,53 @@ public sealed class TheaterService(IDbContextFactory<ApplicationDbContext> dbFac
         to.Website = from.Website;
         to.Description = from.Description;
         to.TimeZone = timeZone;
+        if (from.Latitude.HasValue != from.Longitude.HasValue)
+            throw new AppValidationException("Enter both latitude and longitude, or leave both blank to look them up from the address.");
+        if (from is { Latitude: double lat, Longitude: double lon } && !GeoPoint.IsValid(lat, lon))
+            throw new AppValidationException("Latitude must be between -90 and 90, and longitude between -180 and 180.");
+        to.Latitude = from.Latitude;
+        to.Longitude = from.Longitude;
         if (from.SeasonOpensOn > from.SeasonClosesOn)
             throw new AppValidationException("The season can't close before it opens.");
         to.SeasonOpensOn = from.SeasonOpensOn;
         to.SeasonClosesOn = from.SeasonClosesOn;
+    }
+
+    // --- Location ---
+
+    // Looks up the coordinates from the address when it changed or there are none yet (including when the editor
+    // cleared them), unless the editor entered them. A miss leaves them blank (the old ones belonged to the old address)
+    // and never blocks the save.
+    internal static async Task LocateAsync(IGeocoder geocoder, Theater theater, bool addressChanged, bool coordinatesEdited)
+    {
+        if (coordinatesEdited || (!addressChanged && Geo.Of(theater) is not null))
+            return;
+        var query = Geo.AddressQuery(theater);
+        var point = query is null ? null : await geocoder.GeocodeAsync(query);
+        (theater.Latitude, theater.Longitude) = (point?.Latitude, point?.Longitude);
+    }
+
+    // Whether the editor typed new coordinates. Clearing them isn't entering them: it asks for a fresh lookup.
+    private static bool CoordinatesEntered(Theater saved, Theater input) =>
+        Geo.Of(input) is not null && (input.Latitude != saved.Latitude || input.Longitude != saved.Longitude);
+
+    // For TheaterGeocodingBackfill: locates active theaters that have an address but no coordinates. Returns how many
+    // were found.
+    internal async Task<int> LocateMissingAsync(CancellationToken ct)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var missing = await db.Theaters.Where(t => t.IsActive && (t.Latitude == null || t.Longitude == null)).ToListAsync(ct);
+        var found = 0;
+        foreach (var theater in missing)
+        {
+            if (Geo.AddressQuery(theater) is not string query || await geocoder.GeocodeAsync(query, ct) is not GeoPoint point)
+                continue;
+            (theater.Latitude, theater.Longitude) = (point.Latitude, point.Longitude);
+            // Saved as each is found (lookups are a second apart), so a restart partway through keeps them.
+            await db.SaveChangesAsync(ct);
+            found++;
+        }
+        return found;
     }
 
     // The season can't be changed to leave out showings that are already scheduled (and may have tickets sold).

@@ -23,6 +23,11 @@ public class Theater
     [MaxLength(4000)] public string? Description { get; set; }
     [MaxLength(64)] public string? TimeZone { get; set; }
 
+    // Where the theater is, for "near me" searches and weather. Looked up from the address when it's saved (see
+    // TheaterService.LocateAsync); an editor can also enter them. Null when unknown.
+    [Range(-90, 90)] public double? Latitude { get; set; }
+    [Range(-180, 180)] public double? Longitude { get; set; }
+
     // Prefilled as the intermission between features when a double feature is scheduled.
     [Range(0, Showtime.MaxIntermissionMinutes)]
     public int DefaultIntermissionMinutes { get; set; } = 15;
@@ -88,6 +93,7 @@ public class Theater
         AddressLine1 = AddressLine1, AddressLine2 = AddressLine2, City = City, State = State,
         PostalCode = PostalCode, Country = Country, Phone = Phone, Website = Website,
         Description = Description, TimeZone = TimeZone, SeasonOpensOn = SeasonOpensOn, SeasonClosesOn = SeasonClosesOn,
+        Latitude = Latitude, Longitude = Longitude,
     };
 }
 

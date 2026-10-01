@@ -128,6 +128,8 @@
             return;
         }
         await Theaters.AdminUpdateAsync(User, model);
+        // Shows the coordinates looked up from the address.
+        model = (await Theaters.AdminGetAsync(User, Id.Value)).CopyForEdit();
     }, "Saved.");
 
     private Task AssignOwnerAsync() => RunAsync(async () =>
