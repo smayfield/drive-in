@@ -86,6 +86,28 @@ public class MessagesPageTests
     }
 
     [Fact]
+    public async Task Moving_between_support_and_a_theater_message_starts_clean()
+    {
+        await using var w = await SetUpAsync();
+        await using var host = new PageHost(w.App).SignIn(w.Owner);
+        host.Nav.NavigateTo("messages/new");
+        var page = host.Render<NewMessage>();
+        page.WaitForText("Contact Drive-In Online");
+        host.Select(page, "About (optional)", "Starlight");
+        page.WaitForAssertion(() => Assert.Equal(w.Theater.Id.ToString(), page.Find(".mud-select input").GetAttribute("value")));
+
+        // The same page instance is reused when only the query changes: nothing carries over.
+        host.Nav.NavigateTo("messages/new?theater=starlight");
+        page.Render();
+        page.WaitForText("You work for Starlight");
+        host.Nav.NavigateTo("messages/new");
+        page.Render();
+
+        page.WaitForText("Contact Drive-In Online");
+        page.WaitForAssertion(() => Assert.True(string.IsNullOrEmpty(page.Find(".mud-select input").GetAttribute("value"))));
+    }
+
+    [Fact]
     public async Task An_owner_contacts_support_about_one_of_their_theaters()
     {
         await using var w = await SetUpAsync();
