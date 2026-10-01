@@ -62,6 +62,10 @@ public class GrafanaAuthTests
     [InlineData("https://evil.example/")]
     [InlineData("//evil.example/grafana/")]
     [InlineData("/Account/Manage")]
+    [InlineData("/grafana/../Account/Manage")]
+    [InlineData("/grafana/%2e%2e/Account/Manage")]
+    [InlineData("/grafana/./../Account/Manage?x=1")]
+    [InlineData("/grafana/..\\Account/Manage")]
     public void Sign_in_only_returns_into_grafana(string? forwardedUri)
     {
         var decision = GrafanaAuth.Check(Principals.Anonymous, forwardedUri);

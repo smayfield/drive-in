@@ -9,14 +9,18 @@ drive-in.online {
 	encode zstd gzip
 	# Grafana, for site admins only. Each request first asks the app (/ops/grafana-auth): admins get a 200 with
 	# their email in X-WEBAUTH-USER, which Grafana's auth proxy signs them in as; anyone else gets the app's answer
-	# (a redirect to sign in, or 403). Caddy drops any X-WEBAUTH-USER the client sent before copying the app's.
+	# (a redirect to sign in, or 403). Any X-WEBAUTH-USER the client sent is removed first (route keeps this order;
+	# copy_headers also drops it, but this doesn't rely on that).
 	@grafana path /grafana /grafana/*
 	handle @grafana {
-		forward_auth web:8080 {
-			uri /ops/grafana-auth
-			copy_headers X-WEBAUTH-USER
+		route {
+			request_header -X-WEBAUTH-USER
+			forward_auth web:8080 {
+				uri /ops/grafana-auth
+				copy_headers X-WEBAUTH-USER
+			}
+			reverse_proxy grafana:3000
 		}
-		reverse_proxy grafana:3000
 	}
 	handle {
 		reverse_proxy web:8080

@@ -18,8 +18,7 @@ public static class GrafanaAuth
         if (user.Identity?.IsAuthenticated != true)
         {
             // Only ever back into Grafana: the header comes from Caddy, but don't make it an open redirect anyway.
-            var returnUrl = forwardedUri is not null && forwardedUri.StartsWith(BasePath, StringComparison.Ordinal)
-                ? forwardedUri : BasePath;
+            var returnUrl = IsGrafanaPath(forwardedUri) ? forwardedUri! : BasePath;
             return new(StatusCodes.Status302Found, Location: "/Account/Login?ReturnUrl=" + Uri.EscapeDataString(returnUrl));
         }
         if (!user.IsAdmin())
@@ -30,5 +29,15 @@ public static class GrafanaAuth
         var email = user.FindFirstValue(ClaimTypes.Email)?.ToLowerInvariant();
         var login = email is not null && email.All(char.IsAscii) && !email.Any(char.IsControl) ? email : user.GetUserId();
         return login is null ? new(StatusCodes.Status403Forbidden) : new(StatusCodes.Status200OK, User: login);
+    }
+
+    // Under BasePath, with no dot segments (plain or percent-encoded) or backslashes that a browser would resolve to
+    // somewhere outside it, such as /grafana/../Account/Manage.
+    private static bool IsGrafanaPath(string? uri)
+    {
+        if (uri is null || !uri.StartsWith(BasePath, StringComparison.Ordinal))
+            return false;
+        var path = Uri.UnescapeDataString(uri.Split('?', '#')[0]);
+        return !path.Contains('\\') && path.Split('/').All(segment => segment is not ("." or ".."));
     }
 }
