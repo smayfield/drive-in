@@ -150,7 +150,7 @@ public sealed class WeatherService(IWeatherForecaster forecaster, TimeProvider t
         if (!TheaterService.CanBrowse(user, theater))
             return result;
         var now = time.GetUtcNow();
-        var wanted = showings.Select(s => (s.Id, Starts: Utc(theater, s.StartsLocal), Ends: Utc(theater, s.EndsLocal)))
+        var wanted = showings.Select(s => (s.Id, Starts: s.StartsAt, Ends: s.EndsAt))
             .Where(s => s.Ends > now && s.Starts < now.AddDays(ForecastDays)).ToList();
         if (wanted.Count == 0 || Geo.Of(theater) is not GeoPoint at || await forecaster.GetHourlyAsync(at, ct) is not HourlyForecast forecast)
             return result;
@@ -165,7 +165,7 @@ public sealed class WeatherService(IWeatherForecaster forecaster, TimeProvider t
 
     // Whether a showing is too far off to have a forecast yet.
     public bool IsBeyondForecast(Theater theater, ShowtimeView showing) =>
-        Utc(theater, showing.StartsLocal) >= time.GetUtcNow().AddDays(ForecastDays);
+        showing.StartsAt >= time.GetUtcNow().AddDays(ForecastDays);
 
     // The hours from the one the showing starts in through the one it ends in; null unless the forecast covers them all.
     internal static ShowingWeather? Summarize(HourlyForecast forecast, DateTimeOffset starts, DateTimeOffset ends, bool usUnits)
@@ -181,7 +181,4 @@ public sealed class WeatherService(IWeatherForecaster forecaster, TimeProvider t
     }
 
     private static DateTimeOffset Hour(DateTimeOffset t) => new(t.UtcDateTime.Date.AddHours(t.UtcDateTime.Hour), TimeSpan.Zero);
-
-    private static DateTimeOffset Utc(Theater theater, DateTime local) =>
-        TheaterTime.ToUtc(theater, DateOnly.FromDateTime(local), TimeOnly.FromDateTime(local));
 }

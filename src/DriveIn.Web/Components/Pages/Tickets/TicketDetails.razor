@@ -127,7 +127,7 @@ else
     private string? qr;
     private bool sending;
     private Dictionary<int, ShowingWeather>? weather;
-    private string? weatherFor;
+    private TicketLookup? weatherFor;
 
     protected override async Task LoadAsync()
     {
@@ -136,13 +136,20 @@ else
     }
 
     // The forecast for an upcoming showing, once the page is interactive so a slow weather service doesn't hold it up.
+    // Keyed on the loaded ticket, not the route, so navigating to another ticket mid-load can't leave it without one.
+    // Reloading the same ticket (after admitting it) makes a new lookup and asks again; the forecast is cached.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (lookup is null || weatherFor == Code)
+        if (lookup is null || ReferenceEquals(weatherFor, lookup))
             return;
-        weatherFor = Code;
-        weather = await Weather.ForShowingsAsync(User, lookup.View.Theater, [lookup.View.Showing]);
-        StateHasChanged();
+        var forLookup = lookup;
+        (weatherFor, weather) = (forLookup, null);
+        var found = await Weather.ForShowingsAsync(User, forLookup.View.Theater, [forLookup.View.Showing]);
+        if (ReferenceEquals(lookup, forLookup))
+        {
+            weather = found;
+            StateHasChanged();
+        }
     }
 
     private Task AdmitAsync() => RunAsync(async () =>

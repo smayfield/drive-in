@@ -27,7 +27,9 @@ public sealed record FeatureView(
 // override (it follows whatever the theater's default is), so a pinned schedule shows even if it's also the default.
 public sealed record ShowtimeView(
     int Id, int ScreenId, string ScreenName, List<FeatureView> Features, int IntermissionMinutes,
-    DateTime StartsLocal, DateTime EndsLocal, int? PriceScheduleId, string? PriceScheduleName)
+    DateTime StartsLocal, DateTime EndsLocal, int? PriceScheduleId, string? PriceScheduleName,
+    // The same times in UTC, for anything that can't round-trip local times (they're ambiguous when clocks fall back).
+    DateTimeOffset StartsAt, DateTimeOffset EndsAt)
 {
     public string Title => string.Join(" + ", Features.Select(f => f.Title));
     public bool IsMultiFeature => Features.Count > 1;
@@ -239,7 +241,7 @@ public sealed class ScheduleService(IDbContextFactory<ApplicationDbContext> dbFa
                 f.Film.PosterUrl, f.Film.ReleaseYear, f.Film.Overview, f.Film.Directors, f.Film.Cast, f.Film.Genres)).ToList(),
             s.IntermissionMinutes,
             TheaterTime.ToLocal(theater, s.StartsAt), TheaterTime.ToLocal(theater, s.EndsAt),
-            s.PriceScheduleId, s.PriceSchedule?.Name);
+            s.PriceScheduleId, s.PriceSchedule?.Name, s.StartsAt, s.EndsAt);
     }
 
     // Validates the input and applies it to a new or tracked showtime (with its Features loaded).

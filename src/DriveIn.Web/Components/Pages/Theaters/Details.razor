@@ -173,7 +173,7 @@ else
     private Theater? theater;
     private List<ShowtimeView> showings = [];
     private Dictionary<int, ShowingWeather>? weather;
-    private string? weatherFor;
+    private List<ShowtimeView>? weatherFor;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -182,12 +182,18 @@ else
     }
 
     // The forecast comes once the page is interactive, so a slow weather service never holds up the showings.
+    // Keyed on the loaded showings, not the route, so navigating to another theater mid-load can't leave it without one.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (theater is null || weatherFor == Slug)
+        if (theater is null || ReferenceEquals(weatherFor, showings))
             return;
-        weatherFor = Slug;
-        weather = await Weather.ForShowingsAsync((await AuthState).User, theater, showings);
-        StateHasChanged();
+        var (forTheater, forShowings) = (theater, showings);
+        (weatherFor, weather) = (forShowings, null);
+        var found = await Weather.ForShowingsAsync((await AuthState).User, forTheater, forShowings);
+        if (ReferenceEquals(showings, forShowings))
+        {
+            weather = found;
+            StateHasChanged();
+        }
     }
 }

@@ -24,7 +24,8 @@ public class WeatherTests
     }).ToList());
 
     private static ShowtimeView Showing(int id, DateTimeOffset startsUtc, int minutes = 120) =>
-        new(id, 1, "Screen 1", [], 0, startsUtc.UtcDateTime, startsUtc.AddMinutes(minutes).UtcDateTime, null, null);
+        new(id, 1, "Screen 1", [], 0, startsUtc.UtcDateTime, startsUtc.AddMinutes(minutes).UtcDateTime, null, null,
+            startsUtc, startsUtc.AddMinutes(minutes));
 
     private static async Task<Theater> TheaterAsync(TestApp app, GeoPoint? at, TheaterMode mode = TheaterMode.Live, string? country = "US",
         string? ownerId = null)
