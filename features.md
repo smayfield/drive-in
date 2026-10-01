@@ -142,7 +142,9 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   or more. It appears on the theater page's showing stubs, the showing page (with a "check the forecast" chip when rain is
   50%+ likely, there are thunderstorms, or wind reaches 40 km/h), and the ticket page until the car is admitted. It's only
   for showings that haven't ended, at theaters with coordinates that the user may browse (otherwise nothing is shown). Showings
-  more than `WeatherService.ForecastDays` (16) out say when the forecast becomes available. °F/mph when the theater's country is
+  that end past the forecast range (`WeatherService.ForecastDays`, 16 whole UTC days from
+  today) say when the forecast becomes available. A showing's hours are those it overlaps (an end on the hour doesn't take in
+  the next). °F/mph when the theater's country is
   US or blank, otherwise °C/km/h. It loads after the first interactive render, so a slow provider never delays the page.
   `Weather:Provider` (case-insensitive; an unknown value fails at startup): `OpenMeteo` (default; `OpenMeteoForecaster`, no key,
   one request per place cached for an hour, 5 s timeout, failures logged and shown as no forecast) or `None`.

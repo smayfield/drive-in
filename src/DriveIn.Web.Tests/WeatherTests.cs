@@ -55,6 +55,37 @@ public class WeatherTests
     }
 
     [Fact]
+    public void Summarize_leaves_out_the_hour_a_showing_ends_exactly_on()
+    {
+        // 20:00 to 22:00: the hours 20:00 and 21:00, not 22:00 (when the rain starts).
+        var starts = Today.AddDays(1).AddHours(20);
+        var weather = WeatherService.Summarize(Forecast(), starts, starts.AddHours(2), usUnits: false)!;
+        Assert.Equal(24, weather.EndC);
+        Assert.Equal(10, weather.PrecipitationChance);
+        Assert.Null(WeatherService.Summarize(Forecast(), starts, starts, usUnits: false));
+    }
+
+    [Fact]
+    public async Task The_forecast_range_ends_at_midnight_UTC_after_its_last_day()
+    {
+        await using var app = new TestApp();
+        var user = await app.CreateUserAsync("guest@example.com");
+        var theater = await TheaterAsync(app, new GeoPoint(30.27, -97.74));
+        app.Weather.Forecast = Forecast(); // hours through 23:00 on Sep 16
+        var weather = app.Get<WeatherService>();
+        var lastNight = Showing(1, Today.AddDays(15).AddHours(21));  // Sep 16 21:00-23:00: covered
+        var acrossTheEnd = Showing(2, Today.AddDays(15).AddHours(23)); // ends Sep 17 01:00: not
+        var dayAfter = Showing(3, Today.AddDays(16).AddHours(10));     // before now + 16 days, but past the range
+
+        var result = await weather.ForShowingsAsync(Principals.For(user), theater, [lastNight, acrossTheEnd, dayAfter]);
+
+        Assert.Equal([1], result.Keys);
+        Assert.False(weather.IsBeyondForecast(theater, lastNight));
+        Assert.True(weather.IsBeyondForecast(theater, acrossTheEnd));
+        Assert.True(weather.IsBeyondForecast(theater, dayAfter));
+    }
+
+    [Fact]
     public void Summarize_needs_the_forecast_to_cover_the_whole_showing()
     {
         var lastHour = Forecast().Hours[^1].At;

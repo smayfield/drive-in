@@ -151,7 +151,7 @@ public sealed class WeatherService(IWeatherForecaster forecaster, TimeProvider t
             return result;
         var now = time.GetUtcNow();
         var wanted = showings.Select(s => (s.Id, Starts: s.StartsAt, Ends: s.EndsAt))
-            .Where(s => s.Ends > now && s.Starts < now.AddDays(ForecastDays)).ToList();
+            .Where(s => s.Ends > now && s.Ends <= Horizon).ToList();
         if (wanted.Count == 0 || Geo.Of(theater) is not GeoPoint at || await forecaster.GetHourlyAsync(at, ct) is not HourlyForecast forecast)
             return result;
         var us = string.IsNullOrWhiteSpace(theater.Country) || theater.Country.Trim().ToUpperInvariant() is "US" or "USA" or "UNITED STATES";
@@ -163,15 +163,20 @@ public sealed class WeatherService(IWeatherForecaster forecaster, TimeProvider t
         return result;
     }
 
-    // Whether a showing is too far off to have a forecast yet.
-    public bool IsBeyondForecast(Theater theater, ShowtimeView showing) =>
-        showing.StartsAt >= time.GetUtcNow().AddDays(ForecastDays);
+    // Whether a showing is too far off to have a forecast yet: it doesn't end by the forecast's last hour.
+    public bool IsBeyondForecast(Theater theater, ShowtimeView showing) => showing.EndsAt > Horizon;
 
-    // The hours from the one the showing starts in through the one it ends in; null unless the forecast covers them all.
+    // The forecast runs ForecastDays whole days in UTC, starting today, so it ends at midnight UTC after the last one.
+    private DateTimeOffset Horizon => new DateTimeOffset(time.GetUtcNow().UtcDateTime.Date, TimeSpan.Zero).AddDays(ForecastDays);
+
+    // The hours the showing overlaps, [starts, ends): an end exactly on the hour doesn't take in the next one. Null unless
+    // the forecast covers them all.
     internal static ShowingWeather? Summarize(HourlyForecast forecast, DateTimeOffset starts, DateTimeOffset ends, bool usUnits)
     {
+        if (ends <= starts)
+            return null;
         var first = Hour(starts);
-        var last = Hour(ends < starts ? starts : ends);
+        var last = Hour(ends.AddTicks(-1));
         var hours = forecast.Hours.Where(h => h.At >= first && h.At <= last).OrderBy(h => h.At).ToList();
         if (hours.Count == 0 || hours[0].At != first || hours[^1].At != last)
             return null;
