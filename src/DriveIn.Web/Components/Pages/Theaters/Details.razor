@@ -2,6 +2,7 @@
 @attribute [Authorize]
 @inject TheaterService Theaters
 @inject TicketSalesService Sales
+@inject WeatherService Weather
 
 @if (theater is null)
 {
@@ -95,6 +96,10 @@ else
                                     @($" · {s.Features.Count} films, {s.IntermissionMinutes} min intermission")
                                 }
                             </p>
+                            @if (weather is not null)
+                            {
+                                <WeatherLine Weather="@weather.For(s.Id)" BeyondForecast="@weather.IsLater(s.Id)" />
+                            }
                         </ChildContent>
                         <Aside>
                             <span class="stub-time">@s.StartsLocal.ToString("h:mm tt")</span>
@@ -167,10 +172,28 @@ else
 
     private Theater? theater;
     private List<ShowtimeView> showings = [];
+    private ShowingForecasts? weather;
+    private List<ShowtimeView>? weatherFor;
 
     protected override async Task OnParametersSetAsync()
     {
         theater = await Theaters.GetBySlugAsync((await AuthState).User, Slug);
         showings = theater is null ? [] : (await Sales.ListOnSaleAsync((await AuthState).User, Slug)).Showings;
+    }
+
+    // The forecast comes once the page is interactive, so a slow weather service never holds up the showings.
+    // Keyed on the loaded showings, not the route, so navigating to another theater mid-load can't leave it without one.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (theater is null || ReferenceEquals(weatherFor, showings))
+            return;
+        var (forTheater, forShowings) = (theater, showings);
+        (weatherFor, weather) = (forShowings, null);
+        var found = await Weather.ForShowingsAsync((await AuthState).User, forTheater, forShowings);
+        if (ReferenceEquals(showings, forShowings))
+        {
+            weather = found;
+            StateHasChanged();
+        }
     }
 }

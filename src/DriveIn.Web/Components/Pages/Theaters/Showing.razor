@@ -5,6 +5,7 @@
 @inject TicketSalesService Sales
 @inject SpotEvents Events
 @inject TimeProvider Time
+@inject WeatherService Weather
 
 <PageTitle>@(sale?.Showing.Title ?? "Showing") · Tickets · Drive-In Online</PageTitle>
 
@@ -38,6 +39,10 @@ else
                     @($" · {rating}")
                 }
             </MudText>
+            @if (weather is not null)
+            {
+                <WeatherLine Weather="@weather.For(s.Id)" BeyondForecast="@weather.IsLater(s.Id)" Warn />
+            }
         </div>
     </div>
 
@@ -142,6 +147,8 @@ else
     private string? notice;
     private bool busy;
     private Timer? countdown;
+    private ShowingForecasts? weather;
+    private ShowingForSale? weatherFor;
 
     private int optionId;
     private IReadOnlySet<int> addOnIds = new HashSet<int>();
@@ -182,6 +189,22 @@ else
             throw new NotFoundException("Showing not found.");
         optionId = sale.Prices.Options.FirstOrDefault()?.Id ?? 0;
         availability = await Sales.GetAvailabilityAsync(User, ShowtimeId);
+    }
+
+    // The forecast comes once the page is interactive, so a slow weather service never holds up the spot map.
+    // Keyed on the loaded showing, not the route, so navigating to another showing mid-load can't leave it without one.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (sale is null || ReferenceEquals(weatherFor, sale))
+            return;
+        var forSale = sale;
+        (weatherFor, weather) = (forSale, null);
+        var found = await Weather.ForShowingsAsync(User, forSale.Theater, [forSale.Showing]);
+        if (ReferenceEquals(sale, forSale))
+        {
+            weather = found;
+            StateHasChanged();
+        }
     }
 
     private Task HoldAsync(LotSpot spot) => RunAsync(async () =>

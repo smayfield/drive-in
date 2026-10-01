@@ -175,6 +175,29 @@ if (builder.Configuration[$"{PaymentOptions.Section}:Provider"] == "Dummy")
 else
     builder.Services.AddSingleton<IPaymentProcessor, UnavailablePaymentProcessor>();
 builder.Services.AddSingleton<SpotEvents>();
+
+// The forecast for showings (Open-Meteo: no key, 16 days ahead), cached per place in the shared memory cache.
+builder.Services.AddMemoryCache();
+builder.Services.Configure<WeatherOptions>(builder.Configuration.GetSection(WeatherOptions.Section));
+var weatherProvider = builder.Configuration[$"{WeatherOptions.Section}:Provider"] ?? "OpenMeteo";
+if (weatherProvider.Equals("OpenMeteo", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddHttpClient(OpenMeteoForecaster.HttpClientName, (sp, client) =>
+    {
+        client.BaseAddress = new Uri(sp.GetRequiredService<IOptions<WeatherOptions>>().Value.BaseUrl.TrimEnd('/') + "/");
+        client.Timeout = TimeSpan.FromSeconds(5);
+    });
+    builder.Services.AddSingleton<IWeatherForecaster, OpenMeteoForecaster>();
+}
+else if (weatherProvider.Equals("None", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddSingleton<IWeatherForecaster, NullWeatherForecaster>();
+}
+else
+{
+    throw new InvalidOperationException($"Unknown {WeatherOptions.Section}:Provider '{weatherProvider}'. Use OpenMeteo or None.");
+}
+builder.Services.AddScoped<WeatherService>();
 builder.Services.AddScoped<TicketSalesService>();
 builder.Services.AddScoped<ReportService>();
 builder.Services.AddHostedService<HoldExpiryService>();

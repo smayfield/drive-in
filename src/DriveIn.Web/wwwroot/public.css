@@ -124,6 +124,11 @@
 .near-search-place { flex: 1 1 16rem; }
 .near-search-radius { flex: 0 0 10rem; }
 
+/* --- Weather (showing stubs, showing and ticket pages) --- */
+.weather-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.5rem; margin: 0.4rem 0 0; font-size: 0.9rem; }
+.weather-line .mud-icon-root { color: var(--di-accent); }
+.weather-rough .mud-icon-root { color: var(--mud-palette-warning); }
+
 /* --- Ticket (a guest's ticket page) --- */
 .ticket-hero { text-align: center; }
 .ticket-spot { font-family: "Bungee", system-ui, sans-serif; font-size: 2.4rem; line-height: 1; color: var(--mud-palette-primary); }

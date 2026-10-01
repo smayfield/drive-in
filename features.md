@@ -137,6 +137,17 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 - **Geocoding** (`Geocoding:Provider`, case-insensitive; an unknown value fails at startup): `Nominatim` (OpenStreetMap, default; `NominatimGeocoder`) or `None`. Nominatim allows one
   request a second, so lookups are serialized and spaced, and results (misses too) are cached in memory for a day (up to 10,000 places); a bare
   5-digit query is looked up as a US postcode. Failures return "not found" and are logged.
+- **Weather** (`WeatherService`, `WeatherLine`): the forecast over each showing, from the hour it starts through the hour it
+  ends: the worst WMO condition, the temperature at start and end, the highest chance of rain, and wind when it's 25 km/h or
+  more. It appears on the theater page's showing stubs, the showing page (with a "check the forecast" chip when rain is 50%+
+  likely, there are thunderstorms, or wind reaches 40 km/h), and the ticket page until the car is admitted. It's only for
+  showings that haven't ended, at theaters with coordinates that the user may browse, with weather turned on (otherwise
+  nothing is shown, not even the "available later" note). Showings that end past the forecast range
+  (`WeatherService.ForecastDays`, 16 whole UTC days from today) say when the forecast becomes available. A showing's hours
+  are those it overlaps (an end on the hour doesn't take in the next). °F/mph when the theater's country is US or blank,
+  otherwise °C/km/h. It loads after the first interactive render, so a slow provider never delays the page.
+  `Weather:Provider` (case-insensitive; an unknown value fails at startup): `OpenMeteo` (default; `OpenMeteoForecaster`, no
+  key, one request per place cached for an hour, 5 s timeout, failures logged and shown as no forecast) or `None`.
 - Routes: `/theaters` (list), `/theaters/{slug}` (details, showings), `/theaters/{slug}/showings/{showtimeId}` (spot map +
   checkout), `/tickets` (My tickets), `/tickets/{code}`.
 - A ticket = one spot (one car) at one showing (`tickets`; unique index on showing + spot).

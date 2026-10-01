@@ -2,6 +2,7 @@
 @attribute [Authorize]
 @inherits AppComponentBase
 @inject TicketSalesService Sales
+@inject WeatherService Weather
 
 <PageTitle>Ticket · Drive-In Online</PageTitle>
 
@@ -66,6 +67,10 @@ else
             <MudText Typo="Typo.h5" Class="mb-1">@s.Title</MudText>
             <MudText><strong>@s.StartsLocal.ToString("dddd, MMMM d, yyyy · h:mm tt")</strong></MudText>
             <MudText>@s.ScreenName</MudText>
+            @if (weather is not null && v.AdmittedLocal is null)
+            {
+                <div class="d-flex justify-center"><WeatherLine Weather="@weather.For(s.Id)" BeyondForecast="@weather.IsLater(s.Id)" /></div>
+            }
             <MudText Typo="Typo.caption" Class="muted d-block mt-2">Spot</MudText>
             <div class="ticket-spot @(t.VehicleSize == VehicleSize.Large ? "mb-1" : "mb-3")">@t.SpotLabel</div>
             @if (t.VehicleSize == VehicleSize.Large)
@@ -121,11 +126,32 @@ else
     private TicketLookup? lookup;
     private string? qr;
     private bool sending;
+    private ShowingForecasts? weather;
+    private TicketLookup? weatherFor;
 
     protected override async Task LoadAsync()
     {
         lookup = await Sales.GetByCodeAsync(User, Code);
         qr = lookup.IsBuyer ? QrCodes.PngDataUri(TicketLinks.Ticket(BaseUri, Code)) : null;
+    }
+
+    // The forecast for an upcoming showing, once the page is interactive so a slow weather service doesn't hold it up.
+    // Keyed on the loaded ticket, not the route, so navigating to another ticket mid-load can't leave it without one.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (lookup is null || ReferenceEquals(weatherFor, lookup))
+            return;
+        var forLookup = lookup;
+        (weatherFor, weather) = (forLookup, null);
+        // An admitted car is at the show; the page doesn't show the forecast then, so don't fetch it.
+        if (forLookup.View.AdmittedLocal is not null)
+            return;
+        var found = await Weather.ForShowingsAsync(User, forLookup.View.Theater, [forLookup.View.Showing]);
+        if (ReferenceEquals(lookup, forLookup))
+        {
+            weather = found;
+            StateHasChanged();
+        }
     }
 
     private Task AdmitAsync() => RunAsync(async () =>
