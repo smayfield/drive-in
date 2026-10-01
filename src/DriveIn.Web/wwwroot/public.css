@@ -11,6 +11,9 @@
     color: #efedf6;
     overflow: hidden;
 }
+/* Bulb rows along the top and bottom. Every third bulb is lit brighter and the lit ones step one bulb along (right on
+   top, left on the bottom), so the light chases around the sign, like the real thing. The lit layer repeats every
+   three bulbs (66px), so moving it 66px in three steps loops seamlessly. Still for prefers-reduced-motion. */
 .marquee-header::before,
 .marquee-header::after {
     content: "";
@@ -18,11 +21,18 @@
     left: 0;
     right: 0;
     height: 12px;
-    background: radial-gradient(circle, #ffd66b 0 3px, transparent 4px) 0 50% / 22px 12px repeat-x;
+    background:
+        radial-gradient(circle, #fff4cf 0 2px, #ffd66b 3px, rgba(255, 214, 107, 0.35) 4px, transparent 6px) 0 50% / 66px 12px repeat-x,
+        radial-gradient(circle, rgba(255, 214, 107, 0.55) 0 3px, transparent 4px) 0 50% / 22px 12px repeat-x;
     opacity: 0.9;
+    animation: marquee-chase 2.1s steps(3) infinite;
 }
 .marquee-header::before { top: 6px; }
-.marquee-header::after { bottom: 6px; }
+.marquee-header::after { bottom: 6px; animation-direction: reverse; }
+@keyframes marquee-chase {
+    from { background-position: 0 50%, 0 50%; }
+    to { background-position: 66px 50%, 0 50%; }
+}
 .marquee-body { display: flex; align-items: center; gap: 1.25rem; padding: 0.75rem 0.25rem; }
 .marquee-logo { max-height: 5.5rem; max-width: 11rem; object-fit: contain; border-radius: 4px; }
 .marquee-title {
@@ -135,6 +145,7 @@
 
 @media (prefers-reduced-motion: reduce) {
     * { scroll-behavior: auto !important; }
+    .marquee-header::before, .marquee-header::after { animation: none; }
 }
 
 .stub-feature + .stub-feature { margin-top: 1rem; padding-top: 0.9rem; border-top: 1px solid var(--mud-palette-lines-default); }

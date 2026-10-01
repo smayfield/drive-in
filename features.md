@@ -288,7 +288,7 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 - Blazor Web App, interactive server by default (`Routes`); MudBlazor for interactive pages in `AppLayout`; no Bootstrap.
 - Light/dark follow OS via `wwwroot/theme.js` (`data-theme`, `di-scheme` cookie so the server prerenders the right palette);
   palettes in `Layout/DriveInTheme.cs`, `app.css`, `marketing.css`.
-- Public pages use the marquee header and ticket `Stub` (`public.css`); manage/admin pages are plain dense MudBlazor with
+- Public pages use the marquee header (its bulbs chase around the sign; still under `prefers-reduced-motion`) and ticket `Stub` (`public.css`); manage/admin pages are plain dense MudBlazor with
   `ManageHeader` / `AdminHeader`.
 - Data: PostgreSQL via EF Core, snake_case, migrations in `Data/Migrations`. Interactive components don't hold a DbContext;
   data services use `IDbContextFactory`, services that use `UserManager` open a DI scope per call.
