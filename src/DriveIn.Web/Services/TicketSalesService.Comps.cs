@@ -138,6 +138,8 @@ public sealed partial class TicketSalesService
             await tx.CommitAsync();
         }
         events.Publish(showtimeId);
+        if (!pending)
+            metrics.TicketSold(DriveInMetrics.Comp, ticket.IsTest, 0);
 
         return pending ? null : await SendCompReceiptAsync(ticket.Id, baseUri);
     }
@@ -169,6 +171,7 @@ public sealed partial class TicketSalesService
                 throw new AppValidationException("This request was just handled by someone else.");
             }
             events.Publish(ticket.ShowtimeId);
+            metrics.TicketSold(DriveInMetrics.Comp, ticket.IsTest, 0);
         }
         return await SendCompReceiptAsync(ticketId, baseUri);
     }

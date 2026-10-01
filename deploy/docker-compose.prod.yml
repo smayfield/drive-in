@@ -36,6 +36,8 @@ services:
       # Sent to OpenStreetMap's Nominatim in the User-Agent, as its usage policy asks. Optional.
       Geocoding__ContactEmail: ${GEOCODING_CONTACT_EMAIL:-}
       Email__Provider: Ses
+      # Business and performance metrics, pushed to VictoriaMetrics (Grafana at /grafana/).
+      Metrics__OtlpEndpoint: http://victoriametrics:8428/opentelemetry/v1/metrics
       # Trust X-Forwarded-* only from the edge network (Caddy); must match its subnet below.
       ForwardedHeaders__KnownNetworks__0: 172.30.0.0/24
       # SES credentials come from the EC2 instance role (IMDS hop limit is 2 for containers).

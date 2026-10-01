@@ -60,6 +60,7 @@ public sealed partial class TicketSalesService(
     IAppEmailSender email,
     SpotEvents events,
     TimeProvider time,
+    DriveInMetrics metrics,
     ILogger<TicketSalesService> logger)
 {
     // Gates open this long before the first film; a ticket admits until the showing ends.
@@ -315,16 +316,30 @@ public sealed partial class TicketSalesService(
         PaymentResult result;
         try
         {
-            result = cardAmount == 0
-                ? new PaymentResult(true, null)
-                : await ProcessorFor(theater).ChargeAsync(new PaymentRequest(cardAmount,
-                    $"{theater.Name}: {ScheduleService.ToView(theater, await WithFeaturesAsync(db, showtime)).Title}, spot {ticket.SpotLabel}", card));
+            if (cardAmount == 0)
+                result = new PaymentResult(true, null);
+            else
+            {
+                var description = $"{theater.Name}: {ScheduleService.ToView(theater, await WithFeaturesAsync(db, showtime)).Title}, spot {ticket.SpotLabel}";
+                try
+                {
+                    result = await ProcessorFor(theater).ChargeAsync(new PaymentRequest(cardAmount, description, card));
+                }
+                catch
+                {
+                    // Only the processor's own failures count as payment errors (they page someone).
+                    metrics.Payment("ticket", "error", theater.IsDemo);
+                    throw;
+                }
+            }
         }
         catch
         {
             await AbortPaymentAsync(db, ticket, gift, giftAmount);
             throw;
         }
+        if (cardAmount > 0)
+            metrics.Payment("ticket", result.Approved ? "approved" : "declined", theater.IsDemo);
         if (!result.Approved)
         {
             await AbortPaymentAsync(db, ticket, gift, giftAmount);
@@ -363,6 +378,9 @@ public sealed partial class TicketSalesService(
         ticket.Stamp = Guid.NewGuid();
         await db.SaveChangesAsync();
         events.Publish(ticket.ShowtimeId);
+        metrics.TicketSold(atGate ? DriveInMetrics.Gate : DriveInMetrics.Online, ticket.IsTest, ticket.Total);
+        if (atGate)
+            metrics.TicketAdmitted("sold_at_gate");
         return ticket;
     }
 
@@ -413,6 +431,7 @@ public sealed partial class TicketSalesService(
         {
             throw new AppValidationException("This ticket was just used.");
         }
+        metrics.TicketAdmitted("scan");
     }
 
     public async Task<bool> ResendReceiptAsync(ClaimsPrincipal user, string code, string baseUri)
@@ -448,6 +467,7 @@ public sealed partial class TicketSalesService(
         {
             return 0; // a buyer took one of these spots meanwhile; the next pass gets the rest
         }
+        metrics.HoldsExpired(expired.Count);
         foreach (var id in expired.Select(t => t.ShowtimeId).Distinct())
             events.Publish(id);
         return expired.Count;
@@ -630,7 +650,8 @@ public sealed class SpotEvents
 }
 
 // Releases expired holds every few seconds so everyone's seat map shows the spot free again promptly.
-public sealed class HoldExpiryService(IServiceScopeFactory scopes, TimeProvider time, ILogger<HoldExpiryService> logger)
+public sealed class HoldExpiryService(IServiceScopeFactory scopes, TimeProvider time, DriveInMetrics metrics,
+    ILogger<HoldExpiryService> logger)
     : BackgroundService
 {
     public static readonly TimeSpan Interval = TimeSpan.FromSeconds(10);
@@ -648,6 +669,7 @@ public sealed class HoldExpiryService(IServiceScopeFactory scopes, TimeProvider 
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 logger.LogError(ex, "Couldn't release expired ticket holds");
+                metrics.JobFailed("hold_expiry");
             }
         }
     }

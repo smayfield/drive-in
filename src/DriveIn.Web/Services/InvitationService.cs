@@ -27,7 +27,8 @@ public sealed class InvitationService(
     IAuthorizationService auth,
     TheaterAccess access,
     IAppEmailSender email,
-    TimeProvider time)
+    TimeProvider time,
+    DriveInMetrics metrics)
 {
     public static readonly TimeSpan Lifetime = TimeSpan.FromDays(7);
 
@@ -210,6 +211,7 @@ public sealed class InvitationService(
         invite.AcceptedAt = time.GetUtcNow();
         await db.SaveChangesAsync();
         await tx.CommitAsync();
+        metrics.UserRegistered("invite");
         return user;
     }
 

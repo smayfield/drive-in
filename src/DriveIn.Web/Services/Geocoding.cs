@@ -156,7 +156,8 @@ public sealed partial class NominatimGeocoder(
 
 // Looks up any active theater that has an address but no coordinates, once at startup (theaters saved before
 // geocoding existed, or whose lookup failed while the provider was down).
-public sealed class TheaterGeocodingBackfill(IServiceScopeFactory scopes, ILogger<TheaterGeocodingBackfill> logger) : BackgroundService
+public sealed class TheaterGeocodingBackfill(IServiceScopeFactory scopes, DriveInMetrics metrics,
+    ILogger<TheaterGeocodingBackfill> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -173,6 +174,7 @@ public sealed class TheaterGeocodingBackfill(IServiceScopeFactory scopes, ILogge
         catch (Exception ex)
         {
             logger.LogError(ex, "Geocoding theaters failed");
+            metrics.JobFailed("geocoding");
         }
     }
 }

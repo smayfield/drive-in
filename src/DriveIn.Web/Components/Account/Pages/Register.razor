@@ -12,6 +12,7 @@
 @inject SignInManager<ApplicationUser> SignInManager
 @inject IEmailSender<ApplicationUser> EmailSender
 @inject ILogger<Register> Logger
+@inject DriveInMetrics Metrics
 @inject NavigationManager NavigationManager
 @inject IdentityRedirectManager RedirectManager
 
@@ -87,6 +88,7 @@
         }
 
         Logger.LogInformation("User created a new account with password.");
+        Metrics.UserRegistered("password");
 
         var userId = await UserManager.GetUserIdAsync(user);
         var code = await UserManager.GenerateEmailConfirmationTokenAsync(user);

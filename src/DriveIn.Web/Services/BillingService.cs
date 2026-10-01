@@ -41,6 +41,7 @@ public sealed class BillingService(
     IOptions<BillingOptions> billing,
     IOptions<CompanyOptions> company,
     TimeProvider time,
+    DriveInMetrics metrics,
     ILogger<BillingService> logger)
 {
     public const decimal MaxLineAmount = 99_999.99m;
@@ -402,6 +403,7 @@ public sealed class BillingService(
                 }
             }
             issued++;
+            metrics.InvoiceIssued();
             if (!await TrySendAsync(invoice.BillToEmail, BillingEmails.Invoice(invoice, company.Value, InvoiceLink(baseUri, invoice))))
                 notEmailed++;
         }
@@ -466,6 +468,7 @@ public sealed class BillingService(
             invoice.PaidAt = now;
         }
         await db.SaveChangesAsync();
+        metrics.InvoicePaid(payment.Amount);
         return await TrySendAsync(invoice.BillToEmail, BillingEmails.Receipt(invoice, payment, company.Value, InvoiceLink(baseUri, invoice)));
     }
 
@@ -568,7 +571,8 @@ public sealed class BillingService(
 }
 
 // Drafts invoices as months come due: once at startup, then hourly.
-public sealed class BillingJobService(IServiceScopeFactory scopes, TimeProvider time, ILogger<BillingJobService> logger)
+public sealed class BillingJobService(IServiceScopeFactory scopes, TimeProvider time, DriveInMetrics metrics,
+    ILogger<BillingJobService> logger)
     : BackgroundService
 {
     public static readonly TimeSpan Interval = TimeSpan.FromHours(1);
@@ -586,6 +590,7 @@ public sealed class BillingJobService(IServiceScopeFactory scopes, TimeProvider 
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 logger.LogError(ex, "Couldn't draft invoices");
+                metrics.JobFailed("billing");
             }
         }
         while (await timer.WaitForNextTickAsync(stoppingToken));

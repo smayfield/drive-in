@@ -71,6 +71,26 @@ public sealed class SesEmailSender(IAmazonSimpleEmailServiceV2 ses, Microsoft.Ex
 // A failed send, with a message safe to log (no recipient address).
 public sealed class EmailSendException(string message) : Exception(message);
 
+// Counts every email sent or failed (DriveInMetrics), whichever sender is configured. Wraps the real sender in Program.cs.
+public sealed class MeteredEmailSender(IAppEmailSender inner, DriveInMetrics metrics) : IAppEmailSender
+{
+    public async Task SendAsync(string to, string subject, string htmlBody, IReadOnlyList<InlineImage>? images = null,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            await inner.SendAsync(to, subject, htmlBody, images, ct);
+        }
+        catch when (!ct.IsCancellationRequested)
+        {
+            // A send the caller called off (shutdown, a closed request) isn't a failure; an SES timeout is.
+            metrics.Email(sent: false);
+            throw;
+        }
+        metrics.Email(sent: true);
+    }
+}
+
 // Development: writes the email (and any links in it) to the log so flows can be tested without SES. Logging the
 // recipient and body is the point (it's how a developer gets confirmation, invite and ticket links locally), so the
 // CodeQL "exposure of private information" alert here is deliberate. Production sets Email:Provider=Ses.

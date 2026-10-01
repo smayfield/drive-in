@@ -40,6 +40,7 @@ public sealed partial class OnboardingService(
     BillingService billing,
     TimeProvider time,
     IGeocoder geocoder,
+    DriveInMetrics metrics,
     ILogger<OnboardingService> logger)
 {
     public const int MaxScreens = Screen.MaxPerTheater;
@@ -96,6 +97,7 @@ public sealed partial class OnboardingService(
         {
             throw new AppValidationException($"The web address \"{slug}\" was just taken. Try another.");
         }
+        metrics.TheaterSignedUp();
         return theater;
     }
 
@@ -148,6 +150,7 @@ public sealed partial class OnboardingService(
             throw new AppValidationException("Set your theater's time zone first (Profile), so showtimes are right.");
         theater.GoLiveRequestedAt = time.GetUtcNow();
         await db.SaveChangesAsync();
+        metrics.GoLiveRequested();
 
         var admins = await AdminEmailsAsync(db);
         var link = $"{baseUri.TrimEnd('/')}/admin/theaters/{theater.Id}";
@@ -194,6 +197,7 @@ public sealed partial class OnboardingService(
             db.Subscriptions.Add(BillingService.NewSubscription(theater, price, time.GetUtcNow()));
         await db.SaveChangesAsync();
         await tx.CommitAsync();
+        metrics.TheaterActivated("go_live");
         await billing.GenerateDraftsCoreAsync(theaterId);
 
         if (theater.Owner?.Email is string to)

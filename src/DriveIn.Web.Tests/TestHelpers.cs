@@ -59,6 +59,8 @@ public sealed class TestApp : IAsyncDisposable
         var dbName = Guid.NewGuid().ToString();
         var services = new ServiceCollection();
         services.AddLogging();
+        services.AddMetrics();
+        services.AddSingleton<DriveInMetrics>();
         services.AddDataProtection();
         services.AddSingleton<IConfiguration>(new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["Seed:AdminEmail"] = adminEmail })
@@ -181,11 +183,15 @@ public sealed class FakePaymentProcessor : IPaymentProcessor
 {
     public bool IsAvailable { get; set; } = true;
     public string? DeclineWith { get; set; }
+    // When set, the charge fails with this (the processor erroring, as opposed to declining).
+    public Exception? FailWith { get; set; }
     public List<PaymentRequest> Charges { get; } = [];
 
     public Task<PaymentResult> ChargeAsync(PaymentRequest request, CancellationToken ct = default)
     {
         Charges.Add(request);
+        if (FailWith is not null)
+            return Task.FromException<PaymentResult>(FailWith);
         return Task.FromResult(DeclineWith is null ? new PaymentResult(true, $"FAKE-{Charges.Count}") : PaymentResult.Declined(DeclineWith));
     }
 }

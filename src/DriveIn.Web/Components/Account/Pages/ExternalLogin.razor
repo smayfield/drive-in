@@ -16,6 +16,7 @@
 @inject NavigationManager NavigationManager
 @inject IdentityRedirectManager RedirectManager
 @inject ILogger<ExternalLogin> Logger
+@inject DriveInMetrics Metrics
 
 <PageTitle>Register</PageTitle>
 
@@ -197,6 +198,7 @@
             if (result.Succeeded)
             {
                 Logger.LogInformation("User created an account using {Name} provider.", externalLoginInfo.LoginProvider);
+                Metrics.UserRegistered(externalLoginInfo.LoginProvider.ToLowerInvariant());
 
                 if (user.EmailConfirmed)
                 {
