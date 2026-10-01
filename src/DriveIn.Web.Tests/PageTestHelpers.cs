@@ -30,6 +30,10 @@ public sealed class PageHost : IAsyncDisposable
     public PageHost(TestApp? app = null)
     {
         App = app ?? new TestApp();
+        System.Globalization.CultureInfo.DefaultThreadCurrentCulture ??= System.Globalization.CultureInfo.InvariantCulture;
+        System.Globalization.CultureInfo.DefaultThreadCurrentUICulture ??= System.Globalization.CultureInfo.InvariantCulture;
+        System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
+        System.Globalization.CultureInfo.CurrentUICulture = System.Globalization.CultureInfo.InvariantCulture;
         Context.JSInterop.Mode = JSRuntimeMode.Loose;
         Context.Services.AddMudServices(o => o.PopoverOptions.CheckForPopoverProvider = false);
         // MudBlazor registers the system clock; pages must see the app's fake one.
