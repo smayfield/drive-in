@@ -1,0 +1,12 @@
+# Dashboards from deploy/grafana/dashboards, in a "Drive-In" folder. They're files in the repo: change them there
+# (export from Grafana's UI: Share → Export → JSON) rather than in the UI, where changes are lost on redeploy.
+apiVersion: 1
+
+providers:
+  - name: drive-in
+    folder: Drive-In
+    type: file
+    allowUiUpdates: false
+    disableDeletion: true
+    options:
+      path: /var/lib/grafana-dashboards

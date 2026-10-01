@@ -1,6 +1,29 @@
 # Staging (ServeApex=false): only app.drive-in.online is served (and only it gets a certificate), e.g. to
 # bring up a replacement server without taking over the domain.
+{
+	# Request counts, durations and status codes for every site (served on :2020 below).
+	metrics
+}
+
 app.drive-in.online {
 	encode zstd gzip
-	reverse_proxy web:8080
+	# Grafana, for site admins only. Each request first asks the app (/ops/grafana-auth): admins get a 200 with
+	# their email in X-WEBAUTH-USER, which Grafana's auth proxy signs them in as; anyone else gets the app's answer
+	# (a redirect to sign in, or 403). Caddy drops any X-WEBAUTH-USER the client sent before copying the app's.
+	@grafana path /grafana /grafana/*
+	handle @grafana {
+		forward_auth web:8080 {
+			uri /ops/grafana-auth
+			copy_headers X-WEBAUTH-USER
+		}
+		reverse_proxy grafana:3000
+	}
+	handle {
+		reverse_proxy web:8080
+	}
+}
+
+# Caddy's Prometheus metrics, scraped by VictoriaMetrics. Port 2020 isn't published on the host.
+:2020 {
+	metrics
 }

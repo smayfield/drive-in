@@ -323,6 +323,18 @@ app.MapGet("/admin/billing/{kind}.csv", async (string kind, string? from, string
     }
 }).RequireAuthorization(Policies.Admin);
 
+// Asked by Caddy before every request to the metrics site (/grafana/): admits site admins only. See GrafanaAuth.
+app.MapGet("/ops/grafana-auth", (HttpContext http) =>
+{
+    var decision = GrafanaAuth.Check(http.User, http.Request.Headers["X-Forwarded-Uri"]);
+    http.Response.Headers.CacheControl = "no-store";
+    if (decision.User is not null)
+        http.Response.Headers[GrafanaAuth.UserHeader] = decision.User;
+    if (decision.Location is not null)
+        http.Response.Headers.Location = decision.Location;
+    return Results.StatusCode(decision.StatusCode);
+});
+
 await DbSeeder.SeedAsync(app.Services);
 
 app.Run();
