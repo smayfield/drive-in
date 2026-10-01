@@ -35,7 +35,11 @@ function registerImage() {
             return formats;
         }
         format(name, value) {
-            if (imageAttributes.includes(name)) {
+            if (name === 'alt') {
+                // Empty is meaningful: a decorative image. Only null/undefined removes it.
+                if (value === null || value === undefined) this.domNode.removeAttribute('alt');
+                else this.domNode.setAttribute('alt', value);
+            } else if (imageAttributes.includes(name)) {
                 if (value) this.domNode.setAttribute(name, value);
                 else this.domNode.removeAttribute(name);
             } else {
@@ -142,7 +146,7 @@ export function insertImage(id, image) {
     const range = editor.range || quill.getSelection(true) || { index: quill.getLength(), length: 0 };
     if (range.length) quill.deleteText(range.index, range.length, 'user');
     quill.insertEmbed(range.index, 'image', image.src, 'user');
-    quill.formatText(range.index, 1, { alt: image.alt || '', width: String(image.width), height: String(image.height), class: image.className }, 'user');
+    quill.formatText(range.index, 1, { alt: image.alt ?? '', width: String(image.width), height: String(image.height), class: image.className }, 'user');
     quill.setSelection(range.index + 1, 0, 'silent');
     editor.range = null;
 }
@@ -153,7 +157,7 @@ export function updateImage(id, image) {
     const blot = editor?.editing;
     if (!blot) return;
     const index = editor.quill.getIndex(blot);
-    if (image) editor.quill.formatText(index, 1, { alt: image.alt || '', class: image.className }, 'user');
+    if (image) editor.quill.formatText(index, 1, { alt: image.alt ?? '', class: image.className }, 'user');
     else editor.quill.deleteText(index, 1, 'user');
     editor.editing = null;
 }

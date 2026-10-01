@@ -62,18 +62,24 @@ public sealed partial class ContentService(
         await using var db = await dbFactory.CreateDbContextAsync();
         var theater = await RequireManageAsync(db, user, theaterId);
         var now = time.GetUtcNow();
+        // Only what the list shows: never the bodies.
         var pages = await db.TheaterPages.AsNoTracking()
             .Where(p => p.TheaterId == theaterId)
-            .Select(p => new { Page = p, UpdatedBy = p.UpdatedBy != null ? p.UpdatedBy.DisplayName ?? p.UpdatedBy.Email : null })
+            .Select(p => new
+            {
+                p.Id, p.Kind, p.Title, p.Slug, p.PublishAt, p.UnpublishAt, p.ShowInMenu, p.SortOrder, p.IsPinned,
+                p.EventStartsAt, p.UpdatedAt,
+                UpdatedBy = p.UpdatedBy != null ? p.UpdatedBy.DisplayName ?? p.UpdatedBy.Email : null,
+            })
             .ToListAsync();
         return pages
-            .OrderBy(x => x.Page.Kind)
-            .ThenBy(x => x.Page.Kind == PageKind.Page ? x.Page.SortOrder : 0)
-            .ThenByDescending(x => x.Page.Kind == PageKind.Post ? x.Page.PublishAt ?? x.Page.UpdatedAt : default)
-            .ThenBy(x => x.Page.Title)
-            .Select(x => new PageListItem(x.Page.Id, x.Page.Kind, x.Page.Title, x.Page.Slug, x.Page.StatusAt(now),
-                x.Page.PublishAt, x.Page.UnpublishAt, x.Page.ShowInMenu, x.Page.SortOrder, x.Page.IsPinned,
-                x.Page.EventStartsAt, x.Page.UpdatedAt, x.UpdatedBy, PublicHref(theater.Slug, x.Page)))
+            .OrderBy(p => p.Kind)
+            .ThenBy(p => p.Kind == PageKind.Page ? p.SortOrder : 0)
+            .ThenByDescending(p => p.Kind == PageKind.Post ? p.PublishAt ?? p.UpdatedAt : default)
+            .ThenBy(p => p.Title)
+            .Select(p => new PageListItem(p.Id, p.Kind, p.Title, p.Slug, TheaterPage.Status(p.PublishAt, p.UnpublishAt, now),
+                p.PublishAt, p.UnpublishAt, p.ShowInMenu, p.SortOrder, p.IsPinned, p.EventStartsAt, p.UpdatedAt,
+                p.UpdatedBy, PublicHref(theater.Slug, p.Kind, p.Slug)))
             .ToList();
     }
 
@@ -148,7 +154,8 @@ public sealed partial class ContentService(
 
         if (input.CoverImageId is int coverId && !await db.TheaterImages.AnyAsync(i => i.Id == coverId && i.TheaterId == theater.Id))
             throw new AppValidationException("Choose a cover image from this theater's images.");
-        var coverAlt = string.IsNullOrWhiteSpace(input.CoverAlt) ? null : input.CoverAlt.Trim();
+        // Null: use the image's own description. Empty: decorative (the picker's "Decorative only").
+        var coverAlt = input.CoverAlt?.Trim();
         if (coverAlt?.Length > TheaterImage.MaxAltLength)
             throw new AppValidationException($"Keep the image description to {TheaterImage.MaxAltLength} characters.");
 
@@ -448,8 +455,10 @@ public sealed partial class ContentService(
     private static IQueryable<TheaterPage> Live(IQueryable<TheaterPage> pages, DateTimeOffset now) =>
         pages.Where(p => p.PublishAt != null && p.PublishAt <= now && (p.UnpublishAt == null || p.UnpublishAt > now));
 
-    public static string PublicHref(string theaterSlug, TheaterPage page) =>
-        $"theaters/{theaterSlug}/{(page.Kind == PageKind.Page ? "pages" : "news")}/{page.Slug}";
+    public static string PublicHref(string theaterSlug, TheaterPage page) => PublicHref(theaterSlug, page.Kind, page.Slug);
+
+    public static string PublicHref(string theaterSlug, PageKind kind, string slug) =>
+        $"theaters/{theaterSlug}/{(kind == PageKind.Page ? "pages" : "news")}/{slug}";
 
     // --- Helpers ---
 

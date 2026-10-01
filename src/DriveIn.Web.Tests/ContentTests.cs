@@ -341,6 +341,11 @@ public class ContentTests
 
         await w.Content.UpdateAsync(me, post.Id, new PageInput("Opening night", "opening-night", null, "<p>x</p>", ours.Id, "Our big screen"));
         Assert.Equal("Our big screen", (await w.Content.GetPageAsync(Principals.Anonymous, "starlight", PageKind.Post, "opening-night"))!.CoverAlt);
+
+        // Decorative: an empty description stays empty rather than falling back to the image's own.
+        await w.Content.UpdateAsync(me, post.Id, new PageInput("Opening night", "opening-night", null, "<p>x</p>", ours.Id, ""));
+        Assert.Equal("", (await w.Content.GetPageAsync(Principals.Anonymous, "starlight", PageKind.Post, "opening-night"))!.CoverAlt);
+        Assert.Equal("", Assert.Single((await w.Content.ListLivePostsAsync(Principals.Anonymous, w.Theater)).Posts).CoverAlt);
     }
 
     [Fact]

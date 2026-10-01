@@ -53,6 +53,8 @@ public class HtmlContentTests
         var kept = Clean("<p><img src=\"theaters/starlight/images/7\" width=\"9999\" class=\"img-small img-left\" onerror=\"x()\"></p>");
         Assert.Equal("<p><img src=\"theaters/starlight/images/7\" width=\"800\" class=\"img-small img-left\" height=\"600\" alt=\"Our screen at dusk\" loading=\"lazy\" decoding=\"async\"></p>", kept);
 
+        // An empty description is kept (a decorative image), not replaced by the library's.
+        Assert.Contains("alt=\"\"", Clean("<img src=\"theaters/starlight/images/7\" alt=\"\">"));
         // Its own description wins over the library's; an absolute link to this site is made relative.
         Assert.Contains("alt=\"Popcorn\"", Clean("<img src=\"https://drive-in.online/theaters/starlight/images/8\" alt=\"Popcorn\">"));
         Assert.Contains("src=\"theaters/starlight/images/8\"", Clean("<img src=\"/theaters/starlight/images/8\">"));

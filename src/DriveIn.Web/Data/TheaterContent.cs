@@ -37,7 +37,7 @@ public class TheaterPage
     public int? CoverImageId { get; set; }
     public TheaterImage? CoverImage { get; set; }
 
-    // Overrides the cover image's own alt text here.
+    // Overrides the cover image's own alt text here; empty means decorative (no description).
     [MaxLength(TheaterImage.MaxAltLength)]
     public string? CoverAlt { get; set; }
 
@@ -62,11 +62,13 @@ public class TheaterPage
     public bool IsLive(DateTimeOffset now) =>
         PublishAt is DateTimeOffset from && from <= now && (UnpublishAt is not DateTimeOffset until || until > now);
 
-    public PageStatus StatusAt(DateTimeOffset now) => PublishAt switch
+    public PageStatus StatusAt(DateTimeOffset now) => Status(PublishAt, UnpublishAt, now);
+
+    public static PageStatus Status(DateTimeOffset? publishAt, DateTimeOffset? unpublishAt, DateTimeOffset now) => publishAt switch
     {
         null => PageStatus.Draft,
         DateTimeOffset from when from > now => PageStatus.Scheduled,
-        _ when UnpublishAt is DateTimeOffset until && until <= now => PageStatus.Ended,
+        _ when unpublishAt is DateTimeOffset until && until <= now => PageStatus.Ended,
         _ => PageStatus.Live,
     };
 }
