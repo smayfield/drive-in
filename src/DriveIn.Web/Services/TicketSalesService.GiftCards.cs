@@ -82,7 +82,17 @@ public sealed partial class TicketSalesService
         var card = Cards.Validate(input.Card, now);
         var code = await NewGiftCardCodeAsync(db);
 
-        var result = await ProcessorFor(theater).ChargeAsync(new PaymentRequest(amount, $"{theater.Name}: gift card", card));
+        PaymentResult result;
+        try
+        {
+            result = await ProcessorFor(theater).ChargeAsync(new PaymentRequest(amount, $"{theater.Name}: gift card", card));
+        }
+        catch
+        {
+            metrics.Payment("gift_card", "error", theater.IsDemo);
+            throw;
+        }
+        metrics.Payment("gift_card", result.Approved ? "approved" : "declined", theater.IsDemo);
         if (!result.Approved)
             throw new AppValidationException($"Your payment wasn't approved: {result.DeclineReason ?? "declined"}. Check your card details or try another card.");
 
@@ -119,6 +129,8 @@ public sealed partial class TicketSalesService
                 throw;
             }
         }
+
+        metrics.GiftCardSold(giftCard.IsTest, amount);
 
         var buyerEmailed = await TrySendGiftCardAsync(buyerEmail, giftCard, theater, baseUri, buyer?.DisplayName, forRecipient: false);
         bool? recipientEmailed = recipientEmail is null ? null

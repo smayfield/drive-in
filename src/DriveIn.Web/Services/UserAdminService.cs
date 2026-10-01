@@ -12,7 +12,8 @@ public sealed record UserSummary(
 
 // Site-admin user management. Each call runs in its own scope (see InvitationService).
 public sealed class UserAdminService(
-    IServiceScopeFactory scopeFactory, IAppEmailSender emailSender, TimeProvider time, ILogger<UserAdminService> logger)
+    IServiceScopeFactory scopeFactory, IAppEmailSender emailSender, TimeProvider time, DriveInMetrics metrics,
+    ILogger<UserAdminService> logger)
 {
     public async Task<List<UserSummary>> ListAsync(ClaimsPrincipal actor, string? search)
     {
@@ -71,6 +72,7 @@ public sealed class UserAdminService(
         Check(await users.CreateAsync(user));
         if (makeAdmin)
             Check(await users.AddToRoleAsync(user, Roles.Admin));
+        metrics.UserRegistered("admin");
 
         var token = await users.GeneratePasswordResetTokenAsync(user);
         await emailSender.SendOrReportAsync(logger, address,

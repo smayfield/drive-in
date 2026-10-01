@@ -75,6 +75,7 @@ public sealed partial class TicketSalesService
         }
 
         events.Publish(ticket.ShowtimeId);
+        metrics.TicketMoved();
         return await LoadViewAsync(db, ticket.Id);
     }
 

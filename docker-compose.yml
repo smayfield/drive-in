@@ -1,4 +1,7 @@
 # Local development database. Port 5433 so it can run alongside other projects' Postgres on 5432.
+# `docker compose --profile monitoring up -d` also runs the metrics stack: VictoriaMetrics on localhost:8428 (the app
+# pushes to it, see Metrics:OtlpEndpoint) and Grafana at http://localhost:3000/grafana/ (anonymous admin, the same
+# provisioning as production, so dashboards can be built and checked here).
 services:
   postgres:
     image: postgres:17
@@ -16,5 +19,58 @@ services:
       timeout: 5s
       retries: 10
 
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:v1.153.0
+    profiles: ["monitoring"]
+    command:
+      - -storageDataPath=/storage
+      - -retentionPeriod=1 # month
+      - -promscrape.config=/etc/victoriametrics/scrape.local.yml
+      - -opentelemetry.usePrometheusNaming
+    ports:
+      - "127.0.0.1:8428:8428"
+    volumes:
+      - vmdata:/storage
+      - ./deploy/victoriametrics:/etc/victoriametrics:ro
+
+  grafana:
+    image: grafana/grafana-oss:13.0.2
+    profiles: ["monitoring"]
+    environment:
+      GF_SERVER_ROOT_URL: http://localhost:3000/grafana/
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      GRAFANA_DB_PASSWORD: grafana_ro
+      # Alerts can't be delivered locally; the contact point just needs a well-formed ARN.
+      ALERTS_TOPIC_ARN: arn:aws:sns:us-east-1:000000000000:drive-in-alerts-local
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana-dashboards:ro
+    depends_on:
+      - victoriametrics
+      - grafana-ro
+
+  # Creates or refreshes the read-only role Grafana's database data source uses, as deploy.sh does in production.
+  grafana-ro:
+    image: postgres:17
+    profiles: ["monitoring"]
+    environment:
+      PGPASSWORD: drivein
+      GRAFANA_DB_PASSWORD: grafana_ro
+    volumes:
+      - ./deploy/grafana-ro.sql:/grafana-ro.sql:ro
+    command: ["psql", "-q", "-h", "postgres", "-U", "drivein", "-d", "drivein", "-f", "/grafana-ro.sql"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   pgdata:
+  vmdata:

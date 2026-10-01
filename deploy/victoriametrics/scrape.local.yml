@@ -1,0 +1,8 @@
+# Local development (docker compose --profile monitoring): only VictoriaMetrics itself. The app pushes OTLP to
+# http://localhost:8428/opentelemetry/v1/metrics (Metrics:OtlpEndpoint in appsettings.Development.json).
+global:
+  scrape_interval: 30s
+
+scrape_configs:
+  - job_name: victoriametrics
+    static_configs: [{ targets: ["localhost:8428"] }]

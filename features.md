@@ -311,13 +311,42 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   `user_claims`, `user_logins`, `user_passkeys` and `user_tokens`, leaving out bearer codes (`code`, `short_code`), hashes,
   `security_stamp`, image bytes (`data`), `payment_reference` and any `*email*` column; on `users` only `id`, `created_at`,
   `email_confirmed`, `employee_theater_id`, `lockout_end` and `two_factor_enabled`.
+- **The app's metrics** go over OTLP (http/protobuf, every 15 s) to VictoriaMetrics when `Metrics:OtlpEndpoint` is set
+  (production compose; locally `appsettings.Development.json` points at the `monitoring` compose profile). Built-in meters:
+  ASP.NET Core hosting (requests by route and status), Kestrel, SignalR, Blazor circuits, diagnostics (unhandled exceptions),
+  Identity, authentication/authorization, `System.Runtime`, `System.Net.Http` (SES, Nominatim, Open-Meteo), Npgsql and EF Core.
+- **`DriveInMetrics`** (meter `DriveIn`; Prometheus names add `_total`): counters recorded after the change is saved, with
+  low-cardinality tags only (never a theater, user or showing id):
+  `drivein.users.registered{method=password|google|invite|admin}`, `drivein.theaters.signed_up`,
+  `drivein.theaters.go_live_requested`, `drivein.theaters.activated{how=go_live|admin_created}`,
+  `drivein.tickets.sold` and `drivein.tickets.revenue` (dollars) `{channel=online|gate|comp, test}`,
+  `drivein.tickets.admitted{how=scan|sold_at_gate}`, `drivein.tickets.moved`, `drivein.holds.expired`,
+  `drivein.payments{for=ticket|gift_card, result=approved|declined|error, test}`, `drivein.gift_cards.sold` and
+  `drivein.gift_cards.revenue {test}`, `drivein.emails{result=sent|failed}` (every sender is wrapped in `MeteredEmailSender`),
+  `drivein.jobs.failures{job=hold_expiry|billing|geocoding|business_gauges}`, `drivein.invoices.issued`,
+  `drivein.invoices.payments` (dollars), and `drivein.errors.logged{category, level}` (every Error/Critical log message,
+  `ErrorCountingLoggerProvider`: failures inside Blazor circuits never become 5xx responses).
+- **`BusinessGauges`** (hosted service) reads totals every minute and reports them as gauges: `drivein.users{kind=customer|employee}`,
+  `drivein.theaters{mode}` (active), `drivein.screens.live`, `drivein.showings.upcoming` (next 7 days, live theaters),
+  `drivein.theaters.go_live_pending`, `drivein.free_admission.pending`, `drivein.invoices.outstanding` (dollars). Nothing is
+  reported before the first read.
 - Everything in Grafana is provisioned from the repo (data sources, dashboards in a read-only "Drive-In" folder, alert rules,
-  contact point, notification policy); UI edits aren't kept. Dashboards: **Drive-In: Server** (host, edge, PostgreSQL,
-  backups, monitoring targets).
+  contact point, notification policy); UI edits aren't kept. Dashboards:
+  - **Drive-In: Business**: totals (customers, new accounts, live/demo theaters, go-live requests, live screens, tickets, revenue,
+    cars admitted, gift cards, invoiced, owed) and daily trends from SQL (real sales only; test tickets and gift cards left out),
+    top theaters and pending go-lives, plus live activity from the counters (sales, payments, sign-ups, abandoned holds, open
+    sessions, emails).
+  - **Drive-In: Site performance**: requests, 5xx, latency (p50/95/99, leaving out the Blazor circuit's connection), busiest and
+    slowest routes, errors logged by category, unhandled exceptions, job failures, payments, emails, circuits and connections,
+    sign-ins, outbound calls, database time and pool, EF Core, and the .NET runtime (memory, CPU, GC, thread pool).
+  - **Drive-In: Server**: host, edge, PostgreSQL, backups, monitoring targets.
 - **Alerts** email through the `drive-in-alerts` SNS topic (`infra/app.yml`, `AlertEmail`), which Grafana publishes to with the
   instance role. Grafana rules (folder Drive-In, group Server): disk over 80% (10 min), memory available under 10% (10 min),
   swap over 1 GB (15 min), Caddy 502/503/504 above 0.02/s (5 min), PostgreSQL down (3 min), a scrape target down (10 min),
-  last backup over 26 h old. Repeats every 12 h while firing. CloudWatch alarms on the same topic cover what Grafana can't see
+  last backup over 26 h old. Group App: the app stopped reporting (5 min), 5xx over 5% of at least 20 requests in 10 min,
+  p95 over 2 s (10 min), more than 10 errors logged in 5 min, any critical error, any email failure (15 min), any background
+  job failure (15 min), any payment processor error (15 min), and a go-live request waiting over 24 h (SQL). Repeats every
+  12 h while firing. CloudWatch alarms on the same topic cover what Grafana can't see
   from the box: EC2 system status (also auto-recovers the instance), instance status, CPU over 90% for 15 min, and any
   surplus CPU credits charged (t4g "unlimited" billing).
 

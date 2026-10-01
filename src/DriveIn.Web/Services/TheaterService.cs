@@ -23,7 +23,8 @@ internal static class UploadedImages
 }
 
 public sealed class TheaterService(
-    IDbContextFactory<ApplicationDbContext> dbFactory, IAuthorizationService auth, TimeProvider time, IGeocoder geocoder)
+    IDbContextFactory<ApplicationDbContext> dbFactory, IAuthorizationService auth, TimeProvider time, IGeocoder geocoder,
+    DriveInMetrics metrics)
 {
     // --- Browsing (any signed-in user) ---
 
@@ -240,6 +241,7 @@ public sealed class TheaterService(
         await LocateAsync(geocoder, theater, addressChanged: true, coordinatesEdited: Geo.Of(theater) is not null);
         AddStarterSetup(db, theater, time.GetUtcNow());
         await db.SaveChangesAsync();
+        metrics.TheaterActivated("admin_created");
         return theater;
     }
 

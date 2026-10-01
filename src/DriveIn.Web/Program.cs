@@ -14,6 +14,9 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using OpenTelemetry.Exporter;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -110,16 +113,47 @@ builder.Services.AddAuthorizationBuilder()
 builder.Services.AddScoped<TheaterAccess>();
 builder.Services.AddScoped<IAuthorizationHandler, TheaterAuthorizationHandler>();
 
+// Business and activity metrics (see DriveInMetrics), plus the platform's own: requests, Blazor circuits, the runtime,
+// outbound HTTP and the database. Pushed over OTLP to VictoriaMetrics when Metrics:OtlpEndpoint is set (production
+// compose; locally, run `docker compose --profile monitoring up`); without it they're recorded but not exported.
+builder.Services.AddSingleton<DriveInMetrics>();
+builder.Logging.Services.AddSingleton<ILoggerProvider, ErrorCountingLoggerProvider>();
+builder.Services.AddSingleton<BusinessGauges>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<BusinessGauges>());
+var otlpEndpoint = builder.Configuration["Metrics:OtlpEndpoint"];
+if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+{
+    builder.Services.AddOpenTelemetry()
+        .ConfigureResource(r => r.AddService("drive-in-web", serviceInstanceId: Environment.MachineName))
+        .WithMetrics(m => m
+            .AddMeter(DriveInMetrics.MeterName)
+            .AddMeter("Microsoft.AspNetCore.Hosting", "Microsoft.AspNetCore.Server.Kestrel",
+                "Microsoft.AspNetCore.Http.Connections", "Microsoft.AspNetCore.Diagnostics",
+                "Microsoft.AspNetCore.Components.Server.Circuits", "Microsoft.AspNetCore.Identity",
+                "Microsoft.AspNetCore.Authentication", "Microsoft.AspNetCore.Authorization",
+                "System.Runtime", "System.Net.Http", "Npgsql", "Microsoft.EntityFrameworkCore")
+            .AddOtlpExporter((exporter, reader) =>
+            {
+                exporter.Endpoint = new Uri(otlpEndpoint);
+                exporter.Protocol = OtlpExportProtocol.HttpProtobuf;
+                reader.PeriodicExportingMetricReaderOptions.ExportIntervalMilliseconds = 15_000;
+            }));
+}
+
 builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection(EmailOptions.Section));
 if (builder.Configuration[$"{EmailOptions.Section}:Provider"] == "Ses")
 {
     // Region and credentials come from the environment (AWS_REGION + the EC2 instance role).
     builder.Services.AddSingleton<IAmazonSimpleEmailServiceV2, AmazonSimpleEmailServiceV2Client>();
-    builder.Services.AddSingleton<IAppEmailSender, SesEmailSender>();
+    builder.Services.AddSingleton<SesEmailSender>();
+    builder.Services.AddSingleton<IAppEmailSender>(sp =>
+        new MeteredEmailSender(sp.GetRequiredService<SesEmailSender>(), sp.GetRequiredService<DriveInMetrics>()));
 }
 else
 {
-    builder.Services.AddSingleton<IAppEmailSender, LoggingEmailSender>();
+    builder.Services.AddSingleton<LoggingEmailSender>();
+    builder.Services.AddSingleton<IAppEmailSender>(sp =>
+        new MeteredEmailSender(sp.GetRequiredService<LoggingEmailSender>(), sp.GetRequiredService<DriveInMetrics>()));
 }
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityEmailSender>();
 

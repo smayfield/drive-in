@@ -209,6 +209,8 @@ Needs Docker and the .NET 10 SDK.
 ```
 
 Emails aren't sent locally; confirmation, reset, and invite links are written to the console.
+To see metrics locally, `docker compose --profile monitoring up -d` starts VictoriaMetrics and Grafana
+(http://localhost:3000/grafana/, no sign-in) with the production dashboards; the app pushes to it in Development.
 To make yourself admin locally: `dotnet user-secrets set Seed:AdminEmail you@example.com --project src/DriveIn.Web`.
 Google sign-in is optional locally; to enable it, set `Authentication:Google:ClientId` and
 `Authentication:Google:ClientSecret` with user-secrets (redirect URI `http://localhost:5280/signin-google`).

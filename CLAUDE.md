@@ -46,6 +46,9 @@ See README.md for the full picture. Conventions worth knowing before changing co
 - **Schema:** EF Core migrations in `Data/Migrations` (snake_case via EFCore.NamingConventions). Add with
   `dotnet ef migrations add <Name> --project src/DriveIn.Web --output-dir Data/Migrations`.
   `DesignTimeDbContextFactory` is what `dotnet ef` and the migration bundle use.
+- **Metrics:** a new business event (a sale, sign-up, failure...) records a counter in `Services/DriveInMetrics.cs` after its
+  save, with low-cardinality tags only (no ids), and gets a panel in `deploy/grafana/dashboards` (and an alert rule if it's a
+  failure). Grafana is provisioned from `deploy/grafana`; see features.md section 14.
 - **Tests:** `dotnet test src/DriveIn.sln`. `TestApp` in `TestHelpers.cs` builds the real DI graph with EF
   InMemory, a fake email sender, and a fake clock; add service tests there.
 - Local Postgres runs on port **5433** (`docker-compose.yml`); the app on http://localhost:5280.
