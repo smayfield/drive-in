@@ -70,7 +70,7 @@ else
                     </MudButton>
                     @if (saved is not null)
                     {
-                        <MudButton Href="@ContentService.PublicHref(theater.Slug, saved)" Target="_blank" Variant="Variant.Text">Preview</MudButton>
+                        <MudButton Href="@ContentService.PublicHref(theater.Slug, saved)" Target="_blank" Rel="noopener noreferrer" Variant="Variant.Text">Preview</MudButton>
                     }
                 </div>
 

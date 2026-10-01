@@ -122,7 +122,7 @@ else
 
     // Preview or view it, publish now or take it down, delete.
     private RenderFragment Actions(PageListItem item) => @<text>
-        <MudButton Href="@item.PublicHref" Target="_blank" Size="Size.Small">@(item.Status == PageStatus.Live ? "View" : "Preview")</MudButton>
+        <MudButton Href="@item.PublicHref" Target="_blank" Rel="noopener noreferrer" Size="Size.Small">@(item.Status == PageStatus.Live ? "View" : "Preview")</MudButton>
         @if (item.Status == PageStatus.Draft)
         {
             <MudButton Size="Size.Small" Color="Color.Primary" OnClick="() => PublishAsync(item)">Publish</MudButton>

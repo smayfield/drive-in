@@ -44,7 +44,7 @@ else
             {
                 var image = i;
                 <MudPaper Outlined Class="image-card" @key="image.Id">
-                    <a href="@image.Url" target="_blank" class="image-card-thumb"><img src="@image.Url" alt="@(image.AltText ?? image.FileName)" loading="lazy" /></a>
+                    <a href="@image.Url" target="_blank" rel="noopener noreferrer" class="image-card-thumb"><img src="@image.Url" alt="@(image.AltText ?? image.FileName)" loading="lazy" /></a>
                     <div class="pa-2">
                         <div class="text-truncate" title="@image.FileName">@image.FileName</div>
                         <div class="muted" style="font-size: 0.8rem">@image.Width × @image.Height · @FileSize(image.ByteSize) · @When.Ago(image.UploadedAt, Time.GetUtcNow())</div>
