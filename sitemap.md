@@ -80,6 +80,7 @@ Admins can also open every owner and employee page for any theater.
 | [/admin/billing/subscriptions](https://drive-in.online/admin/billing/subscriptions) | Subscriptions and prices |
 | [/admin/billing/reports](https://drive-in.online/admin/billing/reports) | Billing reports. CSV from `/admin/billing/{kind}.csv?from=yyyy-MM&to=yyyy-MM`, where `{kind}` is invoices, payments or aging |
 | [/grafana/](https://drive-in.online/grafana/) | Metrics and alerts (Admin → Metrics). Dashboards: Business, Site performance, Server |
+| [AWS Billing and Cost Management](https://us-east-1.console.aws.amazon.com/costmanagement/home#/home) | What hosting costs: this month's spend and forecast, by service (sign in to the AWS console). See also [Bills](https://us-east-1.console.aws.amazon.com/billing/home#/bills), [Cost Explorer](https://us-east-1.console.aws.amazon.com/costmanagement/home#/cost-explorer) and [Free Tier usage](https://us-east-1.console.aws.amazon.com/billing/home#/freetier) |
 
 Who's an admin: the personal (not employee) account whose email is in the SSM parameter `/drive-in/admin-email`
 becomes one when it signs in; others are made admin at `/admin/users`.
