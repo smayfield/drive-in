@@ -310,10 +310,12 @@ aws cloudformation describe-change-set --change-set-name <name from the output> 
   --query "Changes[].ResourceChange.[LogicalResourceId,Action,Replacement]" --output table
 ```
 
-If `Server` shows `Replacement: True`, don't execute it as is. The server's image is pinned (`AmiId` in
-`infra/app.yml`) so updates don't pick up a new one. The template used to follow the "latest" SSM parameter, and on
-2026-10-01 an unrelated stack update replaced the server that way. To upgrade the OS image, do it deliberately: take a
-backup, change `AmiId`, apply, then move the Docker volumes (`drive-in_pgdata`, `drive-in_dpkeys`,
+If `Server` shows `Replacement: True`, don't execute it as is. The server's image is pinned (`ImageId` on `Server` in
+`infra/app.yml`, not a parameter, since `cloudformation deploy` keeps a parameter's previous value) so updates don't
+pick up a new one. The template used to follow the "latest" SSM parameter, and on 2026-10-01 an unrelated stack update
+replaced the server that way. The first update after that change drops the old `AmiId` parameter; its preview should
+show `Server` unchanged, since the pinned image is the one it runs. To upgrade the OS image, do it deliberately: take a
+backup, change `ImageId` in the template (through a PR), apply, then move the Docker volumes (`drive-in_pgdata`, `drive-in_dpkeys`,
 `drive-in_caddy_data`, `drive-in_caddy_config`) from the old root volume, and update the `INSTANCE_ID` repo variable
 before redeploying. Patches within the image come from `dnf upgrade` on the server instead.
 
