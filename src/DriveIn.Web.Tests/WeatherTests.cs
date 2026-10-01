@@ -107,6 +107,7 @@ public class WeatherTests
     [InlineData(2, "Partly cloudy")]
     [InlineData(45, "Fog")]
     [InlineData(53, "Drizzle")]
+    [InlineData(57, "Freezing drizzle")]
     [InlineData(63, "Rain")]
     [InlineData(67, "Freezing rain")]
     [InlineData(75, "Snow")]
