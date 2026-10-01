@@ -46,7 +46,7 @@ Owners can do everything at their own theaters. Start at [/manage](https://drive
 | `/manage/{id}/pricing` | Price schedules and add-ons |
 | `/manage/{id}/employees` | Employees and invitations |
 | `/manage/{id}/roles` | Roles (named sets of actions) for employees |
-| `/manage/{id}/reports` | Sales, attendance and gift card reports (CSV downloads: `/manage/{id}/reports/{days\|films\|showings\|giftcards}.csv?from=yyyy-MM-dd&to=yyyy-MM-dd`) |
+| `/manage/{id}/reports` | Sales, attendance and gift card reports. Each table downloads as CSV from `/manage/{id}/reports/{kind}.csv?from=yyyy-MM-dd&to=yyyy-MM-dd`, where `{kind}` is days, films, showings or giftcards |
 | `/manage/{id}/billing` | Plan, invoices and payments (owner only unless granted) |
 | `/manage/{id}/billing/invoices/{invoiceId}` | One invoice (printable) |
 
@@ -54,15 +54,16 @@ The employee pages below are open to owners too.
 
 ## Employees
 
-An employee sees what their roles allow; with no role, nothing. Their theater is under [/manage](https://drive-in.online/manage).
+An employee can do what their roles allow. Their theater is under [/manage](https://drive-in.online/manage); with no role yet, its
+page (`/manage/{id}`) opens but only says they have no permissions there until someone assigns them a role.
 
 | URL | What | Needs |
 |---|---|---|
 | `/manage/{id}/gate` | The gate: check cars in (gate code or QR), sell a ticket at the gate, move a car to another spot | Admit guests / Sell tickets at the gate / Move tickets |
 | `/manage/{id}/comps` | Free admission: reserve a spot for a guest, approve requests, the log | Offer / Approve / View free admission |
 | `/manage/{id}/giftcards` | Gift card sales, balances and amounts owed | Manage / View gift cards |
-| `/manage/{id}/schedule`, `/pricing`, `/screens/…`, `/lot` | As for owners | Manage schedule / pricing / screens |
-| `/manage/{id}/employees`, `/roles` | As for owners | View, invite or manage employees / Manage roles |
+| `/manage/{id}/schedule`, `/manage/{id}/pricing`, `/manage/{id}/screens/{screenId}`, `/manage/{id}/lot` | As for owners | Manage schedule / pricing / screens |
+| `/manage/{id}/employees`, `/manage/{id}/roles` | As for owners | View, invite or manage employees / Manage roles |
 | `/manage/{id}/reports` | As for owners | View reports |
 
 ## Site admins
@@ -77,7 +78,7 @@ Admins can also open every owner and employee page for any theater.
 | [/admin/users](https://drive-in.online/admin/users) | Users: create, make or remove admin, delete |
 | [/admin/billing](https://drive-in.online/admin/billing) | Invoices: draft, issue, void, record payments |
 | [/admin/billing/subscriptions](https://drive-in.online/admin/billing/subscriptions) | Subscriptions and prices |
-| [/admin/billing/reports](https://drive-in.online/admin/billing/reports) | Billing reports (CSV: `/admin/billing/{invoices\|payments\|aging}.csv?from=yyyy-MM&to=yyyy-MM`) |
+| [/admin/billing/reports](https://drive-in.online/admin/billing/reports) | Billing reports. CSV from `/admin/billing/{kind}.csv?from=yyyy-MM&to=yyyy-MM`, where `{kind}` is invoices, payments or aging |
 | [/grafana/](https://drive-in.online/grafana/) | Metrics and alerts (Admin → Metrics). Dashboards: Business, Site performance, Server |
 
 Who's an admin: the personal (not employee) account whose email is in the SSM parameter `/drive-in/admin-email`
