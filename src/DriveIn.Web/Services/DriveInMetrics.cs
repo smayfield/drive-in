@@ -61,7 +61,7 @@ public sealed class DriveInMetrics
             "Gift card face value sold, in dollars (test).");
         emails = meter.CreateCounter<long>("drivein.emails", "{email}", "Emails sent or failed (result: sent, failed).");
         jobFailures = meter.CreateCounter<long>("drivein.jobs.failures", "{failure}",
-            "Background job runs that failed (job: hold_expiry, billing, geocoding).");
+            "Background job runs that failed (job: hold_expiry, billing, geocoding, business_gauges).");
         invoicesIssued = meter.CreateCounter<long>("drivein.invoices.issued", "{invoice}", "Invoices issued to owners.");
         invoicePayments = meter.CreateCounter<double>("drivein.invoices.payments", "{USD}",
             "Invoice payments recorded, in dollars.");

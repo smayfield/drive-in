@@ -152,6 +152,8 @@ public class MetricsTests
             var d = await db.Theaters.FindAsync(demo.Id);
             d!.Mode = TheaterMode.Demo;
             d.GoLiveRequestedAt = app.Time.GetUtcNow();
+            // A live theater with a leftover request isn't waiting (Admin → Theaters doesn't list it either).
+            (await db.Theaters.FindAsync(s.Theater.Id))!.GoLiveRequestedAt = app.Time.GetUtcNow();
             db.Invoices.Add(new Invoice { TheaterName = "Starlight", Status = InvoiceStatus.Issued, Total = 98m, CreatedAt = app.Time.GetUtcNow(),
                 Payments = [new InvoicePayment { Amount = 40m, ReceivedOn = new DateOnly(2026, 9, 1), RecordedAt = app.Time.GetUtcNow() }] });
             db.Invoices.Add(new Invoice { TheaterName = "Starlight", Status = InvoiceStatus.Draft, Total = 49m, CreatedAt = app.Time.GetUtcNow() });

@@ -480,7 +480,7 @@
                 "rawQuery": true,
                 "editorMode": "code",
                 "format": "table",
-                "rawSql": "SELECT count(*) AS waiting FROM theaters WHERE go_live_requested_at < now() - interval '24 hours'"
+                "rawSql": "SELECT count(*) AS waiting FROM theaters WHERE mode = 'Demo' AND go_live_requested_at < now() - interval '24 hours'"
               }
             },
             {

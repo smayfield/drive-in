@@ -327,7 +327,7 @@
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT count(*) FROM theaters WHERE go_live_requested_at IS NOT NULL"
+          "rawSql": "SELECT count(*) FROM theaters WHERE mode = 'Demo' AND go_live_requested_at IS NOT NULL"
         }
       ],
       "fieldConfig": {
@@ -1177,7 +1177,7 @@
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT name AS \"Theater\", go_live_requested_at AS \"Go-live requested\", created_at AS \"Signed up\" FROM theaters WHERE go_live_requested_at IS NOT NULL ORDER BY go_live_requested_at"
+          "rawSql": "SELECT name AS \"Theater\", go_live_requested_at AS \"Go-live requested\", created_at AS \"Signed up\" FROM theaters WHERE mode = 'Demo' AND go_live_requested_at IS NOT NULL ORDER BY go_live_requested_at"
         }
       ],
       "fieldConfig": {

@@ -91,7 +91,8 @@ public sealed class BusinessGauges : BackgroundService
         var liveScreens = await db.Screens.CountAsync(s => s.Theater!.IsActive && s.Theater.Mode == TheaterMode.Live, ct);
         var showings = await db.Showtimes.CountAsync(s => s.StartsAt >= now && s.StartsAt < weekAhead
             && s.Screen!.Theater!.IsActive && s.Screen.Theater.Mode == TheaterMode.Live, ct);
-        var goLive = await db.Theaters.CountAsync(t => t.GoLiveRequestedAt != null, ct);
+        // As Admin → Theaters lists them (OnboardingService.ListGoLiveRequestsAsync).
+        var goLive = await db.Theaters.CountAsync(t => t.Mode == TheaterMode.Demo && t.GoLiveRequestedAt != null, ct);
         var freeAdmission = await db.Tickets.CountAsync(t => t.IsComp && t.Status == TicketStatus.Pending, ct);
         var issuedTotal = await db.Invoices.Where(i => i.Status == InvoiceStatus.Issued).SumAsync(i => i.Total, ct);
         var issuedPaid = await db.InvoicePayments.Where(p => p.Invoice!.Status == InvoiceStatus.Issued).SumAsync(p => p.Amount, ct);
