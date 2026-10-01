@@ -31,6 +31,7 @@
             @if (Id is not null)
             {
                 <MudButton Href="@($"manage/{Id}")" Variant="Variant.Outlined">Screens &amp; employees</MudButton>
+                <MudButton Href="@($"admin/messages?view=theaters&theater={Id}")" Variant="Variant.Outlined">Customer messages</MudButton>
             }
         </div>
     </EditForm>

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using DriveIn.Web.Data;
 
 namespace DriveIn.Web.Services;
 
@@ -33,6 +34,8 @@ public sealed class DriveInMetrics
     private readonly Counter<long> invoicesIssued;
     private readonly Counter<double> invoicePayments;
     private readonly Counter<long> errorsLogged;
+    private readonly Counter<long> messagesSent;
+    private readonly Counter<long> notificationsEmailed;
 
     public DriveInMetrics(IMeterFactory meterFactory)
     {
@@ -61,12 +64,16 @@ public sealed class DriveInMetrics
             "Gift card face value sold, in dollars (test).");
         emails = meter.CreateCounter<long>("drivein.emails", "{email}", "Emails sent or failed (result: sent, failed).");
         jobFailures = meter.CreateCounter<long>("drivein.jobs.failures", "{failure}",
-            "Background job runs that failed (job: hold_expiry, billing, geocoding, business_gauges).");
+            "Background job runs that failed (job: hold_expiry, billing, geocoding, business_gauges, notification_email).");
         invoicesIssued = meter.CreateCounter<long>("drivein.invoices.issued", "{invoice}", "Invoices issued to owners.");
         invoicePayments = meter.CreateCounter<double>("drivein.invoices.payments", "{USD}",
             "Invoice payments recorded, in dollars.");
         errorsLogged = meter.CreateCounter<long>("drivein.errors.logged", "{message}",
             "Errors and critical messages logged (category: the logger, level: error, critical). See ErrorCountingLoggerProvider.");
+        messagesSent = meter.CreateCounter<long>("drivein.messages.sent", "{message}",
+            "In-app messages sent (kind: theater, support; side: customer, theater, support).");
+        notificationsEmailed = meter.CreateCounter<long>("drivein.notifications.emailed", "{email}",
+            "Notification digests emailed (one email per user per run, however many notifications it lists).");
     }
 
     public void UserRegistered(string method) => usersRegistered.Add(1, new KeyValuePair<string, object?>("method", method));
@@ -110,4 +117,9 @@ public sealed class DriveInMetrics
 
     public void ErrorLogged(string category, LogLevel level) =>
         errorsLogged.Add(1, new TagList { { "category", category }, { "level", level == LogLevel.Critical ? "critical" : "error" } });
+
+    public void MessageSent(ConversationKind kind, MessageSide side) =>
+        messagesSent.Add(1, new TagList { { "kind", kind.ToString().ToLowerInvariant() }, { "side", side.ToString().ToLowerInvariant() } });
+
+    public void NotificationEmailed() => notificationsEmailed.Add(1);
 }

@@ -1,0 +1,85 @@
+@page "/Account/Manage/Notifications"
+
+@using Microsoft.AspNetCore.Identity
+@using DriveIn.Web.Data
+
+@inject UserManager<ApplicationUser> UserManager
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Notifications</PageTitle>
+
+<h3>Notifications</h3>
+<StatusMessage />
+
+<p class="muted" style="max-width: 40rem">
+    New messages show under the bell at the top of the page. If you haven't read one after a few minutes, we can email you
+    a link to it. The email never includes the message itself.
+</p>
+
+<div class="row">
+    <div class="col-xl-6">
+        <EditForm Model="Input" FormName="notifications" OnValidSubmit="OnValidSubmitAsync" method="post">
+            @* An unchecked box posts nothing; this makes sure the post still binds Input (so "off" saves as off). *@
+            <input type="hidden" name="Input.Posted" value="true" />
+            <div class="checkbox">
+                <label class="form-label">
+                    <InputCheckbox @bind-Value="Input.EmailNotifications" class="form-check-input" />
+                    Email me about unread notifications
+                </label>
+            </div>
+            <button type="submit" class="w-100 btn btn-lg btn-primary">Save</button>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    private ApplicationUser? user;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Input ??= new();
+
+        user = await UserManager.GetUserAsync(HttpContext.User);
+        if (user is null)
+        {
+            RedirectManager.RedirectToInvalidUser(UserManager, HttpContext);
+            return;
+        }
+        // A post brings the form's value; a plain visit shows the saved one.
+        if (!Input.Posted)
+            Input.EmailNotifications = user.EmailNotifications;
+    }
+
+    private async Task OnValidSubmitAsync()
+    {
+        if (user is null)
+        {
+            RedirectManager.RedirectToInvalidUser(UserManager, HttpContext);
+            return;
+        }
+
+        user.EmailNotifications = Input.EmailNotifications;
+        var result = await UserManager.UpdateAsync(user);
+        if (!result.Succeeded)
+        {
+            RedirectManager.RedirectToCurrentPageWithStatus("Error: Couldn't save your notification settings.", HttpContext);
+            return;
+        }
+        RedirectManager.RedirectToCurrentPageWithStatus(
+            user.EmailNotifications ? "We'll email you about unread notifications." : "We won't email you about notifications.",
+            HttpContext);
+    }
+
+    private sealed class InputModel
+    {
+        public bool EmailNotifications { get; set; }
+
+        public bool Posted { get; set; }
+    }
+}

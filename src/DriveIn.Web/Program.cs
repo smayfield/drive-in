@@ -243,6 +243,14 @@ builder.Services.AddScoped<ReportService>();
 builder.Services.AddHostedService<HoldExpiryService>();
 builder.Services.AddHostedService<BillingJobService>();
 
+// In-app messages and the notification bell; unread notifications are emailed (links only) after a delay.
+builder.Services.Configure<NotificationOptions>(builder.Configuration.GetSection(NotificationOptions.Section));
+builder.Services.AddSingleton<NotificationEvents>();
+builder.Services.AddSingleton<MessageEvents>();
+builder.Services.AddScoped<NotificationService>();
+builder.Services.AddScoped<MessagingService>();
+builder.Services.AddHostedService<NotificationEmailService>();
+
 var app = builder.Build();
 
 app.UseForwardedHeaders();

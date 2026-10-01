@@ -1,0 +1,12 @@
+@page "/messages/{Id:int}"
+@attribute [Authorize]
+
+<PageTitle>Conversation · Messages · Drive-In Online</PageTitle>
+
+<MudLink Href="messages" Class="d-inline-block mb-3">&larr; All messages</MudLink>
+
+<MessageThread ConversationId="Id" />
+
+@code {
+    [Parameter] public int Id { get; set; }
+}

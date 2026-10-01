@@ -75,6 +75,7 @@ else if (isOwner)
                 <text> · @Theater.Screens.Count screen@(Theater.Screens.Count == 1 ? "" : "s") × @Money.Format(subscription.PricePerScreenPerMonth) = @Money.Format(Theater.Screens.Count * subscription.PricePerScreenPerMonth) a month in season@(subscription.IsActive ? "" : " (cancelled)")</text>
             }
             · <MudLink Href="@($"manage/{Theater.Id}/billing")" Typo="Typo.body2">Billing and invoices</MudLink>
+            · <MudLink Href="messages/new" Typo="Typo.body2">Contact us</MudLink>
         </MudText>
     </MudPaper>
 }

@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Primitives;
 using DriveIn.Web.Components.Account.Pages;
 using DriveIn.Web.Components.Account.Pages.Manage;
@@ -125,7 +126,8 @@ internal static class IdentityComponentsEndpointRouteBuilderExtensions
             HttpContext context,
             [FromServices] UserManager<ApplicationUser> userManager,
             [FromServices] AuthenticationStateProvider authenticationStateProvider,
-            [FromServices] IAntiforgery antiforgery) =>
+            [FromServices] IAntiforgery antiforgery,
+            [FromServices] IDbContextFactory<ApplicationDbContext> dbFactory) =>
         {
             // Binds no form data, so UseAntiforgery() alone would not reject a missing token.
             if (!await antiforgery.IsRequestValidAsync(context))
@@ -156,6 +158,19 @@ internal static class IdentityComponentsEndpointRouteBuilderExtensions
             }
 
             personalData.Add("Authenticator Key", (await userManager.GetAuthenticatorKeyAsync(user))!);
+
+            // The in-app messages they wrote (MessagingService).
+            await using (var db = await dbFactory.CreateDbContextAsync())
+            {
+                var messages = await db.Messages.AsNoTracking()
+                    .Where(m => m.SenderId == userId)
+                    .OrderBy(m => m.SentAt)
+                    .Select(m => new { m.SentAt, m.Conversation!.Subject, m.Body })
+                    .ToListAsync();
+                for (var i = 0; i < messages.Count; i++)
+                    personalData.Add($"Message {i + 1}", $"{messages[i].SentAt:O} ({messages[i].Subject}): {messages[i].Body}");
+            }
+
             var fileBytes = JsonSerializer.SerializeToUtf8Bytes(personalData);
 
             context.Response.Headers.TryAdd("Content-Disposition", "attachment; filename=PersonalData.json");

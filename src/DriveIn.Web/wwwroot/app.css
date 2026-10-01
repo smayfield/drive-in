@@ -223,3 +223,7 @@ h1:focus {
 
 /* The 4-character gate code on tickets and at the gate. */
 .gate-code { font-family: Menlo, Consolas, monospace; font-size: 2rem; font-weight: 700; letter-spacing: 0.3em; }
+
+/* The notification bell's menu (NotificationBell). */
+.notification-menu { width: min(22rem, 90vw); }
+.notification-unread { font-weight: 600; }

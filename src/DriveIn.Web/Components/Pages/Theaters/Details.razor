@@ -131,6 +131,10 @@ else
                 {
                     <div><MudLink Href="@site.ToString()" Target="_blank" rel="noopener">@site.Host</MudLink></div>
                 }
+                @if (!staff)
+                {
+                    <MudButton Href="@($"messages/new?theater={Uri.EscapeDataString(theater.Slug)}")" Variant="Variant.Outlined" Color="Color.Primary" Class="mt-3">Message the theater</MudButton>
+                }
             </MudPaper>
 
             @if (theater.GiftCardsEnabled)
@@ -171,13 +175,18 @@ else
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
 
     private Theater? theater;
+    private bool staff;
     private List<ShowtimeView> showings = [];
     private ShowingForecasts? weather;
     private List<ShowtimeView>? weatherFor;
 
     protected override async Task OnParametersSetAsync()
     {
-        theater = await Theaters.GetBySlugAsync((await AuthState).User, Slug);
+        var user = (await AuthState).User;
+        theater = await Theaters.GetBySlugAsync(user, Slug);
+        // The owner and employees answer the theater's messages rather than send them.
+        staff = theater is not null && user.GetUserId() is string userId
+            && (theater.OwnerId == userId || user.GetEmployeeTheaterId() == theater.Id);
         showings = theater is null ? [] : (await Sales.ListOnSaleAsync((await AuthState).User, Slug)).Showings;
     }
 

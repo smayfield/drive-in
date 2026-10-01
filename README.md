@@ -161,6 +161,12 @@ invitee sets a password or continues with Google using the invited address.
   by channel, payment, day, showing and film, ticket options and add-ons, and gift cards sold, spent and still owed
   (with every card that has a balance left). Each table downloads as CSV. Only Managers get it by default (a migration
   adds it to existing Managers). Details in [features.md](features.md).
+- **Messages** stay in the app (stored in Postgres, never emailed): customers write to a theater from its page (staff
+  with *View messages* / *Reply to messages* answer at Manage → Messages), anyone signed in can contact us (admins answer at
+  `/admin/messages`, where they can also read, but not join, every theater's conversations). New messages show under a
+  bell in the app bar; if one is still unread after `Notifications:EmailDelayMinutes` (10) the person is emailed a link
+  (never the text) unless they turned that off at Account → Notifications. Links point at `Notifications:SiteUrl`
+  (production's address by default; `appsettings.Development.json` uses localhost). Details in [features.md](features.md).
 
 ## Marketing site and onboarding
 

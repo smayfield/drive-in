@@ -1,0 +1,108 @@
+@* The app bar's bell: the signed-in user's unread count, updated live (NotificationEvents), and a menu of the latest
+   notifications. Opening one marks it read; "See all" goes to /notifications. *@
+@implements IDisposable
+@inject NotificationService Notifications
+@inject NotificationEvents Events
+@inject NavigationManager Nav
+@inject TimeProvider Time
+
+@* The badge wraps the menu (not the menu's button): MudIconButton stops click propagation, so a button inside a menu's
+   ActivatorContent never opens it. *@
+<MudBadge Content="@unread" Visible="@(unread > 0)" Color="Color.Primary" Overlap Max="99" Class="notification-bell">
+    <MudMenu Icon="@Icons.Material.Filled.Notifications" Color="Color.Inherit" AriaLabel="@Label"
+             AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" OpenChanged="OnOpenChanged">
+        <div class="notification-menu">
+            @if (items is null)
+            {
+                <MudProgressCircular Indeterminate Size="Size.Small" Class="ma-3" aria-label="Loading notifications" />
+            }
+            else if (items.Count == 0)
+            {
+                <MudText Class="muted pa-3">Nothing new.</MudText>
+            }
+            else
+            {
+                @foreach (var n in items)
+                {
+                    var item = n;
+                    <MudMenuItem @key="item.Id" OnClick="() => OpenAsync(item)" Class="@(item.IsRead ? null : "notification-unread")">
+                        <div>@item.Title</div>
+                        <div class="muted" style="font-size: 0.8rem">@When.Ago(item.UpdatedAt, Time.GetUtcNow())</div>
+                    </MudMenuItem>
+                }
+            }
+            <MudDivider />
+            <div class="d-flex justify-content-between gap-2 pa-2">
+                <MudButton Size="Size.Small" Disabled="@(unread == 0)" OnClick="MarkAllReadAsync">Mark all read</MudButton>
+                <MudButton Size="Size.Small" Href="notifications">See all</MudButton>
+            </div>
+        </div>
+    </MudMenu>
+</MudBadge>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private System.Security.Claims.ClaimsPrincipal user = new();
+    private string? userId;
+    private int unread;
+    private List<NotificationItem>? items;
+    private bool open;
+
+    private string Label => unread == 0 ? "Notifications" : $"Notifications, {unread} unread";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Events.Changed += OnChanged;
+        user = AuthState is null ? new() : (await AuthState).User;
+        userId = user.GetUserId();
+        unread = await Notifications.CountUnreadAsync(user);
+    }
+
+    private async Task OnOpenChanged(bool isOpen)
+    {
+        open = isOpen;
+        if (isOpen)
+            items = await Notifications.ListAsync(user, NotificationService.BellSize);
+    }
+
+    private async Task OpenAsync(NotificationItem item)
+    {
+        if (!item.IsRead)
+            await Notifications.MarkReadAsync(user, item.Id);
+        Nav.NavigateTo(item.Link);
+    }
+
+    private async Task MarkAllReadAsync()
+    {
+        await Notifications.MarkAllReadAsync(user);
+        await RefreshAsync();
+    }
+
+    private async Task RefreshAsync()
+    {
+        unread = await Notifications.CountUnreadAsync(user);
+        if (open)
+            items = await Notifications.ListAsync(user, NotificationService.BellSize);
+    }
+
+    private void OnChanged(string changedUserId)
+    {
+        if (changedUserId != userId)
+            return;
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                await RefreshAsync();
+                StateHasChanged();
+            }
+            catch (Exception)
+            {
+                // The circuit may be going away; the next change refreshes again.
+            }
+        });
+    }
+
+    public void Dispose() => Events.Changed -= OnChanged;
+}

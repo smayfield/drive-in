@@ -1,0 +1,142 @@
+@* One conversation: its messages, oldest first, and a reply box for whoever may reply. Refreshes live when someone
+   else posts, closes or reopens it (MessageEvents), and reading it here marks it read. Used by the customer, theater
+   and admin message pages; MessagingService decides what each of them sees and may do. *@
+@inherits AppComponentBase
+@implements IDisposable
+@inject MessagingService Messaging
+@inject MessageEvents Events
+@inject TimeProvider Time
+
+@if (conversation is null)
+{
+    <Alerts Error="@Error" />
+    @if (Error is null) { <MudProgressCircular Indeterminate Size="Size.Small" aria-label="Loading conversation" /> }
+}
+else
+{
+    <div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2 mb-1">
+        <MudText Typo="Typo.h5" HtmlTag="h2">@conversation.Subject</MudText>
+        @if (conversation.IsClosed) { <MudChip T="string" Size="Size.Small" Class="my-0">Closed</MudChip> }
+    </div>
+    <MudText Typo="Typo.body2" Class="muted mb-3">@Context()</MudText>
+
+    <Alerts Error="@Error" Success="@Success" />
+
+    <ol class="message-thread" aria-label="Messages">
+        @foreach (var m in conversation.Messages)
+        {
+            <li @key="m.Id" class="message @(m.Mine ? "message-mine" : null)">
+                <div class="message-meta">
+                    <strong>@(m.Mine ? "You" : m.SenderName)</strong>
+                    <span class="muted"> · <time datetime="@m.SentAt.ToString("O")" title="@m.SentAt.ToString("MMM d, yyyy h:mm tt 'UTC'")">@When.Ago(m.SentAt, Time.GetUtcNow())</time></span>
+                </div>
+                <div class="message-body">@m.Body</div>
+            </li>
+        }
+    </ol>
+
+    @if (conversation.CanReply)
+    {
+        <MudTextField T="string" @bind-Value="reply" Label="Reply" Lines="4" Variant="Variant.Outlined" Class="mt-3"
+                      MaxLength="@Message.MaxBodyLength" Counter="@Message.MaxBodyLength" Immediate />
+        <div class="d-flex flex-wrap gap-2 mt-2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(busy || string.IsNullOrWhiteSpace(reply))" OnClick="SendAsync">Send</MudButton>
+            @if (conversation.CanClose)
+            {
+                <MudButton Variant="Variant.Outlined" Disabled="busy" OnClick="() => SetClosedAsync(true)">Close conversation</MudButton>
+            }
+        </div>
+    }
+    else if (conversation.IsClosed)
+    {
+        <MudText Class="muted mt-3">
+            This conversation is closed.
+            @if (conversation.IsCustomer) { <span>Start a new one if you need anything else.</span> }
+        </MudText>
+        @if (conversation.CanClose)
+        {
+            <MudButton Variant="Variant.Outlined" Class="mt-2" Disabled="busy" OnClick="() => SetClosedAsync(false)">Reopen</MudButton>
+        }
+    }
+    else if (!conversation.IsCustomer)
+    {
+        <MudText Class="muted mt-3">You can read this conversation but not reply.</MudText>
+    }
+}
+
+@code {
+    [Parameter, EditorRequired] public int ConversationId { get; set; }
+
+    // Called after this person sends, closes or reopens, so a list beside the thread can refresh.
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private ConversationView? conversation;
+    private string? reply;
+    private bool busy;
+    private int? loadedId;
+
+    protected override void OnInitialized() => Events.Changed += OnConversationChanged;
+
+    protected override async Task LoadAsync()
+    {
+        if (loadedId != ConversationId)
+        {
+            (conversation, reply, loadedId) = (null, null, ConversationId);
+        }
+        conversation = await Messaging.GetAsync(User, ConversationId);
+    }
+
+    private string Context()
+    {
+        var c = conversation!;
+        if (c.Kind == ConversationKind.Support)
+            return c.IsCustomer
+                ? $"With {MessagingService.SupportName}{(c.AboutTheaterName is null ? "" : $", about {c.AboutTheaterName}")}"
+                : $"From {c.CustomerName}{(c.AboutTheaterName is null ? "" : $", about {c.AboutTheaterName}")}";
+        return c.IsCustomer ? $"With {c.TheaterName}" : $"From {c.CustomerName} to {c.TheaterName}";
+    }
+
+    private async Task SendAsync()
+    {
+        busy = true;
+        if (await RunAsync(() => Messaging.PostAsync(User, ConversationId, reply ?? "")))
+        {
+            reply = null;
+            await RunAsync(LoadAsync);
+            await Changed.InvokeAsync();
+        }
+        busy = false;
+    }
+
+    private async Task SetClosedAsync(bool closed)
+    {
+        busy = true;
+        if (await RunAsync(() => Messaging.SetClosedAsync(User, ConversationId, closed)))
+        {
+            await RunAsync(LoadAsync);
+            await Changed.InvokeAsync();
+        }
+        busy = false;
+    }
+
+    // Someone else posted, closed or reopened it.
+    private void OnConversationChanged(int conversationId)
+    {
+        if (conversationId != ConversationId || conversation is null)
+            return;
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                conversation = await Messaging.GetAsync(User, ConversationId);
+                StateHasChanged();
+            }
+            catch (Exception)
+            {
+                // The circuit may be going away; the next change or action refreshes again.
+            }
+        });
+    }
+
+    public void Dispose() => Events.Changed -= OnConversationChanged;
+}

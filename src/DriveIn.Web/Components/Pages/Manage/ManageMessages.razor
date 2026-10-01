@@ -1,0 +1,86 @@
+@page "/manage/{Id:int}/messages"
+@page "/manage/{Id:int}/messages/{ConversationId:int}"
+@attribute [Authorize]
+@inherits AppComponentBase
+@implements IDisposable
+@inject TheaterService Theaters
+@inject MessagingService Messaging
+@inject MessageEvents Events
+
+<PageTitle>Messages · Manage · Drive-In Online</PageTitle>
+
+@if (theater is null)
+{
+    <Alerts Error="@Error" />
+    @if (Error is null) { <MudProgressCircular Indeterminate Size="Size.Small" aria-label="Loading messages" /> }
+}
+else
+{
+    <ManageHeader Theater="theater" Title="Messages" Current="messages" />
+
+    <Alerts Error="@Error" />
+
+    <MudGrid Spacing="4">
+        <MudItem xs="12" md="5">
+            <nav class="manage-tabs manage-subtabs mb-2" aria-label="Conversations">
+                <a class="manage-tab @(Closed ? null : "active")" href="@ListHref(false)" aria-current="@(Closed ? null : "page")">Open</a>
+                <a class="manage-tab @(Closed ? "active" : null)" href="@ListHref(true)" aria-current="@(Closed ? "page" : null)">Closed</a>
+            </nav>
+            <ConversationList Items="items" Href="@(c => $"manage/{Id}/messages/{c.Id}{(Closed ? "?closed=true" : "")}")"
+                              ActiveId="ConversationId"
+                              Empty="@(Closed ? "No closed conversations." : "No open conversations. Customers can message you from your theater's page.")" />
+        </MudItem>
+        <MudItem xs="12" md="7">
+            @if (ConversationId is int conversationId)
+            {
+                <MessageThread ConversationId="conversationId" Changed="ReloadListAsync" />
+            }
+            else
+            {
+                <MudText Class="muted">Choose a conversation to read it.</MudText>
+            }
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+    [Parameter] public int? ConversationId { get; set; }
+    [SupplyParameterFromQuery(Name = "closed")] public bool Closed { get; set; }
+
+    private Theater? theater;
+    private List<ConversationSummary> items = [];
+
+    protected override void OnInitialized() => Events.Changed += OnConversationChanged;
+
+    protected override async Task LoadAsync()
+    {
+        theater = await Theaters.GetForManageAsync(User, Id);
+        items = await Messaging.ListForTheaterAsync(User, Id, Closed);
+    }
+
+    private string ListHref(bool closed) => $"manage/{Id}/messages{(closed ? "?closed=true" : "")}";
+
+    private Task ReloadListAsync() => RunAsync(async () => items = await Messaging.ListForTheaterAsync(User, Id, Closed));
+
+    // A new conversation or message somewhere: refresh the list (unread marks, order).
+    private void OnConversationChanged(int conversationId)
+    {
+        if (theater is null)
+            return;
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                items = await Messaging.ListForTheaterAsync(User, Id, Closed);
+                StateHasChanged();
+            }
+            catch (Exception)
+            {
+                // The circuit may be going away; the next change or action refreshes again.
+            }
+        });
+    }
+
+    public void Dispose() => Events.Changed -= OnConversationChanged;
+}
