@@ -59,6 +59,9 @@ public sealed class NotificationService(
 {
     public const int BellSize = 10;
 
+    // The notifications page shows this many, newest unread first.
+    public const int PageSize = 100;
+
     // --- Raised by other services ---
 
     // A new message in a conversation, for each recipient. Each has at most one unread notification per conversation:
@@ -142,7 +145,7 @@ public sealed class NotificationService(
 
     // --- The signed-in user's own ---
 
-    public async Task<List<NotificationItem>> ListAsync(ClaimsPrincipal user, int take = 100)
+    public async Task<List<NotificationItem>> ListAsync(ClaimsPrincipal user, int take = PageSize)
     {
         var userId = Guard.RequireUserId(user);
         await using var db = await dbFactory.CreateDbContextAsync();

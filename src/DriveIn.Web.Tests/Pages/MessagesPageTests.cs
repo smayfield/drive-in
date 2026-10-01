@@ -95,6 +95,7 @@ public class MessagesPageTests
         page.WaitForText("Contact Drive-In Online");
         host.Select(page, "About (optional)", "Starlight");
         page.WaitForAssertion(() => Assert.Equal(w.Theater.Id.ToString(), page.Find(".mud-select input").GetAttribute("value")));
+        page.SetField("Subject", "Meant for support");
 
         // The same page instance is reused when only the query changes: nothing carries over.
         host.Nav.NavigateTo("messages/new?theater=starlight");
@@ -105,6 +106,7 @@ public class MessagesPageTests
 
         page.WaitForText("Contact Drive-In Online");
         page.WaitForAssertion(() => Assert.True(string.IsNullOrEmpty(page.Find(".mud-select input").GetAttribute("value"))));
+        Assert.True(string.IsNullOrEmpty(page.Field("Subject").GetAttribute("value")));
     }
 
     [Fact]
@@ -359,6 +361,28 @@ public class MessagesPageTests
         page.Find(".conversation-item.unread").Click();
         page.WaitForAssertion(() => Assert.EndsWith($"manage/{w.Theater.Id}/messages/{id}", host.Nav.Uri));
         Assert.Equal(0, await w.Notifications.CountUnreadAsync(Principals.For(w.Owner)));
+    }
+
+    [Fact]
+    public async Task The_notifications_page_says_when_it_shows_only_the_latest()
+    {
+        await using var w = await SetUpAsync();
+        await using (var db = w.App.Db())
+        {
+            var now = w.App.Time.GetUtcNow();
+            db.Notifications.AddRange(Enumerable.Range(0, NotificationService.PageSize + 5).Select(i => new Notification
+            {
+                UserId = w.Owner.Id, Kind = NotificationKind.Message, Title = $"Note {i}", Link = "messages",
+                CreatedAt = now, UpdatedAt = now.AddMinutes(-i),
+            }));
+            await db.SaveChangesAsync();
+        }
+        await using var host = new PageHost(w.App).SignIn(w.Owner);
+
+        var page = host.Render<NotificationsPage>();
+
+        page.WaitForText($"Showing the latest {NotificationService.PageSize}.");
+        Assert.Equal(NotificationService.PageSize, page.FindAll(".conversation-item").Count);
     }
 
     [Fact]

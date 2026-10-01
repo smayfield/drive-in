@@ -383,7 +383,7 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 - **Notifications** (`notifications`; `NotificationKind.Message` for now): one unread notification per person and
   conversation, counting new messages ("3 new messages from Starlight"); reading the conversation reads it. The bell in the app
   bar shows the unread count and the latest 10 (mark all read, see all); the static pages' top bar shows
-  "Notifications (n)"; `/notifications` lists them all.
+  "Notifications (n)"; `/notifications` lists the latest 100 (unread first).
 - **Email** (`NotificationEmailService`, every minute): a notification still unread `Notifications:EmailDelayMinutes` (10)
   after its last update, and not yet emailed, is sent in one digest per person: titles and links
   (`Notifications:SiteUrl`) only, never the message or subject. More messages before it's read don't send another; a

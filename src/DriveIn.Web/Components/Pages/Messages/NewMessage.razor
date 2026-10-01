@@ -69,8 +69,10 @@
 
     protected override async Task LoadAsync()
     {
-        // The page instance is reused when only the query changes (?theater=...), so start each load clean.
+        // The page instance is reused when only the query changes (?theater=...), so start each load clean: text typed
+        // for one recipient mustn't be sent to another.
         (loaded, theater, staff, theaters, aboutTheaterId) = (false, null, false, [], null);
+        (subject, body, busy) = (null, null, false);
         if (TheaterSlug is not null)
         {
             theater = await Theaters.GetBySlugAsync(User, TheaterSlug) ?? throw new NotFoundException("Theater not found.");
