@@ -1,0 +1,67 @@
+@* The top of a theater's public pages: the marquee (logo, name, place, season) and the theater's own menu: Showings,
+   its live menu pages in the order it chose (ContentService.GetMenuAsync), News & events when it has posts, and Gift
+   cards when it sells them. New pages appear here as soon as they're published. *@
+@inject ContentService Content
+
+<header class="marquee-header">
+    <div class="marquee-body">
+        @if (Theater.LogoUrl is not null)
+        {
+            <img class="marquee-logo" src="@Theater.LogoUrl" alt="@Theater.Name logo" />
+        }
+        <div>
+            @if (IsHome)
+            {
+                <h1 class="marquee-title">@Theater.Name</h1>
+            }
+            else
+            {
+                <a class="marquee-title marquee-title-link" href="@($"theaters/{Theater.Slug}")">@Theater.Name</a>
+            }
+            <p class="marquee-sub">
+                @Pages.Theaters.Index.Location(Theater)
+                @if (Theater.SeasonOpensOn is not null || Theater.SeasonClosesOn is not null)
+                {
+                    <span> · Season: @Seasons.Describe(Theater)</span>
+                }
+            </p>
+        </div>
+    </div>
+</header>
+
+<nav class="theater-nav" aria-label="@Theater.Name">
+    @foreach (var (href, text) in Links)
+    {
+        <a href="@href" class="theater-nav-link @(href == Current ? "active" : null)" aria-current="@(href == Current ? "page" : null)">@text</a>
+    }
+</nav>
+
+@code {
+    [Parameter, EditorRequired] public Theater Theater { get; set; } = default!;
+
+    // The link of the page being shown (e.g. "theaters/starlight/pages/rules"), marked as current.
+    [Parameter] public string? Current { get; set; }
+
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private TheaterMenu menu = TheaterMenu.Empty;
+
+    private bool IsHome => Current == $"theaters/{Theater.Slug}";
+
+    private IEnumerable<(string Href, string Text)> Links
+    {
+        get
+        {
+            yield return ($"theaters/{Theater.Slug}", "Showings");
+            foreach (var page in menu.Pages)
+                yield return (page.Href, page.Title);
+            if (menu.HasPosts)
+                yield return ($"theaters/{Theater.Slug}/news", "News & events");
+            if (Theater.GiftCardsEnabled)
+                yield return ($"theaters/{Theater.Slug}/giftcards", "Gift cards");
+        }
+    }
+
+    protected override async Task OnParametersSetAsync() =>
+        menu = await Content.GetMenuAsync((await AuthState).User, Theater);
+}

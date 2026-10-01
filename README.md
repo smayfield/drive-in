@@ -167,6 +167,10 @@ invitee sets a password or continues with Google using the invited address.
   bell in the app bar; if one is still unread after `Notifications:EmailDelayMinutes` (10) the person is emailed a link
   (never the text) unless they turned that off at Account → Notifications. Links point at `Notifications:SiteUrl`
   (production's address by default; `appsettings.Development.json` uses localhost). Details in [features.md](features.md).
+- **Theater pages and posts**: theaters write their own pages (in the theater's menu) and posts (news and special events) in a
+  rich-text editor (Quill, vendored in `wwwroot/lib/quill`), with images from their own library. Drafts can be previewed by staff,
+  publishing can be scheduled, and the HTML is sanitized (HtmlSanitizer) when saved and when shown. A theater's page and its content
+  are public (no sign-in) for live theaters; buying still needs an account. Details in [features.md](features.md).
 
 ## Marketing site and onboarding
 

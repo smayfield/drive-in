@@ -1,0 +1,100 @@
+@page "/theaters/{Slug}/pages/{PageSlug}"
+@page "/theaters/{Slug}/news/{PostSlug}"
+@* A theater's own page or post, public like the theater's page. Staff who manage its content also see drafts and
+   scheduled items here, marked as a preview. *@
+@inject ContentService Content
+
+@if (loaded && content is null)
+{
+    <PageTitle>Page not found · Drive-In Online</PageTitle>
+    <MudText Typo="Typo.h3" HtmlTag="h1" Class="mb-2">Page not found</MudText>
+    <MudText Class="mb-2">This page doesn't exist, or isn't published.</MudText>
+    <MudLink Href="@($"theaters/{Slug}")">Back to the theater</MudLink>
+}
+else if (content is not null)
+{
+    <PageTitle>@content.Title · @content.Theater.Name · Drive-In Online</PageTitle>
+    <HeadContent>
+        <meta name="description" content="@content.Description" />
+        <meta property="og:type" content="article" />
+        <meta property="og:title" content="@($"{content.Title} · {content.Theater.Name}")" />
+        <meta property="og:description" content="@content.Description" />
+        @if (content.ShareImageUrl is not null)
+        {
+            <meta property="og:image" content="@(Nav.BaseUri + content.ShareImageUrl)" />
+        }
+        @if (content.IsPreview)
+        {
+            <meta name="robots" content="noindex" />
+        }
+    </HeadContent>
+
+    <TheaterMasthead Theater="content.Theater" Current="@(content.Kind == PageKind.Page ? Href : $"theaters/{Slug}/news")" />
+
+    @if (content.IsPreview)
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-3">
+            Preview: only staff can see this. It's @(content.Status switch
+            {
+                PageStatus.Scheduled => $"scheduled for {TheaterTime.ToLocal(content.Theater, content.PublishAt!.Value):MMMM d, h:mm tt}",
+                PageStatus.Ended => "no longer published",
+                _ => "a draft",
+            }).
+        </MudAlert>
+    }
+
+    <article class="theater-article">
+        @if (content.CoverUrl is not null)
+        {
+            <img class="content-hero" src="@content.CoverUrl" alt="@content.CoverAlt" width="@content.CoverWidth" height="@content.CoverHeight" />
+        }
+        <h1 class="theater-article-title">@content.Title</h1>
+        @if (content.Kind == PageKind.Post)
+        {
+            <p class="news-card-meta">
+                @if (content.EventStartsAt is DateTimeOffset at)
+                {
+                    <span>Event: @TheaterTime.ToLocal(content.Theater, at).ToString("dddd, MMMM d, yyyy · h:mm tt")</span>
+                }
+                else if (content.PublishAt is DateTimeOffset posted)
+                {
+                    <span>@TheaterTime.ToLocal(content.Theater, posted).ToString("MMMM d, yyyy")</span>
+                }
+            </p>
+        }
+        <div class="theater-content">@((MarkupString)content.BodyHtml)</div>
+    </article>
+
+    @if (content.Kind == PageKind.Post)
+    {
+        <MudLink Href="@($"theaters/{Slug}/news")" Class="d-inline-block mt-4">&larr; All news &amp; events</MudLink>
+    }
+}
+
+@code {
+    [Parameter] public string Slug { get; set; } = "";
+    [Parameter] public string? PageSlug { get; set; }
+    [Parameter] public string? PostSlug { get; set; }
+
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+
+    private PublicPage? content;
+    private bool loaded;
+
+    private string Href => PageSlug is not null ? $"theaters/{Slug}/pages/{PageSlug}" : $"theaters/{Slug}/news/{PostSlug}";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        loaded = false;
+        var user = (await AuthState).User;
+        content = PageSlug is not null
+            ? await Content.GetPageAsync(user, Slug, PageKind.Page, PageSlug)
+            : await Content.GetPageAsync(user, Slug, PageKind.Post, PostSlug ?? "");
+        loaded = true;
+        // While prerendering, say so to crawlers too.
+        if (content is null && HttpContext is { Response.HasStarted: false })
+            HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
+    }
+}

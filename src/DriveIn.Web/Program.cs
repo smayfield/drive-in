@@ -251,6 +251,10 @@ builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<MessagingService>();
 builder.Services.AddHostedService<NotificationEmailService>();
 
+// Theaters' own pages and posts (sanitized rich text) and their image libraries.
+builder.Services.AddSingleton<HtmlContent>();
+builder.Services.AddScoped<ContentService>();
+
 var app = builder.Build();
 
 app.UseForwardedHeaders();
@@ -280,7 +284,7 @@ app.MapRazorComponents<App>()
 // Add additional endpoints required by the Identity /Account Razor components.
 app.MapAdditionalIdentityEndpoints();
 
-// A theater's logo. Signed-in users only, like the theater pages, and only for theaters they may browse.
+// A theater's logo, for whoever may browse the theater (signed in or not, like the theater's page).
 app.MapGet("/theaters/{slug}/logo", async (string slug, HttpContext http, TheaterService theaters) =>
 {
     var logo = await theaters.GetLogoAsync(http.User, slug);
@@ -290,7 +294,7 @@ app.MapGet("/theaters/{slug}/logo", async (string slug, HttpContext http, Theate
     // The page URL carries a version (?v=) that changes with each upload, so a browser can keep it for a day.
     http.Response.Headers.CacheControl = "private, max-age=86400";
     return Results.File(logo.Data, logo.ContentType);
-}).RequireAuthorization();
+});
 
 // A film's poster, visible to whoever may browse the film's theater.
 app.MapGet("/films/{filmId:int}/poster", async (int filmId, HttpContext http, ScheduleService schedule) =>
@@ -301,7 +305,19 @@ app.MapGet("/films/{filmId:int}/poster", async (int filmId, HttpContext http, Sc
     http.Response.Headers.XContentTypeOptions = "nosniff";
     http.Response.Headers.CacheControl = "private, max-age=86400";
     return Results.File(poster.Data, poster.ContentType);
-}).RequireAuthorization();
+});
+
+// An image from a theater's library (its pages and posts), for whoever may browse the theater. An image's bytes never
+// change (a new upload is a new id), so a public theater's can be cached anywhere for a week.
+app.MapGet("/theaters/{slug}/images/{id:int}", async (string slug, int id, HttpContext http, ContentService content) =>
+{
+    var image = await content.GetImageAsync(http.User, slug, id);
+    if (image is null)
+        return Results.NotFound();
+    http.Response.Headers.XContentTypeOptions = "nosniff";
+    http.Response.Headers.CacheControl = image.Theater!.IsPublic ? "public, max-age=604800, immutable" : "private, max-age=3600";
+    return Results.File(image.Data, image.ContentType);
+});
 
 // A report as CSV, for whoever may view the theater's reports (the service checks). ?from=&to= are yyyy-MM-dd dates.
 app.MapGet("/manage/{theaterId:int}/reports/{kind}.csv", async (int theaterId, string kind, string? from, string? to,

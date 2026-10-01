@@ -1,0 +1,127 @@
+@page "/manage/{Id:int}/content/images"
+@attribute [Authorize]
+@inherits AppComponentBase
+@inject TheaterService Theaters
+@inject ContentService Content
+@inject IDialogService Dialogs
+@inject TimeProvider Time
+
+<PageTitle>Images · Manage · Drive-In Online</PageTitle>
+
+@if (theater is null)
+{
+    <Alerts Error="@Error" />
+    @if (Error is null) { <MudProgressCircular Indeterminate Size="Size.Small" aria-label="Loading images" /> }
+}
+else
+{
+    <ManageHeader Theater="theater" Title="Images" Current="content" />
+    <ContentTabs TheaterId="Id" Current="images" />
+
+    <Alerts Error="@Error" Success="@Success" />
+
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+        <MudText Typo="Typo.body2" Class="muted">
+            Images for your pages and posts: @images.Count of @TheaterImage.MaxPerTheater. JPG, PNG, GIF or WebP, up to
+            @(TheaterImage.MaxBytes / (1024 * 1024)) MB each. The description (alt text) is used wherever an image is placed,
+            unless you give it another one there.
+        </MudText>
+        <MudFileUpload T="IReadOnlyList<IBrowserFile>" Accept=".jpg,.jpeg,.png,.gif,.webp" FilesChanged="UploadAsync" MaximumFileCount="20">
+            <CustomContent>
+                <MudButton OnClick="@context.OpenFilePickerAsync" Variant="Variant.Filled" Color="Color.Primary" Disabled="busy">Upload images</MudButton>
+            </CustomContent>
+        </MudFileUpload>
+    </div>
+
+    @if (images.Count == 0)
+    {
+        <MudText Class="muted">No images yet.</MudText>
+    }
+    else
+    {
+        <div class="image-grid">
+            @foreach (var i in images)
+            {
+                var image = i;
+                <MudPaper Outlined Class="image-card" @key="image.Id">
+                    <a href="@image.Url" target="_blank" class="image-card-thumb"><img src="@image.Url" alt="@(image.AltText ?? image.FileName)" loading="lazy" /></a>
+                    <div class="pa-2">
+                        <div class="text-truncate" title="@image.FileName">@image.FileName</div>
+                        <div class="muted" style="font-size: 0.8rem">@image.Width × @image.Height · @FileSize(image.ByteSize) · @When.Ago(image.UploadedAt, Time.GetUtcNow())</div>
+                        <div class="muted" style="font-size: 0.8rem">
+                            @(image.UsedIn.Count == 0 ? "Not used" : $"Used in {string.Join(", ", image.UsedIn)}")
+                        </div>
+                        <MudTextField T="string" Value="@(edits.GetValueOrDefault(image.Id, image.AltText))" ValueChanged="v => edits[image.Id] = v"
+                                      Label="Description" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2"
+                                      MaxLength="@TheaterImage.MaxAltLength" />
+                        <div class="d-flex justify-content-between mt-1">
+                            <MudButton Size="Size.Small" Disabled="@(!edits.ContainsKey(image.Id))" OnClick="() => SaveAltAsync(image)">Save</MudButton>
+                            <MudButton Size="Size.Small" Color="Color.Error" Disabled="@(image.UsedIn.Count > 0)" OnClick="() => DeleteAsync(image)"
+                                       title="@(image.UsedIn.Count > 0 ? "Remove it from the pages that use it first" : null)">Delete</MudButton>
+                        </div>
+                    </div>
+                </MudPaper>
+            }
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private Theater? theater;
+    private List<ImageView> images = [];
+    private readonly Dictionary<int, string?> edits = [];
+    private bool busy;
+
+    protected override async Task LoadAsync()
+    {
+        theater = await Theaters.GetForManageAsync(User, Id);
+        images = await Content.ListImagesAsync(User, Id);
+    }
+
+    private static string FileSize(int bytes) => bytes >= 1024 * 1024 ? $"{bytes / (1024.0 * 1024):0.0} MB" : $"{Math.Max(1, bytes / 1024)} KB";
+
+    private async Task UploadAsync(IReadOnlyList<IBrowserFile>? files)
+    {
+        if (files is null || files.Count == 0)
+            return;
+        busy = true;
+        var uploaded = 0;
+        await RunAsync(async () =>
+        {
+            foreach (var file in files)
+            {
+                if (file.Size > TheaterImage.MaxBytes)
+                    throw new AppValidationException($"{file.Name} is larger than {TheaterImage.MaxBytes / (1024 * 1024)} MB.");
+                using var stream = new MemoryStream();
+                await file.OpenReadStream(TheaterImage.MaxBytes).CopyToAsync(stream);
+                await Content.UploadImageAsync(User, Id, file.Name, stream.ToArray());
+                uploaded++;
+            }
+        }, files.Count == 1 ? "Uploaded." : $"Uploaded {files.Count} images.");
+        if (uploaded > 0)
+            images = await Content.ListImagesAsync(User, Id);
+        busy = false;
+    }
+
+    private Task SaveAltAsync(ImageView image) => RunAsync(async () =>
+    {
+        await Content.UpdateImageAltAsync(User, image.Id, edits[image.Id]);
+        edits.Remove(image.Id);
+        images = await Content.ListImagesAsync(User, Id);
+    }, "Saved the description.");
+
+    private async Task DeleteAsync(ImageView image)
+    {
+        var confirmed = await Dialogs.ShowMessageBoxAsync($"Delete {image.FileName}?", "This can't be undone.",
+            yesText: "Delete", cancelText: "Cancel");
+        if (confirmed != true)
+            return;
+        await RunAsync(async () =>
+        {
+            await Content.DeleteImageAsync(User, image.Id);
+            images = await Content.ListImagesAsync(User, Id);
+        }, $"Deleted {image.FileName}.");
+    }
+}

@@ -10,18 +10,6 @@ public sealed record TheaterSummary(
     int Id, string Name, string Slug, string? City, string? State, bool IsActive,
     string? OwnerEmail, int ScreenCount, int EmployeeCount, TheaterMode Mode = TheaterMode.Live, DateTimeOffset? GoLiveRequestedAt = null);
 
-internal static class UploadedImages
-{
-    // The MIME type if the bytes start like a JPEG, GIF or PNG, else null.
-    public static string? Sniff(ReadOnlySpan<byte> d) => d switch
-    {
-        [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, ..] => "image/png",
-        [0xFF, 0xD8, 0xFF, ..] => "image/jpeg",
-        [(byte)'G', (byte)'I', (byte)'F', (byte)'8', (byte)'7' or (byte)'9', (byte)'a', ..] => "image/gif",
-        _ => null,
-    };
-}
-
 public sealed class TheaterService(
     IDbContextFactory<ApplicationDbContext> dbFactory, IAuthorizationService auth, TimeProvider time, IGeocoder geocoder,
     DriveInMetrics metrics)

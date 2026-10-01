@@ -1,0 +1,71 @@
+@page "/theaters/{Slug}/news"
+@* All of a theater's live posts, NewsPageSize at a time. Public like the theater's page. *@
+@inject TheaterService Theaters
+@inject ContentService Content
+
+@if (theater is null)
+{
+    @if (loaded)
+    {
+        <PageTitle>Theater not found · Drive-In Online</PageTitle>
+        <MudText Typo="Typo.h3" HtmlTag="h1" Class="mb-2">Theater not found</MudText>
+        <MudLink Href="theaters">Back to all theaters</MudLink>
+    }
+}
+else
+{
+    <PageTitle>News & events · @theater.Name · Drive-In Online</PageTitle>
+    <HeadContent><meta name="description" content="@($"News and special events at {theater.Name}.")" /></HeadContent>
+
+    <TheaterMasthead Theater="theater" Current="@($"theaters/{theater.Slug}/news")" />
+
+    <MudText Typo="Typo.h4" HtmlTag="h1" Class="mb-3">News &amp; events</MudText>
+    @if (posts.Count == 0)
+    {
+        <MudText Class="muted">Nothing here yet.</MudText>
+    }
+    else
+    {
+        <NewsCards Theater="theater" Posts="posts" />
+        <div class="d-flex justify-content-between mt-4">
+            @if (PageNumber > 1)
+            {
+                <MudLink Href="@PageHref(PageNumber - 1)">&larr; Newer</MudLink>
+            }
+            else { <span></span> }
+            @if (PageNumber * ContentService.NewsPageSize < total)
+            {
+                <MudLink Href="@PageHref(PageNumber + 1)">Older &rarr;</MudLink>
+            }
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public string Slug { get; set; } = "";
+    [SupplyParameterFromQuery(Name = "page")] public int? PageQuery { get; set; }
+
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
+
+    private Theater? theater;
+    private List<PostCard> posts = [];
+    private int total;
+    private bool loaded;
+
+    private int PageNumber => Math.Max(1, PageQuery ?? 1);
+
+    private string PageHref(int n) => n == 1 ? $"theaters/{Slug}/news" : $"theaters/{Slug}/news?page={n}";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        loaded = false;
+        var user = (await AuthState).User;
+        theater = await Theaters.GetBySlugAsync(user, Slug);
+        (posts, total) = theater is null ? ([], 0)
+            : await Content.ListLivePostsAsync(user, theater, (PageNumber - 1) * ContentService.NewsPageSize, ContentService.NewsPageSize);
+        loaded = true;
+        if (theater is null && HttpContext is { Response.HasStarted: false })
+            HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
+    }
+}

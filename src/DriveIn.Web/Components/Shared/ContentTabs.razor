@@ -1,0 +1,12 @@
+@* The sub-tabs under Manage → Pages & posts. *@
+<nav class="manage-tabs manage-subtabs mb-3" aria-label="Pages and posts">
+    <a class="manage-tab @(Current == "content" ? "active" : null)" href="@($"manage/{TheaterId}/content")" aria-current="@(Current == "content" ? "page" : null)">Pages &amp; posts</a>
+    <a class="manage-tab @(Current == "images" ? "active" : null)" href="@($"manage/{TheaterId}/content/images")" aria-current="@(Current == "images" ? "page" : null)">Images</a>
+</nav>
+
+@code {
+    [Parameter, EditorRequired] public int TheaterId { get; set; }
+
+    // "content" or "images".
+    [Parameter] public string Current { get; set; } = "content";
+}

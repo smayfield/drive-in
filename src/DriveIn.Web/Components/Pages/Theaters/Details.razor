@@ -1,6 +1,7 @@
 @page "/theaters/{Slug}"
-@attribute [Authorize]
+@* Public: anyone can see a live theater's page, signed in or not (buying a ticket asks them to sign in). *@
 @inject TheaterService Theaters
+@inject ContentService Content
 @inject TicketSalesService Sales
 @inject WeatherService Weather
 
@@ -16,30 +17,27 @@ else
 
     <MudLink Href="theaters" Class="d-inline-block mb-3">&larr; All theaters</MudLink>
 
-    <header class="marquee-header">
-        <div class="marquee-body">
-            @if (theater.LogoUrl is not null)
-            {
-                <img class="marquee-logo" src="@theater.LogoUrl" alt="@theater.Name logo" />
-            }
-            <div>
-                <h1 class="marquee-title">@theater.Name</h1>
-                <p class="marquee-sub">
-                    @Index.Location(theater)
-                    @if (theater.SeasonOpensOn is not null || theater.SeasonClosesOn is not null)
-                    {
-                        <span> · Season: @Seasons.Describe(theater)</span>
-                    }
-                </p>
-            </div>
-        </div>
-    </header>
+    <TheaterMasthead Theater="theater" Current="@($"theaters/{theater.Slug}")" />
 
     <MudGrid Spacing="4">
         <MudItem xs="12" md="8">
             @if (!string.IsNullOrWhiteSpace(theater.Description))
             {
                 <MudText Class="mb-4" Style="white-space: pre-line">@theater.Description</MudText>
+            }
+
+            @if (news.Count > 0)
+            {
+                <section class="mb-5" aria-labelledby="news-heading">
+                    <div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2 mb-2">
+                        <MudText Typo="Typo.h4" HtmlTag="h2" id="news-heading">News &amp; events</MudText>
+                        @if (newsTotal > news.Count)
+                        {
+                            <MudLink Href="@($"theaters/{theater.Slug}/news")">All news &amp; events</MudLink>
+                        }
+                    </div>
+                    <NewsCards Theater="theater" Posts="news" />
+                </section>
             }
 
             <MudText Typo="Typo.h4" Class="mb-2">Showings</MudText>
@@ -104,7 +102,7 @@ else
                         <Aside>
                             <span class="stub-time">@s.StartsLocal.ToString("h:mm tt")</span>
                             <span class="stub-note">ends @s.EndsLocal.ToString("h:mm tt")</span>
-                            <MudButton Href="@($"theaters/{theater.Slug}/showings/{s.Id}")" Variant="Variant.Filled" Color="Color.Primary" Size="Size.Medium">Choose a spot</MudButton>
+                            <MudButton Href="@($"theaters/{theater.Slug}/showings/{s.Id}")" Variant="Variant.Filled" Color="Color.Primary" Size="Size.Medium">@(signedIn ? "Choose a spot" : "Sign in to buy")</MudButton>
                         </Aside>
                     </Stub>
                 }
@@ -176,6 +174,9 @@ else
 
     private Theater? theater;
     private bool staff;
+    private bool signedIn;
+    private List<PostCard> news = [];
+    private int newsTotal;
     private List<ShowtimeView> showings = [];
     private ShowingForecasts? weather;
     private List<ShowtimeView>? weatherFor;
@@ -184,10 +185,12 @@ else
     {
         var user = (await AuthState).User;
         theater = await Theaters.GetBySlugAsync(user, Slug);
+        signedIn = user.Identity?.IsAuthenticated == true;
         // The owner and employees answer the theater's messages rather than send them.
         staff = theater is not null && user.GetUserId() is string userId
             && (theater.OwnerId == userId || user.GetEmployeeTheaterId() == theater.Id);
-        showings = theater is null ? [] : (await Sales.ListOnSaleAsync((await AuthState).User, Slug)).Showings;
+        showings = theater is null ? [] : (await Sales.ListOnSaleAsync(user, Slug)).Showings;
+        (news, newsTotal) = theater is null ? ([], 0) : await Content.ListLivePostsAsync(user, theater);
     }
 
     // The forecast comes once the page is interactive, so a slow weather service never holds up the showings.

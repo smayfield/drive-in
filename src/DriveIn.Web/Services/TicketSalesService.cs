@@ -69,9 +69,9 @@ public sealed partial class TicketSalesService(
     // --- Browsing ---
 
     // The showings of an active theater that haven't started yet, soonest first.
+    // Signed in or not: the theater's page is public (CanBrowse still hides demo and inactive theaters).
     public async Task<(Theater Theater, List<ShowtimeView> Showings)> ListOnSaleAsync(ClaimsPrincipal user, string slug)
     {
-        Guard.RequireUserId(user);
         await using var db = await dbFactory.CreateDbContextAsync();
         var theater = await db.Theaters.AsNoTracking().FirstOrDefaultAsync(t => t.Slug == slug && t.IsActive)
             ?? throw new NotFoundException("Theater not found.");

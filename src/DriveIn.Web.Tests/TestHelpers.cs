@@ -118,6 +118,8 @@ public sealed class TestApp : IAsyncDisposable
         services.AddSingleton(MessageEvents);
         services.AddScoped<NotificationService>();
         services.AddScoped<MessagingService>();
+        services.AddSingleton<HtmlContent>();
+        services.AddScoped<ContentService>();
         Services = services.BuildServiceProvider();
         DbSeeder.SeedAsync(Services).GetAwaiter().GetResult();
     }
