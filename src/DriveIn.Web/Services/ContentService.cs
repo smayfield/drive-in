@@ -267,7 +267,9 @@ public sealed partial class ContentService(
         var theater = await RequireManageAsync(db, user, theaterId);
         if (await db.TheaterImages.CountAsync(i => i.TheaterId == theaterId) >= TheaterImage.MaxPerTheater)
             throw new AppValidationException($"This theater has {TheaterImage.MaxPerTheater} images, the most it can keep. Delete some it no longer uses first.");
-        var name = Path.GetFileName(fileName ?? "").Trim();
+        // Just the file's own name: some browsers send a full Windows path, and on Linux Path.GetFileName doesn't split
+        // on backslashes, so split on both.
+        var name = (fileName ?? "").Split('/', '\\')[^1].Trim();
         var image = new TheaterImage
         {
             TheaterId = theaterId,
