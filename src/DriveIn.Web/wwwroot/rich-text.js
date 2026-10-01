@@ -68,10 +68,7 @@ export async function create(host, html, placeholder, dotnet) {
     });
     // Pasted HTML may carry data: images (or images from other sites); those are dropped here, and the server would
     // drop them anyway. Pasted image files are uploaded below instead.
-    quill.clipboard.addMatcher('IMG', (node, delta) => {
-        const src = node.getAttribute('src') || '';
-        return /^(https?:\/\/[^/]+)?\/?theaters\/[a-z0-9-]+\/images\/\d+/.test(src) ? delta : new (window.Quill.import('delta'))();
-    });
+    quill.clipboard.addMatcher('IMG', (node, delta) => isLibraryImage(node.getAttribute('src')) ? delta : new (window.Quill.import('delta'))());
     // Quill would turn a pasted script's (or style's...) code into text; drop it instead.
     for (const tag of ['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'IFRAME', 'OBJECT', 'EMBED', 'SVG', 'TITLE'])
         quill.clipboard.addMatcher(tag, () => new (window.Quill.import('delta'))());
@@ -104,6 +101,15 @@ export async function create(host, html, placeholder, dotnet) {
         });
     });
     return id;
+}
+
+// A theater library image on this site (relative, or this origin): never one from another site, which the editor
+// would otherwise fetch while showing the paste.
+function isLibraryImage(src) {
+    if (!src) return false;
+    let url;
+    try { url = new URL(src, document.baseURI); } catch { return false; }
+    return url.origin === location.origin && /^\/theaters\/[a-z0-9-]+\/images\/\d+$/.test(url.pathname);
 }
 
 function openPicker(id) {

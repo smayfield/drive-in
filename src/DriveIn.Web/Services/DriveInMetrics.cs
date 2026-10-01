@@ -75,7 +75,7 @@ public sealed class DriveInMetrics
             "In-app messages sent (kind: theater, support; side: customer, theater, support).");
         notificationsEmailed = meter.CreateCounter<long>("drivein.notifications.emailed", "{email}",
             "Notification digests emailed (one email per user per run, however many notifications it lists).");
-        contentPublished = meter.CreateCounter<long>("drivein.content.published", "{page}",
+        contentPublished = meter.CreateCounter<long>("drivein.content.published", "{item}",
             "Theater pages and posts published for the first time (kind: page, post).");
     }
 

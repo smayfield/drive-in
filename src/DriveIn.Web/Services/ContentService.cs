@@ -372,25 +372,31 @@ public sealed partial class ContentService(
             return ([], 0);
         await using var db = await dbFactory.CreateDbContextAsync();
         var now = time.GetUtcNow();
-        var posts = await Live(db.TheaterPages.AsNoTracking().Where(p => p.TheaterId == theater.Id && p.Kind == PageKind.Post), now)
+        var live = Live(db.TheaterPages.AsNoTracking().Where(p => p.TheaterId == theater.Id && p.Kind == PageKind.Post), now);
+        var total = await live.CountAsync();
+        // Ordered and paged in the database, so only one page of posts (and their text) is read. Each key is an
+        // explicit value, so posts without an event date sort the same whatever the database does with nulls.
+        var posts = await live
+            .OrderByDescending(p => p.IsPinned)
+            .ThenByDescending(p => p.EventStartsAt != null && p.EventStartsAt > now ? 1 : 0)
+            .ThenBy(p => p.EventStartsAt != null && p.EventStartsAt > now ? p.EventStartsAt : null)
+            .ThenByDescending(p => p.PublishAt)
+            .ThenByDescending(p => p.Id)
+            .Skip(skip)
+            .Take(take)
             .Select(p => new
             {
-                p.Id, p.Title, p.Slug, p.Summary, p.BodyHtml, p.PublishAt, p.EventStartsAt, p.IsPinned, p.CoverImageId,
+                p.Id, p.Title, p.Slug, p.Summary, BodyHtml = p.Summary == null ? p.BodyHtml : null, p.PublishAt,
+                p.EventStartsAt, p.IsPinned, p.CoverImageId,
                 CoverAlt = p.CoverAlt ?? (p.CoverImage != null ? p.CoverImage.AltText : null),
             })
             .ToListAsync();
-        var ordered = posts
-            .OrderByDescending(p => p.IsPinned)
-            .ThenByDescending(p => p.EventStartsAt > now)
-            .ThenBy(p => p.EventStartsAt > now ? p.EventStartsAt : null)
-            .ThenByDescending(p => p.PublishAt)
-            .ToList();
-        var cards = ordered.Skip(skip).Take(take).Select(p => new PostCard(p.Id, p.Title,
+        var cards = posts.Select(p => new PostCard(p.Id, p.Title,
             $"theaters/{theater.Slug}/news/{p.Slug}",
             p.Summary ?? HtmlContent.Excerpt(HtmlContent.ToPlainText(p.BodyHtml), 200),
             p.PublishAt!.Value, p.EventStartsAt, p.IsPinned,
             p.CoverImageId is int id ? TheaterImage.ImageUrl(theater.Slug, id) : null, p.CoverAlt)).ToList();
-        return (cards, ordered.Count);
+        return (cards, total);
     }
 
     // A live page or post, or (for staff who manage content) any of them, as a preview. Null when there's no such
