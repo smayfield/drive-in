@@ -326,7 +326,7 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   `drivein.jobs.failures{job=hold_expiry|billing|geocoding|business_gauges}`, `drivein.invoices.issued`,
   `drivein.invoices.payments` (dollars), and `drivein.errors.logged{category, level}` (every Error/Critical log message,
   `ErrorCountingLoggerProvider`: failures inside Blazor circuits never become 5xx responses).
-- **`BusinessGauges`** (hosted service) reads totals every minute and reports them as gauges: `drivein.users{kind=customer|employee}`,
+- **`BusinessGauges`** (hosted service, only when `Metrics:OtlpEndpoint` is set) reads totals every minute and reports them as gauges: `drivein.users{kind=customer|employee}`,
   `drivein.theaters{mode}` (active), `drivein.screens.live`, `drivein.showings.upcoming` (next 7 days, live theaters),
   `drivein.theaters.go_live_pending`, `drivein.free_admission.pending`, `drivein.invoices.outstanding` (dollars). Nothing is
   reported before the first read.

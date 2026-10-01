@@ -118,11 +118,12 @@ builder.Services.AddScoped<IAuthorizationHandler, TheaterAuthorizationHandler>()
 // compose; locally, run `docker compose --profile monitoring up`); without it they're recorded but not exported.
 builder.Services.AddSingleton<DriveInMetrics>();
 builder.Logging.Services.AddSingleton<ILoggerProvider, ErrorCountingLoggerProvider>();
-builder.Services.AddSingleton<BusinessGauges>();
-builder.Services.AddHostedService(sp => sp.GetRequiredService<BusinessGauges>());
 var otlpEndpoint = builder.Configuration["Metrics:OtlpEndpoint"];
 if (!string.IsNullOrWhiteSpace(otlpEndpoint))
 {
+    // Totals read from the database every minute; only worth it when they're exported.
+    builder.Services.AddSingleton<BusinessGauges>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<BusinessGauges>());
     builder.Services.AddOpenTelemetry()
         .ConfigureResource(r => r.AddService("drive-in-web", serviceInstanceId: Environment.MachineName))
         .WithMetrics(m => m
