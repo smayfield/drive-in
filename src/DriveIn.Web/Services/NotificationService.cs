@@ -68,6 +68,25 @@ public sealed class NotificationService(
         var recipients = userIds.Distinct().ToList();
         if (recipients.Count == 0)
             return;
+        // Two messages at once can both find no unread notification and both add one; the unique index rejects the
+        // second, which then tries again and updates the first's instead.
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await UpsertMessageNotificationsAsync(recipients, conversationId, from, link);
+                break;
+            }
+            catch (DbUpdateException ex) when (attempt < 3 && DbErrors.IsUniqueViolation(ex))
+            {
+            }
+        }
+        foreach (var userId in recipients)
+            events.Publish(userId);
+    }
+
+    private async Task UpsertMessageNotificationsAsync(List<string> recipients, int conversationId, string from, string link)
+    {
         var now = time.GetUtcNow();
         await using var db = await dbFactory.CreateDbContextAsync();
         var unread = await db.Notifications
@@ -97,8 +116,6 @@ public sealed class NotificationService(
             }
         }
         await db.SaveChangesAsync();
-        foreach (var userId in recipients)
-            events.Publish(userId);
     }
 
     // Opening a conversation reads its notifications.
@@ -116,8 +133,12 @@ public sealed class NotificationService(
         events.Publish(userId);
     }
 
-    internal static string MessageTitle(int count, string from) =>
-        Truncate(count == 1 ? $"New message from {from}" : $"{count} new messages from {from}", Notification.MaxTitleLength);
+    // Titles become email subjects, so a name (people choose their own display names) is kept to one line.
+    internal static string MessageTitle(int count, string from)
+    {
+        var name = string.Join(' ', from.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        return Truncate(count == 1 ? $"New message from {name}" : $"{count} new messages from {name}", Notification.MaxTitleLength);
+    }
 
     // --- The signed-in user's own ---
 

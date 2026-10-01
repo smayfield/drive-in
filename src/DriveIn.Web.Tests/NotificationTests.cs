@@ -186,6 +186,8 @@ public class NotificationTests
     {
         Assert.Equal("New message from Pat", NotificationService.MessageTitle(1, "Pat"));
         Assert.Equal("4 new messages from Pat", NotificationService.MessageTitle(4, "Pat"));
+        // Titles become email subjects: a display name can't break onto new lines.
+        Assert.Equal("New message from Pat Bcc: x", NotificationService.MessageTitle(1, "Pat\r\nBcc: x"));
         var longTitle = NotificationService.MessageTitle(1, new string('x', 500));
         Assert.Equal(Notification.MaxTitleLength, longTitle.Length);
         Assert.EndsWith("…", longTitle);

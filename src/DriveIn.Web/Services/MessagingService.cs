@@ -345,11 +345,24 @@ public sealed class MessagingService(
     {
         var now = time.GetUtcNow();
         var read = await db.ConversationReads.FirstOrDefaultAsync(r => r.ConversationId == conversationId && r.UserId == userId);
-        if (read is null)
-            db.ConversationReads.Add(new ConversationRead { ConversationId = conversationId, UserId = userId, ReadAt = now });
-        else
+        if (read is not null)
+        {
             read.ReadAt = now;
-        await db.SaveChangesAsync();
+            await db.SaveChangesAsync();
+            return;
+        }
+        var added = db.ConversationReads.Add(new ConversationRead { ConversationId = conversationId, UserId = userId, ReadAt = now });
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (DbErrors.IsUniqueViolation(ex))
+        {
+            // The same person opened it twice at once (two tabs): the other request added the row, so update it instead.
+            added.State = EntityState.Detached;
+            await db.ConversationReads.Where(r => r.ConversationId == conversationId && r.UserId == userId)
+                .ExecuteUpdateAsync(s => s.SetProperty(r => r.ReadAt, now));
+        }
     }
 
     private void Done(Conversation conversation, MessageSide side)

@@ -187,6 +187,13 @@ namespace DriveIn.Web.Data.Migrations
                 column: "conversation_id");
 
             migrationBuilder.CreateIndex(
+                name: "ix_notifications_one_unread_per_conversation",
+                table: "notifications",
+                columns: new[] { "user_id", "conversation_id" },
+                unique: true,
+                filter: "read_at IS NULL");
+
+            migrationBuilder.CreateIndex(
                 name: "ix_notifications_read_at_emailed_at_updated_at",
                 table: "notifications",
                 columns: new[] { "read_at", "emailed_at", "updated_at" });

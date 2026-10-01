@@ -982,6 +982,11 @@ namespace DriveIn.Web.Data.Migrations
                     b.HasIndex("ConversationId")
                         .HasDatabaseName("ix_notifications_conversation_id");
 
+                    b.HasIndex("UserId", "ConversationId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_notifications_one_unread_per_conversation")
+                        .HasFilter("read_at IS NULL");
+
                     b.HasIndex("UserId", "ReadAt")
                         .HasDatabaseName("ix_notifications_user_id_read_at");
 

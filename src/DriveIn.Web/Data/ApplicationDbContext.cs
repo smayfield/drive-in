@@ -429,9 +429,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         {
             n.Property(x => x.Kind).HasConversion<string>().HasMaxLength(20);
             n.HasIndex(x => new { x.UserId, x.ReadAt });
+            // One unread notification per person and conversation (NotificationService.NotifyMessageAsync retries on a clash).
+            n.HasIndex(x => new { x.UserId, x.ConversationId }).IsUnique().HasFilter("read_at IS NULL")
+                .HasDatabaseName("ix_notifications_one_unread_per_conversation");
             // The email job's scan: unread and not yet emailed.
             n.HasIndex(x => new { x.ReadAt, x.EmailedAt, x.UpdatedAt });
-            n.HasIndex(x => x.ConversationId);
             n.HasOne(x => x.User)
                 .WithMany()
                 .HasForeignKey(x => x.UserId)
