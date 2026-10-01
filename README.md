@@ -95,7 +95,7 @@ invitee sets a password or continues with Google using the invited address.
   map. A ticket is one spot (one car) at one showing.
 - Customers can find **theaters near them** by ZIP code, city or their browser's location. Theater coordinates are
   looked up from the address with OpenStreetMap's Nominatim (`Geocoding:Provider`, no key needed; set `None` to turn
-  lookups off). Its usage policy asks for a contact address in the User-Agent: `Geocoding:ContactEmail`, falling back
+  lookups off). Its usage policy asks for a contact address in the User-Agent: `Geocoding:ContactEmail` (in production, SSM `/drive-in/geocoding-contact-email`), falling back
   to `Company:ContactEmail`. The public server allows about one lookup a second, which is fine at this scale; a busier
   site would switch `IGeocoder` to a paid provider.
 - Choosing a spot **holds** it for 10 minutes while the buyer picks a ticket option and add-ons and pays; the first
@@ -251,8 +251,10 @@ All stacks are in `us-east-1`. The domain is registered at GoDaddy with nameserv
    aws ssm put-parameter --type SecureString --name /drive-in/google-client-id     --value ...
    aws ssm put-parameter --type SecureString --name /drive-in/google-client-secret --value ...
    aws ssm put-parameter --type SecureString --name /drive-in/admin-email          --value you@example.com
+   aws ssm put-parameter --type SecureString --name /drive-in/geocoding-contact-email --value you@example.com
    ```
-   (`/drive-in/serve-apex` is managed by the app stack.)
+   (`/drive-in/serve-apex` is managed by the app stack. `geocoding-contact-email` is optional: it's the contact
+   address Nominatim's usage policy asks for, and without it the app falls back to `Company:ContactEmail`.)
 4. **Server**, serving `drive-in.online` (`www` and `app` redirect to it). Run from the repo root:
    ```sh
    aws cloudformation deploy --stack-name drive-in-app --template-file infra/app.yml \

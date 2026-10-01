@@ -133,7 +133,10 @@ if (geocodingProvider.Equals("Nominatim", StringComparison.OrdinalIgnoreCase))
     builder.Services.AddHttpClient(NominatimGeocoder.HttpClientName, (sp, client) =>
     {
         var options = sp.GetRequiredService<IOptions<GeocodingOptions>>().Value;
-        var contact = options.ContactEmail ?? sp.GetRequiredService<IOptions<CompanyOptions>>().Value.ContactEmail;
+        // Blank (as the production compose file passes it when unset) falls back too.
+        var contact = string.IsNullOrWhiteSpace(options.ContactEmail)
+            ? sp.GetRequiredService<IOptions<CompanyOptions>>().Value.ContactEmail
+            : options.ContactEmail;
         // Requests are relative ("search?..."), so the base needs its trailing slash to keep any path.
         client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
         client.Timeout = TimeSpan.FromSeconds(5);

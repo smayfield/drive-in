@@ -26,6 +26,7 @@ DB_PASSWORD=$(param db-password)
 GOOGLE_CLIENT_ID=$(param google-client-id)
 GOOGLE_CLIENT_SECRET=$(param google-client-secret)
 ADMIN_EMAIL=$(param admin-email)
+GEOCODING_CONTACT_EMAIL=$(param geocoding-contact-email 2>/dev/null || true)
 EOF
 umask 022
 
