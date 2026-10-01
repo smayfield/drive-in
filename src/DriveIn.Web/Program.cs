@@ -126,7 +126,6 @@ builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityEmailSender
 builder.Services.AddSingleton(TimeProvider.System);
 
 // Theater coordinates and "near me" searches. Nominatim (OpenStreetMap) needs no key but allows one request a second.
-builder.Services.AddMemoryCache();
 builder.Services.Configure<GeocodingOptions>(builder.Configuration.GetSection(GeocodingOptions.Section));
 var geocodingProvider = builder.Configuration[$"{GeocodingOptions.Section}:Provider"] ?? "Nominatim";
 if (geocodingProvider.Equals("Nominatim", StringComparison.OrdinalIgnoreCase))

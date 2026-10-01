@@ -96,7 +96,7 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 - **Location** (`Theater.Latitude`/`Longitude`): looked up from the address (`IGeocoder`, `Geo.AddressQuery`) when a profile
   save changes the address or the theater has none, and at sign-up from the city and state; the editor can type them instead
   (both or neither, range-checked), which skips the lookup, or clear them to look them up again. A lookup that finds nothing leaves them blank without blocking
-  the save, and the form warns the theater won't appear in near-me searches. `TheaterGeocodingBackfill` looks up active theaters
+  the save, and the form warns the theater isn't on the map yet (so not in near-me searches). `TheaterGeocodingBackfill` looks up active theaters
   with an address but no coordinates once at startup.
 - **Season:** optional opens/closes (either end optional). Showings must fall inside; can't be changed to exclude scheduled showings.
 - **Logo** (`theater_logos`): JPG/GIF/PNG, max 2 MB, type sniffed from bytes (no SVG), stored in DB; served at

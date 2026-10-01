@@ -37,8 +37,8 @@
         @if (Geo.Of(Model) is null && Model.Id != 0 && Geo.AddressQuery(Model) is not null)
         {
             <MudText Typo="Typo.body2" Color="Color.Warning">
-                We couldn't find this address on the map, so the theater won't show up when customers search near them.
-                Check the address, or enter the coordinates yourself.
+                This theater isn't on the map yet, so it won't show up when customers search near them. Saving looks it up
+                from the address; if it still isn't found, check the address or enter the coordinates yourself.
             </MudText>
         }
         else
