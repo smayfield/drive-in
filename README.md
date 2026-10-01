@@ -5,7 +5,7 @@ lot capacity, concessions, and more). A .NET 10 Blazor Web App (Interactive Serv
 Core Identity (local accounts + Google), PostgreSQL via EF Core, and SES for email, running in
 Docker on one EC2 server. The setup mirrors LegoList.
 
-For the full list of features and behaviors (rules, limits, routes, permission keys), see [features.md](features.md).
+For the full list of features and behaviors (rules, limits, routes, permission keys), see [features.md](features.md); for the important URLs by role, [sitemap.md](sitemap.md).
 
 ## Layout
 
