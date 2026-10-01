@@ -13,7 +13,7 @@ For the full list of features and behaviors (rules, limits, routes, permission k
 |---|---|
 | `src/DriveIn.Web/` | The app: marketing home page, Identity account pages, theater browsing, owner/employee management, admin UI. |
 | `src/DriveIn.Web/Data/Migrations/` | EF Core migrations (the schema's source of truth). |
-| `src/DriveIn.Web.Tests/` | xUnit tests: authorization matrix and services, against a real DI container with EF InMemory. |
+| `src/DriveIn.Web.Tests/` | xUnit tests: authorization matrix and services against a real DI container with EF InMemory, and bUnit tests of the pages (`Pages/`). |
 | `deploy/` | Production compose file, Caddyfiles, `deploy.sh`, `backup.sh` (copied to the server on each deploy). |
 | `deploy/grafana/`, `deploy/victoriametrics/` | The metrics site: Grafana's data sources, dashboards and alert rules, and what VictoriaMetrics scrapes. |
 | `infra/dns.yml` | CloudFormation: Route 53 hosted zone. |
