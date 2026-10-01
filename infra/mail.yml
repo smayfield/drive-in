@@ -1,0 +1,190 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  drive-in.online inbound email: mail to any address at the domain is received by
+  Amazon SES (MX record), stored in a private S3 bucket and forwarded by a small
+  Lambda to one mailbox. SES only sends from verified identities, so forwards come
+  from forwarder@<domain> with the original sender in Reply-To. Deploy in us-east-1
+  after email.yml, then activate the rule set once (see the README).
+
+Parameters:
+  DomainName:
+    Type: String
+    Default: drive-in.online
+  ForwardTo:
+    Type: String
+    Description: The mailbox every message is forwarded to. Kept out of the repo (it's public).
+    AllowedPattern: ".+@.+"
+
+Resources:
+  InboundBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules: [{ ObjectOwnership: BucketOwnerEnforced }]
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+      LifecycleConfiguration:
+        Rules:
+          - { Id: expire-mail, Status: Enabled, ExpirationInDays: 30 }
+  InboundBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref InboundBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ses.amazonaws.com }
+            Action: s3:PutObject
+            Resource: !Sub ${InboundBucket.Arn}/inbound/*
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+                aws:SourceArn: !Sub arn:aws:ses:${AWS::Region}:${AWS::AccountId}:receipt-rule-set/drive-in-inbound:receipt-rule/forward-all
+
+  ForwarderRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: forward
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub ${InboundBucket.Arn}/inbound/*
+              - Effect: Allow
+                Action: [ses:SendEmail, ses:SendRawEmail]
+                Resource: !Sub arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/${DomainName}
+                Condition:
+                  StringEquals: { "ses:FromAddress": !Sub "forwarder@${DomainName}" }
+
+  # Keep under CloudFormation's 4 KB inline limit. Tested by infra/test_mail_forwarder.py.
+  Forwarder:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: Forwards mail received for the domain to one mailbox.
+      Runtime: python3.13
+      Architectures: [arm64]
+      Handler: index.handler
+      MemorySize: 256
+      Timeout: 30
+      Role: !GetAtt ForwarderRole.Arn
+      Environment:
+        Variables:
+          BUCKET: !Ref InboundBucket
+          FORWARD_TO: !Ref ForwardTo
+          FROM_ADDRESS: !Sub forwarder@${DomainName}
+          DOMAIN: !Ref DomainName
+      Code:
+        ZipFile: |
+          import os
+          from email import policy
+          from email.parser import BytesParser
+          from email.utils import formataddr, parseaddr
+
+          import boto3
+
+          MAX_BYTES = 39 * 1024 * 1024  # SES's raw message limit is 40 MB
+          DROP = ("DKIM-Signature", "Return-Path", "Sender", "Message-ID", "X-SES-Spam-Verdict",
+                  "X-SES-Virus-Verdict", "X-SES-Receipt", "X-SES-DKIM-Signature")
+
+
+          def rewrite(raw, recipients, from_address, domain):
+              """The message re-addressed for forwarding: From is ours, the sender moves to Reply-To."""
+              msg = BytesParser(policy=policy.SMTP).parsebytes(raw)
+              name, sender = parseaddr(str(msg.get("From", "")))
+              for header in DROP:
+                  del msg[header]
+              if "Reply-To" not in msg and sender:
+                  msg["Reply-To"] = formataddr((name, sender))
+              del msg["From"]
+              msg["From"] = formataddr((f"{name or sender or 'Unknown'} via {domain}", from_address))
+              msg["X-Original-To"] = ", ".join(recipients)
+              return msg.as_bytes()
+
+
+          def handler(event, context):
+              ses = event["Records"][0]["ses"]
+              mail, receipt = ses["mail"], ses["receipt"]
+              if "FAIL" in (receipt["spamVerdict"]["status"], receipt["virusVerdict"]["status"]):
+                  print(f"Dropped {mail['messageId']}: spam or virus")
+                  return
+              from_address = os.environ["FROM_ADDRESS"]
+              if mail["source"].lower() == from_address.lower():
+                  print(f"Dropped {mail['messageId']}: our own forward (loop)")
+                  return
+              obj = boto3.client("s3").get_object(Bucket=os.environ["BUCKET"], Key="inbound/" + mail["messageId"])
+              raw = obj["Body"].read()
+              data = rewrite(raw, receipt["recipients"], from_address, os.environ["DOMAIN"])
+              if len(data) > MAX_BYTES:
+                  print(f"Dropped {mail['messageId']}: {len(data)} bytes is over SES's limit")
+                  return
+              boto3.client("sesv2").send_email(
+                  FromEmailAddress=from_address,
+                  Destination={"ToAddresses": [os.environ["FORWARD_TO"]]},
+                  Content={"Raw": {"Data": data}})
+              print(f"Forwarded {mail['messageId']} for {', '.join(receipt['recipients'])}")
+  ForwarderPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref Forwarder
+      Action: lambda:InvokeFunction
+      Principal: ses.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub arn:aws:ses:${AWS::Region}:${AWS::AccountId}:receipt-rule-set/drive-in-inbound:receipt-rule/forward-all
+  ForwarderLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${Forwarder}
+      RetentionInDays: 30
+
+  # A region has one active rule set; CloudFormation can't activate it, so the README has the one-time command.
+  RuleSet:
+    Type: AWS::SES::ReceiptRuleSet
+    Properties:
+      RuleSetName: drive-in-inbound
+  ForwardAll:
+    Type: AWS::SES::ReceiptRule
+    DependsOn: [InboundBucketPolicy, ForwarderPermission]
+    Properties:
+      RuleSetName: !Ref RuleSet
+      Rule:
+        Name: forward-all
+        Enabled: true
+        ScanEnabled: true
+        TlsPolicy: Optional
+        Recipients: [!Ref DomainName] # the whole domain: any address
+        Actions:
+          - S3Action: { BucketName: !Ref InboundBucket, ObjectKeyPrefix: inbound/ }
+          - LambdaAction: { FunctionArn: !GetAtt Forwarder.Arn, InvocationType: Event }
+
+  # Mail for the domain goes to SES. (mail.<domain>'s MX in email.yml is for bounces of outgoing mail.)
+  Mx:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !ImportValue drive-in-HostedZoneId
+      Name: !Ref DomainName
+      Type: MX
+      TTL: "1800"
+      ResourceRecords: [!Sub "10 inbound-smtp.${AWS::Region}.amazonaws.com"]
+
+Outputs:
+  InboundBucket:
+    Value: !Ref InboundBucket
+  ForwarderLogGroup:
+    Value: !Ref ForwarderLogs

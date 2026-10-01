@@ -18,6 +18,7 @@ For the full list of features and behaviors (rules, limits, routes, permission k
 | `deploy/grafana/`, `deploy/victoriametrics/` | The metrics site: Grafana's data sources, dashboards and alert rules, and what VictoriaMetrics scrapes. |
 | `infra/dns.yml` | CloudFormation: Route 53 hosted zone. |
 | `infra/email.yml` | CloudFormation: SES domain identity (DKIM, MAIL FROM). |
+| `infra/mail.yml` | CloudFormation: inbound mail. Any address at the domain is forwarded to one mailbox (SES receiving, S3, a small Lambda). |
 | `infra/app.yml` | CloudFormation: VPC, EC2, EIP, ECR, ops bucket, snapshots, DNS records, alerts topic and alarms, GitHub deploy role. |
 | `.github/workflows/deploy.yml` | On merge to `main`: test, build ARM64 images, deploy via SSM. |
 
@@ -241,6 +242,19 @@ All stacks are in `us-east-1`. The domain is registered at GoDaddy with nameserv
 1. **Email.** `aws cloudformation deploy --stack-name drive-in-email --template-file infra/email.yml`.
    Then request SES production access (Account dashboard → Request production access); until it's
    granted, SES only delivers to verified addresses.
+
+   **Inbound mail** (optional): every address at the domain (`info@`, `tickets@`, `anything@`) forwards to one
+   mailbox. The address is a parameter, since this repo is public:
+   ```sh
+   aws cloudformation deploy --stack-name drive-in-mail --template-file infra/mail.yml \
+     --capabilities CAPABILITY_IAM --parameter-overrides ForwardTo=you@example.com
+   aws ses set-active-receipt-rule-set --rule-set-name drive-in-inbound   # once; CloudFormation can't activate it
+   ```
+   It adds the domain's MX record (pointing at SES). SES only sends from our own domain, so forwards come from
+   "*Sender* via drive-in.online" `<forwarder@drive-in.online>`; Reply goes to the original sender (Reply-To). SES's
+   spam and virus scan runs first and flagged mail is dropped. Messages are kept 30 days in the stack's bucket, and
+   the forwarder logs to CloudWatch (`/aws/lambda/drive-in-mail-Forwarder-…`). Cost: SES receiving is about $0.10 per
+   1,000 messages; the Lambda and bucket stay in the free tier. Tests: `python infra/test_mail_forwarder.py`.
 2. **Google OAuth client** (Google Cloud console → Credentials → OAuth client ID, Web application).
    Authorized redirect URIs: `https://drive-in.online/signin-google`,
    `https://app.drive-in.online/signin-google`, `http://localhost:5280/signin-google`.
