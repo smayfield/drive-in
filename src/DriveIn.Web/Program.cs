@@ -134,7 +134,8 @@ if (geocodingProvider.Equals("Nominatim", StringComparison.OrdinalIgnoreCase))
     {
         var options = sp.GetRequiredService<IOptions<GeocodingOptions>>().Value;
         var contact = options.ContactEmail ?? sp.GetRequiredService<IOptions<CompanyOptions>>().Value.ContactEmail;
-        client.BaseAddress = new Uri(options.BaseUrl);
+        // Requests are relative ("search?..."), so the base needs its trailing slash to keep any path.
+        client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
         client.Timeout = TimeSpan.FromSeconds(5);
         client.DefaultRequestHeaders.UserAgent.ParseAdd($"DriveInOnline/1.0{(string.IsNullOrWhiteSpace(contact) ? "" : $" ({contact})")}");
     });

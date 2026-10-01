@@ -128,23 +128,29 @@ else
         theaters = null;
         placeNotFound = false;
         double? radius = Radius == AnyDistance ? null : Radius;
-        if (UsingPosition)
+        try
         {
-            theaters = Nearest(await Theaters.ListNearAsync(User, new GeoPoint(Lat!.Value, Lon!.Value), radius));
-        }
-        else if (!string.IsNullOrWhiteSpace(Near))
-        {
-            var from = await Theaters.FindPlaceAsync(User, Near);
-            if (from is null)
+            if (UsingPosition)
             {
-                (theaters, placeNotFound) = ([], true);
-                throw new AppValidationException($"We couldn't find \"{Near.Trim()}\". Try a ZIP code, or a city and state.");
+                theaters = Nearest(await Theaters.ListNearAsync(User, new GeoPoint(Lat!.Value, Lon!.Value), radius));
             }
-            theaters = Nearest(await Theaters.ListNearAsync(User, from, radius));
+            else if (!string.IsNullOrWhiteSpace(Near))
+            {
+                var from = await Theaters.FindPlaceAsync(User, Near)
+                    ?? throw new AppValidationException($"We couldn't find \"{Near.Trim()}\". Try a ZIP code, or a city and state.");
+                theaters = Nearest(await Theaters.ListNearAsync(User, from, radius));
+            }
+            else
+            {
+                theaters = (await Theaters.ListActiveAsync(User)).Select(t => (t, (double?)null)).ToList();
+            }
         }
-        else
+        finally
         {
-            theaters = (await Theaters.ListActiveAsync(User)).Select(t => (t, (double?)null)).ToList();
+            // A search that failed (a place that can't be found, a bad location in the link) shows its error, not a
+            // spinner; placeNotFound keeps the "no theaters" line from repeating it.
+            if (theaters is null)
+                (theaters, placeNotFound) = ([], true);
         }
     }
 
