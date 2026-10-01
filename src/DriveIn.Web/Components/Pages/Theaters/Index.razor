@@ -19,7 +19,7 @@
         <MudSelect T="int" @bind-Value="radiusInput" Label="Within" Variant="Variant.Outlined" Margin="Margin.Dense">
             @foreach (var r in RadiusChoices)
             {
-                <MudSelectItem Value="r">@(r == AnyDistance ? "Any distance" : $"{r} miles")</MudSelectItem>
+                <MudSelectItem Value="@r">@(r == AnyDistance ? "Any distance" : $"{r} miles")</MudSelectItem>
             }
         </MudSelect>
     </div>

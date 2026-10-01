@@ -37,14 +37,14 @@
         @if (Geo.Of(Model) is null && Model.Id != 0 && Geo.AddressQuery(Model) is not null)
         {
             <MudText Typo="Typo.body2" Color="Color.Warning">
-                This theater isn't on the map yet, so it won't show up when customers search near them. Saving looks it up
+                This theater isn't on the map yet, so it won't show up when customers search near them. Saving tries to look it up
                 from the address; if it still isn't found, check the address or enter the coordinates yourself.
             </MudText>
         }
         else
         {
             <MudText Typo="Typo.body2" Class="muted">
-                Used for "near me" searches and the weather. Saving looks them up from the address unless you enter them yourself; clear them to look them up again.
+                Used for "near me" searches and the weather. Saving looks them up from the address when it can, unless you enter them yourself; clear them to look them up again.
             </MudText>
         }
     </MudItem>
