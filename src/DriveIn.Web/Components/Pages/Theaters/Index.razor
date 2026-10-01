@@ -116,10 +116,12 @@ else
     private bool placeNotFound;
 
     private bool UsingPosition => Lat is not null && Lon is not null;
-    private bool Searching => UsingPosition || !string.IsNullOrWhiteSpace(Near);
+    // Only one of lat/lon: a truncated or hand-edited link, shown as an invalid location rather than ignored.
+    private bool PartialPosition => (Lat is null) != (Lon is null);
+    private bool Searching => UsingPosition || PartialPosition || !string.IsNullOrWhiteSpace(Near);
     private int Radius => RadiusParam is int r && RadiusChoices.Contains(r) ? r : DefaultRadius;
     private string RadiusText => Radius == AnyDistance ? "near" : $"within {Radius} miles of";
-    private string PlaceText => UsingPosition ? "your location" : Near!.Trim();
+    private string PlaceText => UsingPosition ? "your location" : Near?.Trim() ?? "";
 
     protected override async Task LoadAsync()
     {
@@ -130,6 +132,10 @@ else
         double? radius = Radius == AnyDistance ? null : Radius;
         try
         {
+            if (PartialPosition)
+            {
+                throw new AppValidationException("That location isn't valid.");
+            }
             if (UsingPosition)
             {
                 theaters = Nearest(await Theaters.ListNearAsync(User, new GeoPoint(Lat!.Value, Lon!.Value), radius));
