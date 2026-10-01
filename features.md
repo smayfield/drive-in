@@ -135,7 +135,7 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   leaves out theaters without coordinates, and sorts nearest first (haversine, `Geo.DistanceMiles`). The search is in the
   query string (`near` or `lat`+`lon`, `radius`). Without a search the list is alphabetical.
 - **Geocoding** (`Geocoding:Provider`, case-insensitive; an unknown value fails at startup): `Nominatim` (OpenStreetMap, default; `NominatimGeocoder`) or `None`. Nominatim allows one
-  request a second, so lookups are serialized and spaced, and results (misses too) are cached in memory for a day; a bare
+  request a second, so lookups are serialized and spaced, and results (misses too) are cached in memory for a day (up to 10,000 places); a bare
   5-digit query is looked up as a US postcode. Failures return "not found" and are logged.
 - Routes: `/theaters` (list), `/theaters/{slug}` (details, showings), `/theaters/{slug}/showings/{showtimeId}` (spot map +
   checkout), `/tickets` (My tickets), `/tickets/{code}`.

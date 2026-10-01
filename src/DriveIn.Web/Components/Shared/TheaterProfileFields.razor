@@ -34,7 +34,7 @@
                          Variant="Variant.Outlined" Margin="Margin.Dense" />
     </MudItem>
     <MudItem xs="12" md="6" Class="d-flex align-items-center">
-        @if (Model.Latitude is null && Model.Id != 0 && Geo.AddressQuery(Model) is not null)
+        @if (Geo.Of(Model) is null && Model.Id != 0 && Geo.AddressQuery(Model) is not null)
         {
             <MudText Typo="Typo.body2" Color="Color.Warning">
                 We couldn't find this address on the map, so the theater won't show up when customers search near them.

@@ -73,13 +73,17 @@ public sealed class NullGeocoder : IGeocoder
 }
 
 // OpenStreetMap's Nominatim. The public server allows at most one request a second, so calls are serialized and spaced
-// out, and results (misses too) are cached for a day.
+// out, and results (misses too) are cached for a day. The cache is its own and capped, since customers choose the
+// queries.
 public sealed partial class NominatimGeocoder(
-    IHttpClientFactory httpFactory, IMemoryCache cache, TimeProvider time, ILogger<NominatimGeocoder> logger) : IGeocoder
+    IHttpClientFactory httpFactory, TimeProvider time, ILogger<NominatimGeocoder> logger) : IGeocoder, IDisposable
 {
     public const string HttpClientName = "nominatim";
+    private const int MaxCachedPlaces = 10_000;
     private static readonly TimeSpan MinInterval = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan CacheFor = TimeSpan.FromHours(24);
+
+    private readonly MemoryCache cache = new(new MemoryCacheOptions { SizeLimit = MaxCachedPlaces });
 
     private readonly SemaphoreSlim gate = new(1, 1);
     private DateTimeOffset lastCall = DateTimeOffset.MinValue;
@@ -103,7 +107,7 @@ public sealed partial class NominatimGeocoder(
                 await Task.Delay(wait, time, ct);
             lastCall = time.GetUtcNow();
             var point = await LookUpAsync(normalized, ct);
-            cache.Set(key, point, CacheFor);
+            cache.Set(key, point, new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = CacheFor, Size = 1 });
             return point;
         }
         catch (Exception ex) when ((ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException) && !ct.IsCancellationRequested)
@@ -116,6 +120,12 @@ public sealed partial class NominatimGeocoder(
         {
             gate.Release();
         }
+    }
+
+    public void Dispose()
+    {
+        cache.Dispose();
+        gate.Dispose();
     }
 
     private async Task<GeoPoint?> LookUpAsync(string query, CancellationToken ct)

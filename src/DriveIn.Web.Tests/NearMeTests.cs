@@ -1,7 +1,6 @@
 using System.Net;
 using DriveIn.Web.Data;
 using DriveIn.Web.Services;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.EntityFrameworkCore;
 
@@ -214,7 +213,7 @@ public class NearMeTests
     }
 
     private static NominatimGeocoder Nominatim(StubHandler handler) =>
-        new(new StubFactory(handler), new MemoryCache(new MemoryCacheOptions()), TimeProvider.System, NullLogger<NominatimGeocoder>.Instance);
+        new(new StubFactory(handler), TimeProvider.System, NullLogger<NominatimGeocoder>.Instance);
 
     private static HttpResponseMessage Json(string body) =>
         new(HttpStatusCode.OK) { Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json") };
