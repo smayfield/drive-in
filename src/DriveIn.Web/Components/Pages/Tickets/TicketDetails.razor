@@ -137,13 +137,15 @@ else
 
     // The forecast for an upcoming showing, once the page is interactive so a slow weather service doesn't hold it up.
     // Keyed on the loaded ticket, not the route, so navigating to another ticket mid-load can't leave it without one.
-    // Reloading the same ticket (after admitting it) makes a new lookup and asks again; the forecast is cached.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (lookup is null || ReferenceEquals(weatherFor, lookup))
             return;
         var forLookup = lookup;
         (weatherFor, weather) = (forLookup, null);
+        // An admitted car is at the show; the page doesn't show the forecast then, so don't fetch it.
+        if (forLookup.View.AdmittedLocal is not null)
+            return;
         var found = await Weather.ForShowingsAsync(User, forLookup.View.Theater, [forLookup.View.Showing]);
         if (ReferenceEquals(lookup, forLookup))
         {
