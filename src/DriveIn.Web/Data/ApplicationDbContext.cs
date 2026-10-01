@@ -30,6 +30,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<Invoice> Invoices => Set<Invoice>();
     public DbSet<InvoiceLine> InvoiceLines => Set<InvoiceLine>();
     public DbSet<InvoicePayment> InvoicePayments => Set<InvoicePayment>();
+    public DbSet<Conversation> Conversations => Set<Conversation>();
+    public DbSet<Message> Messages => Set<Message>();
+    public DbSet<ConversationRead> ConversationReads => Set<ConversationRead>();
+    public DbSet<Notification> Notifications => Set<Notification>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -369,6 +373,72 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             m.HasOne(x => x.Role)
                 .WithMany(r => r.Members)
                 .HasForeignKey(x => x.RoleId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<Conversation>(c =>
+        {
+            c.Property(x => x.Kind).HasConversion<string>().HasMaxLength(20);
+            c.HasIndex(x => new { x.TheaterId, x.LastMessageAt });
+            c.HasIndex(x => new { x.CustomerId, x.LastMessageAt });
+            c.HasIndex(x => new { x.Kind, x.LastMessageAt });
+            c.HasOne(x => x.Theater)
+                .WithMany()
+                .HasForeignKey(x => x.TheaterId)
+                .OnDelete(DeleteBehavior.Cascade);
+            // Support conversations outlive the theater they were about.
+            c.HasOne(x => x.AboutTheater)
+                .WithMany()
+                .HasForeignKey(x => x.AboutTheaterId)
+                .OnDelete(DeleteBehavior.SetNull);
+            c.HasOne(x => x.Customer)
+                .WithMany()
+                .HasForeignKey(x => x.CustomerId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<Message>(m =>
+        {
+            m.Property(x => x.Side).HasConversion<string>().HasMaxLength(20);
+            m.HasIndex(x => new { x.ConversationId, x.SentAt });
+            m.HasOne(x => x.Conversation)
+                .WithMany(c => c.Messages)
+                .HasForeignKey(x => x.ConversationId)
+                .OnDelete(DeleteBehavior.Cascade);
+            m.HasOne(x => x.Sender)
+                .WithMany()
+                .HasForeignKey(x => x.SenderId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<ConversationRead>(r =>
+        {
+            r.HasKey(x => new { x.ConversationId, x.UserId });
+            r.HasIndex(x => x.UserId);
+            r.HasOne(x => x.Conversation)
+                .WithMany()
+                .HasForeignKey(x => x.ConversationId)
+                .OnDelete(DeleteBehavior.Cascade);
+            r.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<Notification>(n =>
+        {
+            n.Property(x => x.Kind).HasConversion<string>().HasMaxLength(20);
+            n.HasIndex(x => new { x.UserId, x.ReadAt });
+            // The email job's scan: unread and not yet emailed.
+            n.HasIndex(x => new { x.ReadAt, x.EmailedAt, x.UpdatedAt });
+            n.HasIndex(x => x.ConversationId);
+            n.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            n.HasOne(x => x.Conversation)
+                .WithMany()
+                .HasForeignKey(x => x.ConversationId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

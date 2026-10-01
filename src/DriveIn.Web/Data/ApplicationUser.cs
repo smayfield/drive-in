@@ -12,6 +12,10 @@ public class ApplicationUser : IdentityUser
 
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
+    // Email unread notifications (a link, never the message itself). Account → Notifications.
+    [PersonalData]
+    public bool EmailNotifications { get; set; } = true;
+
     public List<Theater> OwnedTheaters { get; set; } = [];
 
     // Employee accounts only: roles within EmployeeTheater.

@@ -1,0 +1,104 @@
+@page "/admin/messages"
+@page "/admin/messages/{ConversationId:int}"
+@attribute [Authorize(Policy = Policies.Admin)]
+@inherits AppComponentBase
+@implements IDisposable
+@inject MessagingService Messaging
+@inject TheaterService Theaters
+@inject MessageEvents Events
+
+@* Support: conversations people start with us (reply, close). Theaters: every theater's conversations with customers,
+   read-only, for oversight. *@
+
+<PageTitle>Messages · Admin · Drive-In Online</PageTitle>
+
+<AdminHeader Title="Messages" Current="messages" />
+
+<Alerts Error="@Error" />
+
+<MudGrid Spacing="4">
+    <MudItem xs="12" md="5">
+        <nav class="manage-tabs manage-subtabs mb-2" aria-label="Conversations">
+            <a class="manage-tab @(IsSupport && !Closed ? "active" : null)" href="admin/messages" aria-current="@(IsSupport && !Closed ? "page" : null)">Support</a>
+            <a class="manage-tab @(IsSupport && Closed ? "active" : null)" href="admin/messages?closed=true" aria-current="@(IsSupport && Closed ? "page" : null)">Support (closed)</a>
+            <a class="manage-tab @(IsSupport ? null : "active")" href="@TheatersHref(TheaterId)" aria-current="@(IsSupport ? null : "page")">Theater conversations</a>
+        </nav>
+        @if (!IsSupport)
+        {
+            <MudSelect T="int?" Value="TheaterId" ValueChanged="FilterTheater" Label="Theater" Variant="Variant.Outlined" Dense Class="mb-2">
+                <MudSelectItem T="int?" Value="null">All theaters</MudSelectItem>
+                @foreach (var t in theaters)
+                {
+                    var id = t.Id;
+                    <MudSelectItem T="int?" Value="id">@t.Name</MudSelectItem>
+                }
+            </MudSelect>
+        }
+        <ConversationList Items="items" Href="ItemHref" ActiveId="ConversationId" Show="@(IsSupport ? "customer" : "both")"
+                          Empty="@(IsSupport ? (Closed ? "No closed support conversations." : "No open support conversations.") : "No conversations.")" />
+    </MudItem>
+    <MudItem xs="12" md="7">
+        @if (ConversationId is int conversationId)
+        {
+            <MessageThread ConversationId="conversationId" Changed="ReloadListAsync" />
+        }
+        else
+        {
+            <MudText Class="muted">Choose a conversation to read it.</MudText>
+        }
+    </MudItem>
+</MudGrid>
+
+@code {
+    [Parameter] public int? ConversationId { get; set; }
+    [SupplyParameterFromQuery(Name = "view")] public string? View { get; set; }
+    [SupplyParameterFromQuery(Name = "closed")] public bool Closed { get; set; }
+    [SupplyParameterFromQuery(Name = "theater")] public int? TheaterId { get; set; }
+
+    private List<ConversationSummary> items = [];
+    private List<Theater> theaters = [];
+
+    private bool IsSupport => View != "theaters";
+
+    protected override void OnInitialized() => Events.Changed += OnConversationChanged;
+
+    protected override async Task LoadAsync()
+    {
+        if (!IsSupport && theaters.Count == 0)
+            theaters = await Theaters.ListManagedAsync(User);
+        await LoadListAsync();
+    }
+
+    private async Task LoadListAsync() => items = IsSupport
+        ? await Messaging.ListSupportAsync(User, Closed)
+        : await Messaging.ListTheaterConversationsAsync(User, TheaterId);
+
+    private Task ReloadListAsync() => RunAsync(LoadListAsync);
+
+    private string ItemHref(ConversationSummary c) => IsSupport
+        ? $"admin/messages/{c.Id}{(Closed ? "?closed=true" : "")}"
+        : $"admin/messages/{c.Id}?view=theaters{(TheaterId is int id ? $"&theater={id}" : "")}";
+
+    private static string TheatersHref(int? theaterId) =>
+        $"admin/messages?view=theaters{(theaterId is int id ? $"&theater={id}" : "")}";
+
+    private void FilterTheater(int? theaterId) => Nav.NavigateTo(TheatersHref(theaterId));
+
+    private void OnConversationChanged(int conversationId)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                await LoadListAsync();
+                StateHasChanged();
+            }
+            catch (Exception)
+            {
+                // The circuit may be going away; the next change or action refreshes again.
+            }
+        });
+    }
+
+    public void Dispose() => Events.Changed -= OnConversationChanged;
+}

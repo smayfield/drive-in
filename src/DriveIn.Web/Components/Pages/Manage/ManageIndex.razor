@@ -42,6 +42,10 @@ else
     {
         <MudText Class="mt-3"><MudLink Href="get-started">+ Sign up another theater</MudLink></MudText>
     }
+    @if (!User.IsAdmin())
+    {
+        <MudText Class="mt-1">Questions? <MudLink Href="messages/new">Message Drive-In Online</MudLink>.</MudText>
+    }
 }
 
 @code {

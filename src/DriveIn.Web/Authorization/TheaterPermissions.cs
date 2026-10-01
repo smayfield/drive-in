@@ -29,6 +29,8 @@ public static class TheaterPermissions
     public const string ViewReports = "reports.view";
     public const string ViewBilling = "billing.view";
     public const string ManageBilling = "billing.manage";
+    public const string ViewMessages = "messages.view";
+    public const string ReplyMessages = "messages.reply";
 
     public static readonly IReadOnlyList<TheaterPermission> All =
     [
@@ -51,6 +53,8 @@ public static class TheaterPermissions
         new(ViewReports, "Reports", "View reports", "See ticket sales, attendance and gift card reports (sold, redeemed and still owed) for any dates, and download them as CSV."),
         new(ViewBilling, "Billing", "View billing", "See the theater's plan, its invoices and receipts, and what's owed."),
         new(ManageBilling, "Billing", "Manage billing", "Change where invoices are emailed, and cancel the theater's subscription."),
+        new(ViewMessages, "Messages", "View messages", "Read the messages customers send the theater, and get notified of new ones."),
+        new(ReplyMessages, "Messages", "Reply to messages", "Reply to customers' messages, and close or reopen conversations. Needs \"View messages\" to see them."),
     ];
 
     public static readonly IReadOnlySet<string> AllKeys = All.Select(p => p.Key).ToHashSet();

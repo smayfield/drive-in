@@ -51,6 +51,8 @@ public sealed class TestApp : IAsyncDisposable
     public FakeEmailSender Email { get; } = new();
     public FakePaymentProcessor Payments { get; } = new();
     public SpotEvents Events { get; } = new();
+    public NotificationEvents NotificationEvents { get; } = new();
+    public MessageEvents MessageEvents { get; } = new();
     public FakeGeocoder Geocoder { get; } = new();
     public FakeWeatherForecaster Weather { get; } = new();
     public FakeTimeProvider Time { get; } = new(new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero));
@@ -112,6 +114,10 @@ public sealed class TestApp : IAsyncDisposable
         services.AddSingleton(Events);
         services.AddScoped<TicketSalesService>();
         services.AddScoped<ReportService>();
+        services.AddSingleton(NotificationEvents);
+        services.AddSingleton(MessageEvents);
+        services.AddScoped<NotificationService>();
+        services.AddScoped<MessagingService>();
         Services = services.BuildServiceProvider();
         DbSeeder.SeedAsync(Services).GetAwaiter().GetResult();
     }

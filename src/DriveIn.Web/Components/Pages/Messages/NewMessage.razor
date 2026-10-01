@@ -1,0 +1,99 @@
+@page "/messages/new"
+@attribute [Authorize]
+@inherits AppComponentBase
+@inject MessagingService Messaging
+@inject TheaterService Theaters
+
+@* Starts a conversation: with a theater (?theater={slug}, from its page), or with us ("support") otherwise. *@
+
+<PageTitle>New message · Drive-In Online</PageTitle>
+
+<MudLink Href="@(theater is null ? "messages" : $"theaters/{theater.Slug}")" Class="d-inline-block mb-3">
+    &larr; @(theater is null ? "All messages" : theater.Name)
+</MudLink>
+
+<MudText Typo="Typo.h4" HtmlTag="h1" Class="mb-2">@(theater is null ? "Contact Drive-In Online" : $"Message {theater.Name}")</MudText>
+
+<Alerts Error="@Error" />
+
+@if (loaded && (TheaterSlug is null || theater is not null))
+{
+    @if (theater is not null && staff)
+    {
+        <MudText>You work for @theater.Name, so its messages are on its <MudLink Href="@($"manage/{theater.Id}/messages")">Messages</MudLink> page.</MudText>
+    }
+    else
+    {
+        <MudText Class="muted mb-3" Style="max-width: 42rem">
+            @if (theater is null)
+            {
+                <span>Questions about signing up a theater, your plan or billing, or anything else: we'll reply here, and you'll get a notification.</span>
+            }
+            else
+            {
+                <span>Your message goes to the theater's staff. They'll reply here, and you'll get a notification.</span>
+            }
+        </MudText>
+        <div style="max-width: 42rem">
+            @if (theater is null && theaters.Count > 0)
+            {
+                <MudSelect T="int?" @bind-Value="aboutTheaterId" Label="About (optional)" Variant="Variant.Outlined" Class="mb-3">
+                    <MudSelectItem T="int?" Value="null">Nothing in particular</MudSelectItem>
+                    @foreach (var t in theaters)
+                    {
+                        var id = t.Id;
+                        <MudSelectItem T="int?" Value="id">@t.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+            <MudTextField T="string" @bind-Value="subject" Label="Subject" Variant="Variant.Outlined" Class="mb-3"
+                          MaxLength="@Conversation.MaxSubjectLength" />
+            <MudTextField T="string" @bind-Value="body" Label="Message" Lines="6" Variant="Variant.Outlined"
+                          MaxLength="@Message.MaxBodyLength" Counter="@Message.MaxBodyLength" Immediate />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-3" Disabled="busy" OnClick="SendAsync">Send</MudButton>
+        </div>
+    }
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "theater")] public string? TheaterSlug { get; set; }
+
+    private Theater? theater;
+    private bool staff;
+    private List<Theater> theaters = [];
+    private int? aboutTheaterId;
+    private string? subject;
+    private string? body;
+    private bool busy;
+    private bool loaded;
+
+    protected override async Task LoadAsync()
+    {
+        loaded = false;
+        theater = null;
+        if (TheaterSlug is not null)
+        {
+            theater = await Theaters.GetBySlugAsync(User, TheaterSlug) ?? throw new NotFoundException("Theater not found.");
+            var userId = User.GetUserId();
+            staff = theater.OwnerId == userId || User.GetEmployeeTheaterId() == theater.Id;
+        }
+        else if (!User.IsAdmin())
+        {
+            // An owner or employee can say which of their theaters it's about.
+            theaters = await Theaters.ListManagedAsync(User);
+        }
+        loaded = true;
+    }
+
+    private async Task SendAsync()
+    {
+        busy = true;
+        int id = 0;
+        var sent = await RunAsync(async () => id = theater is null
+            ? await Messaging.StartSupportAsync(User, aboutTheaterId, subject ?? "", body ?? "")
+            : await Messaging.StartWithTheaterAsync(User, theater.Id, subject ?? "", body ?? ""));
+        busy = false;
+        if (sent)
+            Nav.NavigateTo($"messages/{id}");
+    }
+}

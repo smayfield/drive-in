@@ -16,6 +16,7 @@
         <a class="manage-tab @(Current == "theaters" ? "active" : null)" href="admin/theaters" aria-current="@(Current == "theaters" ? "page" : null)">Theaters</a>
         <a class="manage-tab @(Current == "users" ? "active" : null)" href="admin/users" aria-current="@(Current == "users" ? "page" : null)">Users</a>
         <a class="manage-tab @(Current == "billing" ? "active" : null)" href="admin/billing" aria-current="@(Current != "billing" ? null : Sub is null ? "page" : "true")">Billing</a>
+        <a class="manage-tab @(Current == "messages" ? "active" : null)" href="admin/messages" aria-current="@(Current == "messages" ? "page" : null)">Messages</a>
         @* Grafana, outside the Blazor app (Caddy serves it), so it opens in its own tab rather than through the router. *@
         <a class="manage-tab" href="grafana/" target="_blank" rel="noopener">Metrics</a>
     </nav>
@@ -33,7 +34,7 @@
 @code {
     [Parameter, EditorRequired] public string Title { get; set; } = "";
 
-    // "theaters", "users" or "billing".
+    // "theaters", "users", "billing" or "messages".
     [Parameter] public string Current { get; set; } = "theaters";
 
     // Under Billing: "invoices", "subscriptions" or "reports".

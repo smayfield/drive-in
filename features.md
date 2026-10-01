@@ -31,7 +31,8 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   union of their roles' (`employee_roles`); none by default.
 - **Anti-escalation** (`Guard.RequireWithinAuthority`): a non-owner can only create/edit/delete/assign/remove roles, or delete
   employees, whose permissions are a subset of their own.
-- Default roles for a *new* theater (`DefaultTheaterRoles`): Manager (all but `billing.*`, which stay with the owner unless granted), Operations (`theater.edit`, `screens.manage`,
+- Default roles for a *new* theater (`DefaultTheaterRoles`): Manager (all but `billing.*`, which stay with the owner unless granted;
+  migration `AddMessaging` gave existing Manager roles `messages.*`), Operations (`theater.edit`, `screens.manage`,
   `schedule.manage`), Ticketing (`tickets.admit`, `tickets.sell`, `tickets.move`), Concessions (none). Changing defaults doesn't touch existing
   theaters; that needs a data migration.
 
@@ -56,6 +57,8 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 | `reports.view` | View reports | Sales, attendance and gift card reports, CSV downloads |
 | `billing.view` | View billing | The theater's subscription, issued invoices and payments (Billing tab) |
 | `billing.manage` | Manage billing | Billing email, cancel the subscription (sees the subscription, not invoices, without `billing.view`) |
+| `messages.view` | View messages | The theater's inbox: read customers' conversations, be notified of new ones |
+| `messages.reply` | Reply to messages | Reply, close and reopen conversations (needs `messages.view` to see them) |
 
 ## 3. Theater modes and sign-up
 
@@ -273,6 +276,8 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   else invitation), edit, review go-live requests (activate or decline with note).
 - `/admin/users` (`UserAdminService`): list; create a confirmed account (optionally admin) that is emailed a link to set a
   password; make/remove admin (not on self); delete (not self). The seeded admin regains admin at sign-in.
+- `/admin/messages` (`MessagingService`): the support inbox (reply, close, reopen) and every theater's customer conversations,
+  read-only, filterable by theater (also linked as "Customer messages" from a theater's admin page). See section 15.
 - `/admin/billing` (invoices: filter, draft now, issue all), `/admin/billing/invoices/{id}` (lines, issue, void, record payment,
   resend, print), `/admin/billing/subscriptions` (start, price, cancel, reactivate), `/admin/billing/reports`. See Billing.
 
@@ -309,7 +314,8 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 - **Business data** comes from SQL: the "Drive-In DB" data source connects as `grafana_ro` (`deploy/grafana-ro.sql`, re-run on
   every deploy): read-only sessions, 30 s statement timeout, `pg_monitor`, and column-level SELECT on every table except
   `user_claims`, `user_logins`, `user_passkeys` and `user_tokens`, leaving out bearer codes (`code`, `short_code`), hashes,
-  `security_stamp`, image bytes (`data`), `payment_reference` and any `*email*` column; on `users` only `id`, `created_at`,
+  `security_stamp`, image bytes (`data`), `payment_reference`, any `*email*` column and what people write in the app
+  (`messages.body`, `conversations.subject`, `notifications.title`); on `users` only `id`, `created_at`,
   `email_confirmed`, `employee_theater_id`, `lockout_end` and `two_factor_enabled`.
 - **The app's metrics** go over OTLP (http/protobuf, every 15 s) to VictoriaMetrics when `Metrics:OtlpEndpoint` is set
   (production compose; locally `appsettings.Development.json` points at the `monitoring` compose profile). Built-in meters:
@@ -324,9 +330,10 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   `drivein.payments{for=ticket|gift_card, result=approved|declined|error, test}`, `drivein.gift_cards.sold{test}` and
   `drivein.gift_cards.revenue{test}` (dollars), `drivein.emails{result=sent|failed}` (every sender is wrapped in `MeteredEmailSender`; a send the caller
   cancels isn't counted),
-  `drivein.jobs.failures{job=hold_expiry|billing|geocoding|business_gauges}`, `drivein.invoices.issued`,
+  `drivein.jobs.failures{job=hold_expiry|billing|geocoding|business_gauges|notification_email}`, `drivein.invoices.issued`,
   `drivein.invoices.payments` (dollars), and `drivein.errors.logged{category, level}` (every Error/Critical log message,
-  `ErrorCountingLoggerProvider`: failures inside Blazor circuits never become 5xx responses).
+  `ErrorCountingLoggerProvider`: failures inside Blazor circuits never become 5xx responses),
+  `drivein.messages.sent{kind=theater|support, side=customer|theater|support}` and `drivein.notifications.emailed` (digests).
 - **`BusinessGauges`** (hosted service, only when `Metrics:OtlpEndpoint` is set) reads totals every minute and reports them as gauges: `drivein.users{kind=customer|employee}`,
   `drivein.theaters{mode}` (active), `drivein.screens.live`, `drivein.showings.upcoming` (next 7 days, live theaters),
   `drivein.theaters.go_live_pending`, `drivein.free_admission.pending`, `drivein.invoices.outstanding` (dollars). Nothing is
@@ -336,7 +343,7 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   - **Drive-In: Business**: totals (customers, new accounts, live/demo theaters, go-live requests, live screens, tickets, revenue,
     cars admitted, gift cards, invoiced, owed) and daily trends from SQL (real sales only; test tickets and gift cards left out),
     top theaters and pending go-lives, plus live activity from the counters (sales, payments, sign-ups, abandoned holds, open
-    sessions, emails).
+    sessions, emails, messages and notification emails).
   - **Drive-In: Site performance**: requests, 5xx, latency (p50/95/99, leaving out the Blazor circuit's connection), busiest and
     slowest routes, errors logged by category, unhandled exceptions, job failures, payments, emails, circuits and connections,
     sign-ins, outbound calls, database time and pool, EF Core, and the .NET runtime (memory, CPU, GC, thread pool).
@@ -351,10 +358,45 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   from the box: EC2 system status (also auto-recovers the instance), instance status, CPU over 90% for 15 min, and any
   surplus CPU credits charged (t4g "unlimited" billing).
 
-## 15. Not built
+## 15. Messages and notifications (`MessagingService`, `NotificationService`)
+
+- **In the app only.** Conversations and messages live in the database (`conversations`, `messages`, `conversation_reads`);
+  they are never emailed. Recipients get a notification instead (below). Signed-in users only.
+- **Customer ↔ theater** (`ConversationKind.Theater`): "Message the theater" on `/theaters/{slug}` opens
+  `/messages/new?theater={slug}` (subject up to 200 characters, message up to 4000). Only theaters the person can browse
+  (`TheaterService.CanBrowse`: not demo or inactive ones to outsiders); the owner and employees can't message their own
+  theater. The theater's inbox is `/manage/{id}/messages` (Messages tab; open/closed lists, the thread beside them):
+  `messages.view` reads, `messages.reply` replies, closes and reopens. Customers see replies as from the theater; staff and
+  admins also see which staff member wrote them. Staff see the customer's display name (or "Customer"), never their email.
+- **Support** (`ConversationKind.Support`): anyone signed in, typically a current or future owner, writes from `/messages/new`
+  ("Contact Drive-In Online": linked from `/messages`, the manage list, the plan panel, `/get-started`, FAQ and Pricing),
+  optionally about one of their theaters. Every admin is notified; admins reply, close and reopen at `/admin/messages`.
+- **Admins** read every theater conversation (`/admin/messages?view=theaters`, filter by theater) but never post in them,
+  even though they pass every theater permission check (unless they own the theater).
+- **The customer's side**: `/messages` lists their conversations (theaters and support), `/messages/{id}` is the thread. Only
+  the theater (or, for support, an admin) closes a conversation; nobody can post in a closed one until it's reopened.
+- Limits: 10 new conversations per person per 24 hours (replies are unlimited). Unread state is per person
+  (`conversation_reads`): opening a thread marks it read for you only. Deleting an account keeps its conversations and
+  messages, shown as "Deleted account". The personal-data download includes the messages you wrote.
+- Threads, inboxes, the bell and `/notifications` update live through in-process `MessageEvents` / `NotificationEvents`
+  (like `SpotEvents`).
+- **Notifications** (`notifications`; `NotificationKind.Message` for now): one unread notification per person and
+  conversation, counting new messages ("3 new messages from Starlight"); reading the conversation reads it. The bell in the app
+  bar shows the unread count and the latest 10 (mark all read, see all); the static pages' top bar shows
+  "Notifications (n)"; `/notifications` lists them all.
+- **Email** (`NotificationEmailService`, every minute): a notification still unread `Notifications:EmailDelayMinutes` (10)
+  after its last update, and not yet emailed, is sent in one digest per person: titles and links
+  (`Notifications:SiteUrl`) only, never the message or subject. More messages before it's read don't send another; a
+  failed send is retried next minute; nothing older than `Notifications:EmailMaxAgeHours` (48) is sent. Only to confirmed
+  addresses, and not to anyone who turned it off at Account → Notifications (`ApplicationUser.EmailNotifications`, on by
+  default).
+
+## 16. Not built
 
 - A real payment processor (production can't sell until `Payments:Provider` is set to one).
 - Concessions ordering, announcements (the Concessions role has no permissions yet).
 - Paying invoices online (payments are recorded by an admin), sales tax on invoices, and overdue reminders or suspension for
   non-payment.
-- Multi-server deployment (in-process `SpotEvents`).
+- Multi-server deployment (in-process `SpotEvents`, `MessageEvents`, `NotificationEvents`).
+- Message attachments, theater-initiated conversations (a theater writing to a customer first), blocking a sender, and
+  notification kinds other than messages (e.g. go-live decisions, free-admission requests).

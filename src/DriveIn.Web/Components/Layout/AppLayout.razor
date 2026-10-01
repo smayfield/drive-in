@@ -22,6 +22,11 @@
             }
         </nav>
         <MudSpacer />
+        <AuthorizeView>
+            <Authorized>
+                <NotificationBell />
+            </Authorized>
+        </AuthorizeView>
         <div class="app-user d-none d-md-flex">
             <AuthorizeView>
                 <Authorized>
@@ -94,6 +99,7 @@
             {
                 yield return new("theaters", "Theaters");
                 yield return new("tickets", "My tickets");
+                yield return new("messages", "Messages");
                 if (!manages && !isEmployee)
                     yield return new("get-started", "Sign up a theater");
                 if (manages)

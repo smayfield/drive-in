@@ -2,6 +2,7 @@
 @using DriveIn.Web.Authorization
 
 @inject TheaterService Theaters
+@inject NotificationService Notifications
 
 @* The top bar for statically rendered pages (account, Invite, Error): the same look and links as the interactive
    AppLayout bar. The menu toggle is a checkbox so it works without any interactivity. *@
@@ -17,6 +18,7 @@
                 <Authorized>
                     <NavLink class="app-link" href="theaters">Theaters</NavLink>
                     <NavLink class="app-link" href="tickets">My tickets</NavLink>
+                    <NavLink class="app-link" href="messages">Messages</NavLink>
                     @if (!manages && context.User.GetEmployeeTheaterId() is null)
                     {
                         <NavLink class="app-link" href="get-started">Sign up a theater</NavLink>
@@ -34,6 +36,9 @@
             <span class="spacer"></span>
             <AuthorizeView>
                 <Authorized>
+                    <NavLink class="app-link" href="notifications" aria-label="@(unread == 0 ? "Notifications" : $"Notifications, {unread} unread")">
+                        Notifications@(unread > 0 ? $" ({unread})" : "")
+                    </NavLink>
                     <NavLink class="app-link" href="Account/Manage">
                         @(context.User.FindFirst("drivein:display_name")?.Value ?? context.User.Identity?.Name)
                     </NavLink>
@@ -57,6 +62,7 @@
     private Task<AuthenticationState>? AuthState { get; set; }
 
     private bool manages;
+    private int unread;
 
     // Owners aren't a role and can change at any time, so ask the database. The layout renders
     // statically on each request, so this runs once per page load.
@@ -65,5 +71,6 @@
         var user = AuthState is null ? null : (await AuthState).User;
         manages = user?.Identity?.IsAuthenticated == true
             && (user.IsAdmin() || user.GetEmployeeTheaterId() is not null || (await Theaters.ListManagedAsync(user)).Count > 0);
+        unread = user is null ? 0 : await Notifications.CountUnreadAsync(user);
     }
 }

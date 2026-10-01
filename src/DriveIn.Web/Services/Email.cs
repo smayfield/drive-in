@@ -51,7 +51,7 @@ public sealed class SesEmailSender(IAmazonSimpleEmailServiceV2 ses, Microsoft.Ex
             Destination = new Destination { ToAddresses = [to] },
             Content = new EmailContent
             {
-                Simple = new Message
+                Simple = new Amazon.SimpleEmailV2.Model.Message
                 {
                     Subject = new Content { Data = subject, Charset = "UTF-8" },
                     Body = new Body { Html = new Content { Data = htmlBody, Charset = "UTF-8" } },

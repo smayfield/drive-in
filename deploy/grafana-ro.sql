@@ -1,7 +1,8 @@
 -- The read-only role Grafana (Postgres data source) and postgres-exporter use. Run by deploy.sh on every deploy,
 -- after migrations, so new tables and columns are picked up: psql reads the password from $GRAFANA_DB_PASSWORD.
 -- It can read business data but not secrets or personal details: no password hashes, tokens, bearer codes (ticket and
--- gift card codes), emails, or image bytes. Sessions are read-only with a statement timeout.
+-- gift card codes), emails, image bytes, or what people write in in-app messages. Sessions are read-only with a
+-- statement timeout.
 \set ON_ERROR_STOP on
 \getenv pw GRAFANA_DB_PASSWORD
 
@@ -37,6 +38,9 @@ BEGIN
                    ELSE column_name NOT IN ('code', 'short_code', 'token_hash', 'password_hash', 'security_stamp',
                                             'data', 'payment_reference')
                         AND column_name NOT LIKE '%email%'
+                        -- What people write to each other in the app (and notification titles naming them).
+                        AND (t.table_name, column_name) NOT IN (('messages', 'body'), ('conversations', 'subject'),
+                                                                ('notifications', 'title'))
               END;
         IF cols IS NOT NULL THEN
             EXECUTE format('GRANT SELECT (%s) ON %I TO grafana_ro', cols, t.table_name);

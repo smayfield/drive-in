@@ -1,0 +1,88 @@
+@page "/notifications"
+@attribute [Authorize]
+@inherits AppComponentBase
+@implements IDisposable
+@inject NotificationService Notifications
+@inject NotificationEvents Events
+@inject TimeProvider Time
+
+<PageTitle>Notifications · Drive-In Online</PageTitle>
+
+<div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2 mb-2">
+    <MudText Typo="Typo.h4" HtmlTag="h1">Notifications</MudText>
+    <MudButton Variant="Variant.Outlined" Disabled="@(items?.All(n => n.IsRead) ?? true)" OnClick="MarkAllReadAsync">Mark all read</MudButton>
+</div>
+<MudText Class="muted mb-3">
+    Notifications you haven't read after a few minutes are emailed to you as a link.
+    <MudLink Href="Account/Manage/Notifications">Email settings</MudLink>
+</MudText>
+
+<Alerts Error="@Error" />
+
+@if (items is null)
+{
+    @if (Error is null) { <MudProgressCircular Indeterminate Size="Size.Small" aria-label="Loading notifications" /> }
+}
+else if (items.Count == 0)
+{
+    <MudText Class="muted">No notifications.</MudText>
+}
+else
+{
+    <div class="conversation-list">
+        @foreach (var n in items)
+        {
+            var item = n;
+            <a @key="item.Id" href="@item.Link" class="conversation-item @(item.IsRead ? null : "unread")" @onclick="() => ReadAsync(item)" @onclick:preventDefault>
+                <div class="d-flex justify-content-between gap-2">
+                    <span class="conversation-subject">
+                        @if (!item.IsRead) { <span class="unread-dot" aria-hidden="true"></span><span class="visually-hidden">Unread: </span> }
+                        @item.Title
+                    </span>
+                    <span class="muted text-nowrap" style="font-size: 0.8rem">@When.Ago(item.UpdatedAt, Time.GetUtcNow())</span>
+                </div>
+            </a>
+        }
+    </div>
+}
+
+@code {
+    private List<NotificationItem>? items;
+
+    protected override void OnInitialized() => Events.Changed += OnChanged;
+
+    protected override async Task LoadAsync() => items = await Notifications.ListAsync(User);
+
+    private async Task ReadAsync(NotificationItem item)
+    {
+        if (!item.IsRead && !await RunAsync(() => Notifications.MarkReadAsync(User, item.Id)))
+            return;
+        Nav.NavigateTo(item.Link);
+    }
+
+    private Task MarkAllReadAsync() => RunAsync(async () =>
+    {
+        await Notifications.MarkAllReadAsync(User);
+        items = await Notifications.ListAsync(User);
+    });
+
+    private void OnChanged(string userId)
+    {
+        if (userId != User.GetUserId())
+            return;
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                items = await Notifications.ListAsync(User);
+                StateHasChanged();
+            }
+            catch (Exception)
+            {
+                // The circuit may be going away; the next change refreshes again.
+            }
+        });
+    }
+
+    public void Dispose() => Events.Changed -= OnChanged;
+}

@@ -1,0 +1,48 @@
+@* A list of conversations, newest first, linking each to its thread. Unread ones are marked. *@
+@inject TimeProvider Time
+
+@if (Items.Count == 0)
+{
+    <MudText Class="muted">@Empty</MudText>
+}
+else
+{
+    <nav class="conversation-list" aria-label="Conversations">
+        @foreach (var c in Items)
+        {
+            // The open conversation is being read (the list may have loaded a moment before the thread marked it).
+            var unread = c.Unread && c.Id != ActiveId;
+            <a @key="c.Id" href="@Href(c)" class="conversation-item @(unread ? "unread" : null) @(c.Id == ActiveId ? "active" : null)"
+               aria-current="@(c.Id == ActiveId ? "page" : null)">
+                <div class="d-flex justify-content-between gap-2">
+                    <span class="conversation-subject">
+                        @if (unread) { <span class="unread-dot" aria-hidden="true"></span><span class="visually-hidden">Unread: </span> }
+                        @c.Subject
+                    </span>
+                    <span class="muted text-nowrap" style="font-size: 0.8rem">@When.Ago(c.LastMessageAt, Time.GetUtcNow())</span>
+                </div>
+                <div class="muted" style="font-size: 0.85rem">
+                    @Who(c)@if (c.IsClosed) { <span> · Closed</span> }
+                </div>
+                <div class="conversation-preview muted">@c.Preview</div>
+            </a>
+        }
+    </nav>
+}
+
+@code {
+    [Parameter, EditorRequired] public List<ConversationSummary> Items { get; set; } = [];
+    [Parameter, EditorRequired] public Func<ConversationSummary, string> Href { get; set; } = default!;
+    [Parameter] public int? ActiveId { get; set; }
+    [Parameter] public string Empty { get; set; } = "No conversations yet.";
+
+    // "theater": the other side is a theater or support (the customer's own list); "customer": who wrote in.
+    [Parameter] public string Show { get; set; } = "customer";
+
+    private string Who(ConversationSummary c) => Show == "theater"
+        ? c.Kind == ConversationKind.Support
+            ? MessagingService.SupportName + (c.TheaterName is null ? "" : $" · about {c.TheaterName}")
+            : c.TheaterName ?? ""
+        : c.CustomerName + (c.Kind == ConversationKind.Support && c.TheaterName is not null ? $" · about {c.TheaterName}"
+            : Show == "both" && c.TheaterName is not null ? $" → {c.TheaterName}" : "");
+}
