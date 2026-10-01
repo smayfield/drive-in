@@ -66,7 +66,7 @@ class ForwarderTests(unittest.TestCase):
         module, _ = load()
         out = BytesParser(policy=policy.SMTP).parsebytes(
             module.rewrite(RAW, ["info@drive-in.online"], "forwarder@drive-in.online", "drive-in.online"))
-        self.assertEqual(out["From"], '"Pat Buyer via drive-in.online" <forwarder@drive-in.online>')
+        self.assertEqual(out["From"], '"Pat Buyer (pat@example.com) via drive-in.online" <forwarder@drive-in.online>')
         self.assertEqual(out["Reply-To"], "Pat Buyer <pat@example.com>")
         self.assertEqual(out["To"], "info@drive-in.online")
         self.assertEqual(out["X-Original-To"], "info@drive-in.online")
@@ -74,6 +74,14 @@ class ForwarderTests(unittest.TestCase):
         for header in ("DKIM-Signature", "Message-ID", "Return-Path"):
             self.assertIsNone(out[header], header)
         self.assertIn("Is Friday's show on?", out.get_content())
+
+    def test_rewrite_shows_a_bare_address_without_a_name(self):
+        module, _ = load()
+        raw = RAW.replace(b"From: Pat Buyer <pat@example.com>", b"From: pat@example.com")
+        out = BytesParser(policy=policy.SMTP).parsebytes(
+            module.rewrite(raw, ["a@drive-in.online"], "forwarder@drive-in.online", "drive-in.online"))
+        self.assertEqual(out["From"], '"pat@example.com via drive-in.online" <forwarder@drive-in.online>')
+        self.assertEqual(out["Reply-To"], "pat@example.com")
 
     def test_rewrite_keeps_an_existing_reply_to(self):
         module, _ = load()

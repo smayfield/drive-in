@@ -251,7 +251,7 @@ All stacks are in `us-east-1`. The domain is registered at GoDaddy with nameserv
    aws ses set-active-receipt-rule-set --rule-set-name drive-in-inbound   # once; CloudFormation can't activate it
    ```
    It adds the domain's MX record (pointing at SES). SES only sends from our own domain, so forwards come from
-   "*Sender* via drive-in.online" `<forwarder@drive-in.online>`; Reply goes to the original sender (Reply-To). SES's
+   "*Sender name* (*sender address*) via drive-in.online" `<forwarder@drive-in.online>`; Reply goes to the original sender (Reply-To). SES's
    spam and virus scan runs first and flagged mail is dropped. Messages are kept 30 days in the stack's bucket, and
    the forwarder logs to CloudWatch (`/aws/lambda/drive-in-mail-Forwarder-…`). Cost: SES receiving is about $0.10 per
    1,000 messages; the Lambda and bucket stay in the free tier. Tests: `python infra/test_mail_forwarder.py`.

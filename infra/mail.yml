@@ -112,8 +112,10 @@ Resources:
                   del msg[header]
               if "Reply-To" not in msg and sender:
                   msg["Reply-To"] = formataddr((name, sender))
+              # Name and address both show in the inbox, even where Reply-To is hidden.
+              who = f"{name} ({sender})" if name and sender else name or sender or "Unknown"
               del msg["From"]
-              msg["From"] = formataddr((f"{name or sender or 'Unknown'} via {domain}", from_address))
+              msg["From"] = formataddr((f"{who} via {domain}", from_address))
               msg["X-Original-To"] = ", ".join(recipients)
               return msg.as_bytes()
 
