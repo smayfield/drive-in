@@ -36,9 +36,11 @@ Parameters:
     Description: >
       Where alerts are emailed (CloudWatch alarms and Grafana, through the SNS topic). Confirm
       the subscription from the email SNS sends. Blank = no subscription.
+  # A fixed image, not the "latest" SSM parameter: CloudFormation re-resolves that on every stack update, and a new
+  # image replaces the server (a fresh, empty disk), as happened on 2026-10-01. Upgrade deliberately; see the README.
   AmiId:
-    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+    Type: AWS::EC2::Image::Id
+    Default: ami-065b1b834d2a83a7a # Amazon Linux 2023 arm64, the server launched 2026-10-01
 
 Conditions:
   Live: !Equals [!Ref ServeApex, "true"]

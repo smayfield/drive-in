@@ -296,6 +296,27 @@ Deploy workflow. The apex didn't resolve between the first two steps, and resolv
 "no such name" for up to 15 minutes, so do such moves back to back. (Negative answers are cached for
 the lesser of the SOA record's TTL, 900 s on Route 53, and its MINIMUM field, 86400 s; RFC 2308.)
 
+### Changing the app stack
+
+**Preview every change to `drive-in-app` before applying it.** Some changes replace the server, and a replacement
+starts from a fresh, empty disk: the site is down until the data is moved over. The old root volume is kept
+(`DeleteOnTermination: false`), and there are nightly backups and daily snapshots, but a replacement still means manual
+recovery. Preview:
+
+```sh
+aws cloudformation deploy --stack-name drive-in-app --template-file infra/app.yml \
+  --capabilities CAPABILITY_NAMED_IAM --no-execute-changeset
+aws cloudformation describe-change-set --change-set-name <name from the output> --stack-name drive-in-app \
+  --query "Changes[].ResourceChange.[LogicalResourceId,Action,Replacement]" --output table
+```
+
+If `Server` shows `Replacement: True`, don't execute it as is. The server's image is pinned (`AmiId` in
+`infra/app.yml`) so updates don't pick up a new one. The template used to follow the "latest" SSM parameter, and on
+2026-10-01 an unrelated stack update replaced the server that way. To upgrade the OS image, do it deliberately: take a
+backup, change `AmiId`, apply, then move the Docker volumes (`drive-in_pgdata`, `drive-in_dpkeys`,
+`drive-in_caddy_data`, `drive-in_caddy_config`) from the old root volume, and update the `INSTANCE_ID` repo variable
+before redeploying. Patches within the image come from `dnf upgrade` on the server instead.
+
 ### Operations
 
 - **Metrics:** `https://drive-in.online/grafana/` (Admin → Metrics), for site admins: sign in to the app as an admin and
