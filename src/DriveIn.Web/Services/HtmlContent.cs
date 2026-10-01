@@ -156,7 +156,7 @@ public sealed partial class HtmlContent
     public static bool IsEffectivelyEmpty(string? html) =>
         ToPlainText(html).Length == 0 && html?.Contains("<img", StringComparison.OrdinalIgnoreCase) != true;
 
-    // The library image ids this HTML places (its "images/{id}" sources).
+    // The library image ids this HTML places: <img> sources only, not links or text that merely mention an image.
     public static IReadOnlySet<int> ImageIds(string? html) =>
         html is null ? new HashSet<int>() : ImageRef().Matches(html).Select(m => int.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture)).ToHashSet();
 
@@ -166,7 +166,7 @@ public sealed partial class HtmlContent
     [GeneratedRegex(@"^(?:https?://[^/]+)?/?(?<path>theaters/[a-z0-9-]+/images/)(?<id>\d{1,9})(?:[?#].*)?$")]
     private static partial Regex ImageSrc();
 
-    [GeneratedRegex(@"/images/(\d{1,9})\b")]
+    [GeneratedRegex(@"<img\b[^>]*?\ssrc=""(?:[^""]*/)?theaters/[a-z0-9-]+/images/(\d{1,9})(?:[?#][^""]*)?""", RegexOptions.IgnoreCase)]
     private static partial Regex ImageRef();
 
     [GeneratedRegex(@"\s+")]

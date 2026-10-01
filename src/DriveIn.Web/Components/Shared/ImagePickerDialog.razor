@@ -118,7 +118,8 @@
         size = HtmlContent.ImageSizes.Contains(InitialSize) ? InitialSize : "medium";
         align = HtmlContent.ImageAligns.Contains(InitialAlign) ? InitialAlign : "center";
         alt = InitialAlt;
-        decorative = Mode == "edit" && string.IsNullOrEmpty(InitialAlt);
+        // An image already placed with no description, or a cover chosen as decorative (empty, not null), is decorative.
+        decorative = (Mode == "edit" && string.IsNullOrEmpty(InitialAlt)) || (Mode == "cover" && InitialAlt == "");
         if (Mode == "edit")
             return;
         await LoadLibraryAsync();

@@ -217,7 +217,7 @@ a.marquee-title-link:hover { text-decoration: underline; text-decoration-thickne
 .theater-content img.img-center, .rich-text .ql-editor img.img-center { display: block; margin: 0.5rem auto 1rem; }
 .theater-content img.img-left, .rich-text .ql-editor img.img-left { float: left; margin: 0.25rem 1.25rem 0.75rem 0; }
 .theater-content img.img-right, .rich-text .ql-editor img.img-right { float: right; margin: 0.25rem 0 0.75rem 1.25rem; }
-.theater-content img.img-full { float: none; display: block; margin: 0.5rem 0 1rem; }
+.theater-content img.img-full, .rich-text .ql-editor img.img-full { float: none; display: block; margin: 0.5rem 0 1rem; }
 @media (max-width: 600px) {
     .theater-content img.img-left, .theater-content img.img-right,
     .theater-content img.img-small, .theater-content img.img-medium { float: none; display: block; width: 100%; margin: 0.5rem 0 1rem; }

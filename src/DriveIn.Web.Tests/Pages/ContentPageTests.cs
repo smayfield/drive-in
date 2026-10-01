@@ -188,6 +188,26 @@ public class ContentPageTests
     }
 
     [Fact]
+    public async Task Reopening_a_decorative_cover_keeps_it_decorative()
+    {
+        await using var w = await SetUpAsync();
+        var image = await w.Content.UploadImageAsync(w.OwnerUser, w.Theater.Id, "screen.png", TestImages.Png(), "The screen");
+        var post = await w.Content.CreateAsync(w.OwnerUser, w.Theater.Id, PageKind.Post, new PageInput("Opening night", null, null, "<p>x</p>", image.Id, ""));
+        await using var host = new PageHost(w.App).SignIn(w.Owner);
+        EditorModule(host, "<p>x</p>");
+
+        var page = host.Render<ManageContentEdit>(p => p.Add(x => x.Id, w.Theater.Id).Add(x => x.PageId, post.Id));
+        page.WaitForText("Change cover");
+        page.ClickButton("Change cover");
+
+        var dialogs = host.Dialogs!;
+        dialogs.WaitForText("Use as cover");
+        Assert.True(dialogs.Find("input[type=checkbox]").HasAttribute("checked") || dialogs.Find("input[type=checkbox]").GetAttribute("aria-checked") == "true"
+            || dialogs.FindAll(".mud-checkbox-true").Count > 0);
+        Assert.False(dialogs.FindAll("button").Single(b => b.TextContent.Trim() == "Use as cover").HasAttribute("disabled"));
+    }
+
+    [Fact]
     public async Task The_editors_image_button_uploads_and_inserts_with_a_description_size_and_position()
     {
         await using var w = await SetUpAsync();

@@ -74,7 +74,9 @@ public class HtmlContentTests
         Assert.Equal("Short", HtmlContent.Excerpt("Short", 15));
         Assert.True(HtmlContent.IsEffectivelyEmpty("<p><br></p>"));
         Assert.False(HtmlContent.IsEffectivelyEmpty("<p><img src=\"theaters/x/images/1\"></p>"));
-        Assert.Equal(new HashSet<int> { 7, 8 }, HtmlContent.ImageIds("<img src=\"theaters/x/images/7\"><img src=\"theaters/x/images/8?v=1\">"));
+        Assert.Equal(new HashSet<int> { 7, 8 }, HtmlContent.ImageIds("<img src=\"theaters/x/images/7\"><img alt=\"a\" src=\"theaters/x/images/8?v=1\">"));
+        // Links and text that mention an image address don't count as using it.
+        Assert.Empty(HtmlContent.ImageIds("<a href=\"https://example.com/theaters/x/images/9\">see /images/9</a>"));
         Assert.Equal("", Clean("   "));
     }
 }
