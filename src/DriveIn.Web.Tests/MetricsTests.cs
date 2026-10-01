@@ -55,6 +55,23 @@ public class MetricsTests
     }
 
     [Fact]
+    public async Task A_processor_failure_counts_as_a_payment_error_and_the_buyer_keeps_the_hold()
+    {
+        await using var s = await SetUpAsync();
+        using var payments = Collect<long>(s.App, "drivein.payments");
+        var buyer = await BuyerAsync(s.App);
+        s.App.Payments.FailWith = new HttpRequestException("processor unreachable");
+
+        var hold = await s.Sales.HoldAsync(buyer, s.Showing.Id, 1, 1);
+        await Assert.ThrowsAsync<HttpRequestException>(() => s.Sales.PurchaseAsync(buyer, hold.TicketId, Buy(s.Single), TestApp.BaseUri));
+
+        Assert.Equal("error", Tag(Assert.Single(payments.GetMeasurementSnapshot()), "result"));
+        // Back to held (not stuck paying), so the buyer can try again.
+        await using var db = s.App.Db();
+        Assert.Equal(TicketStatus.Held, (await db.Tickets.FindAsync(hold.TicketId))!.Status);
+    }
+
+    [Fact]
     public async Task A_gate_sale_counts_as_sold_and_admitted_at_the_gate()
     {
         await using var s = await SetUpAsync();

@@ -316,14 +316,25 @@ public sealed partial class TicketSalesService(
         PaymentResult result;
         try
         {
-            result = cardAmount == 0
-                ? new PaymentResult(true, null)
-                : await ProcessorFor(theater).ChargeAsync(new PaymentRequest(cardAmount,
-                    $"{theater.Name}: {ScheduleService.ToView(theater, await WithFeaturesAsync(db, showtime)).Title}, spot {ticket.SpotLabel}", card));
+            if (cardAmount == 0)
+                result = new PaymentResult(true, null);
+            else
+            {
+                var description = $"{theater.Name}: {ScheduleService.ToView(theater, await WithFeaturesAsync(db, showtime)).Title}, spot {ticket.SpotLabel}";
+                try
+                {
+                    result = await ProcessorFor(theater).ChargeAsync(new PaymentRequest(cardAmount, description, card));
+                }
+                catch
+                {
+                    // Only the processor's own failures count as payment errors (they page someone).
+                    metrics.Payment("ticket", "error", theater.IsDemo);
+                    throw;
+                }
+            }
         }
         catch
         {
-            metrics.Payment("ticket", "error", theater.IsDemo);
             await AbortPaymentAsync(db, ticket, gift, giftAmount);
             throw;
         }

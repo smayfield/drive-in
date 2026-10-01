@@ -116,6 +116,8 @@ builder.Services.AddScoped<IAuthorizationHandler, TheaterAuthorizationHandler>()
 // Business and activity metrics (see DriveInMetrics), plus the platform's own: requests, Blazor circuits, the runtime,
 // outbound HTTP and the database. Pushed over OTLP to VictoriaMetrics when Metrics:OtlpEndpoint is set (production
 // compose; locally, run `docker compose --profile monitoring up`); without it they're recorded but not exported.
+// IMeterFactory (the host registers it too; explicit because DriveInMetrics and the error-counting logger need it).
+builder.Services.AddMetrics();
 builder.Services.AddSingleton<DriveInMetrics>();
 builder.Logging.Services.AddSingleton<ILoggerProvider, ErrorCountingLoggerProvider>();
 var otlpEndpoint = builder.Configuration["Metrics:OtlpEndpoint"];
