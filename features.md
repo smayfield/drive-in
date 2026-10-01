@@ -293,9 +293,35 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 - Data: PostgreSQL via EF Core, snake_case, migrations in `Data/Migrations`. Interactive components don't hold a DbContext;
   data services use `IDbContextFactory`, services that use `UserManager` open a DI scope per call.
 - Deploy: merge to `main` runs tests, builds ARM64 images, runs an EF migration bundle, then deploys via SSM; Caddy fronts the app.
-  Nightly `pg_dump` (30 days) plus daily EBS snapshots (7).
+  Nightly `pg_dump` (30 days) plus daily EBS snapshots (7). Metrics and alerts: see section 14.
 
-## 14. Not built
+## 14. Metrics and alerts (`deploy/grafana`, `deploy/victoriametrics`)
+
+- **Grafana** at `/grafana/` (`https://drive-in.online/grafana/`, linked as Metrics on `AdminHeader`), **site admins only**.
+  Caddy's `forward_auth` asks `/ops/grafana-auth` (`GrafanaAuth.Check`) before every Grafana request: an admin gets 200 with
+  their lowercased email (else user id) in `X-WEBAUTH-USER`, which Grafana's auth proxy signs them in as (auto sign-up, org
+  Admin; the seeded admin is also Grafana server admin); signed out redirects to `/Account/Login?ReturnUrl=` (only ever back into
+  `/grafana/`); anyone else gets 403. Caddy drops a client-sent `X-WEBAUTH-USER`, and Grafana only trusts the header from
+  Caddy's fixed IP (172.30.0.10). No login form, basic auth or anonymous access; Grafana publishes no port.
+- **VictoriaMetrics** (13 months) scrapes node-exporter (host CPU, memory, swap, disk, PSI), Caddy (`:2020`, request
+  counts, latency, status codes), postgres-exporter and itself every 30 s (`deploy/victoriametrics/scrape.yml`). `backup.sh`
+  pushes `drivein_backup_last_success_timestamp_seconds` after each nightly backup.
+- **Business data** comes from SQL: the "Drive-In DB" data source connects as `grafana_ro` (`deploy/grafana-ro.sql`, re-run on
+  every deploy): read-only sessions, 30 s statement timeout, `pg_monitor`, and column-level SELECT on every table except
+  `user_claims`, `user_logins`, `user_passkeys` and `user_tokens`, leaving out bearer codes (`code`, `short_code`), hashes,
+  `security_stamp`, image bytes (`data`), `payment_reference` and any `*email*` column; on `users` only `id`, `created_at`,
+  `email_confirmed`, `employee_theater_id`, `lockout_end` and `two_factor_enabled`.
+- Everything in Grafana is provisioned from the repo (data sources, dashboards in a read-only "Drive-In" folder, alert rules,
+  contact point, notification policy); UI edits aren't kept. Dashboards: **Drive-In: Server** (host, edge, PostgreSQL,
+  backups, monitoring targets).
+- **Alerts** email through the `drive-in-alerts` SNS topic (`infra/app.yml`, `AlertEmail`), which Grafana publishes to with the
+  instance role. Grafana rules (folder Drive-In, group Server): disk over 80% (10 min), memory available under 10% (10 min),
+  swap over 1 GB (15 min), Caddy 502/503/504 above 0.02/s (5 min), PostgreSQL down (3 min), a scrape target down (10 min),
+  last backup over 26 h old. Repeats every 12 h while firing. CloudWatch alarms on the same topic cover what Grafana can't see
+  from the box: EC2 system status (also auto-recovers the instance), instance status, CPU over 90% for 15 min, and any
+  surplus CPU credits charged (t4g "unlimited" billing).
+
+## 15. Not built
 
 - A real payment processor (production can't sell until `Payments:Provider` is set to one).
 - Concessions ordering, announcements (the Concessions role has no permissions yet).

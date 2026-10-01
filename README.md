@@ -15,9 +15,10 @@ For the full list of features and behaviors (rules, limits, routes, permission k
 | `src/DriveIn.Web/Data/Migrations/` | EF Core migrations (the schema's source of truth). |
 | `src/DriveIn.Web.Tests/` | xUnit tests: authorization matrix and services, against a real DI container with EF InMemory. |
 | `deploy/` | Production compose file, Caddyfiles, `deploy.sh`, `backup.sh` (copied to the server on each deploy). |
+| `deploy/grafana/`, `deploy/victoriametrics/` | The metrics site: Grafana's data sources, dashboards and alert rules, and what VictoriaMetrics scrapes. |
 | `infra/dns.yml` | CloudFormation: Route 53 hosted zone. |
 | `infra/email.yml` | CloudFormation: SES domain identity (DKIM, MAIL FROM). |
-| `infra/app.yml` | CloudFormation: VPC, EC2, EIP, ECR, ops bucket, snapshots, DNS records, GitHub deploy role. |
+| `infra/app.yml` | CloudFormation: VPC, EC2, EIP, ECR, ops bucket, snapshots, DNS records, alerts topic and alarms, GitHub deploy role. |
 | `.github/workflows/deploy.yml` | On merge to `main`: test, build ARM64 images, deploy via SSM. |
 
 ## Accounts and permissions
@@ -256,7 +257,13 @@ All stacks are in `us-east-1`. The domain is registered at GoDaddy with nameserv
    aws ssm put-parameter --type SecureString --name /drive-in/admin-email          --value you@example.com
    aws ssm put-parameter --type SecureString --name /drive-in/geocoding-contact-email --value you@example.com
    ```
-   (`/drive-in/serve-apex` is managed by the app stack. `geocoding-contact-email` is optional: it's the contact
+   And the password of `grafana_ro`, the read-only database role the metrics site uses (PowerShell, like the DB password):
+   ```powershell
+   $pw = aws secretsmanager get-random-password --password-length 40 --exclude-punctuation --query RandomPassword --output text
+   aws ssm put-parameter --type SecureString --name /drive-in/grafana-db-password --value $pw
+   Remove-Variable pw
+   ```
+   (`/drive-in/serve-apex` and `/drive-in/alerts-topic-arn` are managed by the app stack. `geocoding-contact-email` is optional: it's the contact
    address Nominatim's usage policy asks for, and without it the app falls back to `Company:ContactEmail`.)
 4. **Server**, serving `drive-in.online` (`www` and `app` redirect to it). Run from the repo root:
    ```sh
@@ -290,6 +297,11 @@ Deploy workflow. The apex didn't resolve between the first two steps, and resolv
 the lesser of the SOA record's TTL, 900 s on Route 53, and its MINIMUM field, 86400 s; RFC 2308.)
 
 ### Operations
+
+- **Metrics:** `https://drive-in.online/grafana/` (Admin → Metrics), for site admins: sign in to the app as an admin and
+  Grafana signs you in. Dashboards and alert rules live in `deploy/grafana/`; Grafana's UI can't save changes to them, so
+  edit them there (or export a changed dashboard as JSON into that folder). Alerts are emailed through the
+  `drive-in-alerts` SNS topic; to check delivery, open Alerting → Contact points → SNS email → Test.
 
 - Shell on the server: `aws ssm start-session --target <InstanceId>`; the stack lives in `/opt/drive-in`.
 - Logs: `docker compose logs web` there (lost when the container is recreated on deploy). Production logs include

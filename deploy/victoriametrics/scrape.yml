@@ -1,0 +1,14 @@
+# What VictoriaMetrics scrapes (Prometheus format). The app isn't here: it pushes OTLP to
+# /opentelemetry/v1/metrics instead, so it exposes no metrics endpoint.
+global:
+  scrape_interval: 30s
+
+scrape_configs:
+  - job_name: node
+    static_configs: [{ targets: ["node-exporter:9100"] }]
+  - job_name: caddy
+    static_configs: [{ targets: ["caddy:2020"] }]
+  - job_name: postgres
+    static_configs: [{ targets: ["postgres-exporter:9187"] }]
+  - job_name: victoriametrics
+    static_configs: [{ targets: ["localhost:8428"] }]

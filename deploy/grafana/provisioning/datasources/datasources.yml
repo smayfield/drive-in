@@ -1,0 +1,30 @@
+# Data sources, provisioned on every start (edits in the UI aren't kept).
+apiVersion: 1
+
+datasources:
+  # Time series: the app's OTLP metrics, the exporters and Caddy. VictoriaMetrics speaks PromQL.
+  - name: VictoriaMetrics
+    uid: victoriametrics
+    type: prometheus
+    access: proxy
+    url: http://victoriametrics:8428
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: 30s
+
+  # Business history straight from the app's database, read-only (grafana_ro; see deploy/grafana-ro.sql).
+  - name: Drive-In DB
+    uid: drivein-db
+    type: grafana-postgresql-datasource
+    url: postgres:5432
+    user: grafana_ro
+    editable: false
+    jsonData:
+      database: drivein
+      sslmode: disable
+      postgresVersion: 1700
+      timescaledb: false
+      maxOpenConns: 2
+    secureJsonData:
+      password: $GRAFANA_DB_PASSWORD

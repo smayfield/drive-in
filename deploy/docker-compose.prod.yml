@@ -1,6 +1,6 @@
 # Production stack for drive-in.online, run on the EC2 server by deploy.sh.
-# Variables (REGISTRY, TAG, DB_PASSWORD, GOOGLE_*, ADMIN_EMAIL, GEOCODING_CONTACT_EMAIL) come from the .env
-# file deploy.sh writes from SSM Parameter Store. Local development uses the
+# Variables (REGISTRY, TAG, DB_PASSWORD, GOOGLE_*, ADMIN_EMAIL, GEOCODING_CONTACT_EMAIL, PUBLIC_HOST,
+# GRAFANA_*, ALERTS_TOPIC_ARN) come from the .env file deploy.sh writes from SSM Parameter Store. Local development uses the
 # docker-compose.yml at the repo root.
 name: drive-in
 
@@ -19,7 +19,9 @@ services:
     depends_on:
       - web
     networks:
-      - edge
+      edge:
+        # Fixed so Grafana trusts its auth-proxy header from Caddy only (GF_AUTH_PROXY_WHITELIST).
+        ipv4_address: 172.30.0.10
 
   web:
     image: ${REGISTRY}/drive-in-web:${TAG}
@@ -62,6 +64,106 @@ services:
       timeout: 5s
       retries: 20
 
+  # ---------- Monitoring (admin-only Grafana at /grafana/; nothing here publishes a public port) ----------
+
+  # Time-series database. Scrapes the exporters and Caddy (victoriametrics/scrape.yml); the app pushes OTLP to it.
+  # Bound to the host's loopback too, so backup.sh can record its last success.
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:v1.153.0
+    restart: unless-stopped
+    command:
+      - -storageDataPath=/storage
+      - -retentionPeriod=13 # months
+      - -promscrape.config=/etc/victoriametrics/scrape.yml
+      - -opentelemetry.usePrometheusNaming
+    ports:
+      - "127.0.0.1:8428:8428"
+    volumes:
+      - vmdata:/storage
+      - ./victoriametrics:/etc/victoriametrics:ro
+    mem_limit: 256m
+    networks:
+      - default
+      - edge
+
+  # Signed in through the app: Caddy asks /ops/grafana-auth, which only admits site admins, and passes their
+  # email in X-WEBAUTH-USER. Everything (data sources, dashboards, alerts) is provisioned from ./grafana.
+  grafana:
+    image: grafana/grafana-oss:13.0.2
+    restart: unless-stopped
+    environment:
+      GF_SERVER_ROOT_URL: https://${PUBLIC_HOST}/grafana/
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_AUTH_PROXY_ENABLED: "true"
+      GF_AUTH_PROXY_HEADER_NAME: X-WEBAUTH-USER
+      GF_AUTH_PROXY_HEADER_PROPERTY: username
+      GF_AUTH_PROXY_AUTO_SIGN_UP: "true"
+      GF_AUTH_PROXY_WHITELIST: 172.30.0.10
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_AUTH_DISABLE_SIGNOUT_MENU: "true"
+      GF_AUTH_BASIC_ENABLED: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_USERS_AUTO_ASSIGN_ORG_ROLE: Admin
+      # The seeded admin is also Grafana's server admin. Its password is never used (no login form or basic auth).
+      GF_SECURITY_ADMIN_USER: ${ADMIN_EMAIL}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      # Only the bundled data sources are used; skip downloading plugins at startup.
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      # Read by the provisioning files.
+      GRAFANA_DB_PASSWORD: ${GRAFANA_DB_PASSWORD}
+      ALERTS_TOPIC_ARN: ${ALERTS_TOPIC_ARN}
+      # The SNS contact point signs with the EC2 instance role (IMDS hop limit is 2 for containers).
+      AWS_REGION: us-east-1
+    volumes:
+      - grafanadata:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana-dashboards:ro
+    mem_limit: 320m
+    depends_on:
+      - victoriametrics
+    networks:
+      - default
+      - edge
+
+  # Host CPU, memory, swap and disk (the host's /proc and / are mounted read-only).
+  node-exporter:
+    image: prom/node-exporter:v1.12.1
+    restart: unless-stopped
+    command:
+      - --path.rootfs=/host
+      - --collector.disable-defaults
+      - --collector.cpu
+      - --collector.meminfo
+      - --collector.filesystem
+      - --collector.loadavg
+      - --collector.diskstats
+      - --collector.pressure
+      - --collector.stat
+      - --collector.uname
+      - --collector.time
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    mem_limit: 48m
+
+  # Postgres connections, size and activity, as the read-only grafana_ro role (granted pg_monitor; grafana-ro.sql).
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.20.1
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_URI: postgres:5432/drivein?sslmode=disable
+      DATA_SOURCE_USER: grafana_ro
+      DATA_SOURCE_PASS: ${GRAFANA_DB_PASSWORD}
+    mem_limit: 48m
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   # One-shot EF Core migration bundle; run explicitly by deploy.sh before the app restarts.
   migrate:
     image: ${REGISTRY}/drive-in-migrate:${TAG}
@@ -78,6 +180,8 @@ volumes:
   dpkeys:
   caddy_data:
   caddy_config:
+  vmdata:
+  grafanadata:
 
 networks:
   # Caddy <-> web. Fixed subnet so the web app can trust forwarded headers from it only.

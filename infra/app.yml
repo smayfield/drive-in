@@ -3,7 +3,8 @@ Description: >
   drive-in.online app: one small ARM EC2 server running the stack in Docker
   (Caddy, Blazor web app, PostgreSQL, EF Core migration bundle), with ECR image
   repos, an ops bucket for deploy files and DB backups, daily EBS snapshots,
-  Route 53 records, and a GitHub Actions OIDC deploy role. Deploy in us-east-1.
+  Route 53 records, an SNS alerts topic with CloudWatch alarms, and a GitHub
+  Actions OIDC deploy role. Deploy in us-east-1.
 
 Parameters:
   DomainName:
@@ -29,12 +30,19 @@ Parameters:
       OIDC subject allowed to deploy (main branch only). This repo uses GitHub's
       immutable subject format; see
       `gh api repos/smayfield/drive-in/actions/oidc/customization/sub`.
+  AlertEmail:
+    Type: String
+    Default: ""
+    Description: >
+      Where alerts are emailed (CloudWatch alarms and Grafana, through the SNS topic). Confirm
+      the subscription from the email SNS sends. Blank = no subscription.
   AmiId:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
 
 Conditions:
   Live: !Equals [!Ref ServeApex, "true"]
+  HasAlertEmail: !Not [!Equals [!Ref AlertEmail, ""]]
 
 Resources:
   # ---------- Network: one public subnet, no NAT ----------
@@ -161,6 +169,10 @@ Resources:
               - Effect: Allow
                 Action: s3:PutObject
                 Resource: !Sub ${OpsBucket.Arn}/backups/*
+              # Grafana sends alerts to the alerts topic with the instance role (no stored keys).
+              - Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref AlertsTopic
               # The web container sends account and invite emails through SES (see email.yml).
               - Effect: Allow
                 Action: [ses:SendEmail, ses:SendRawEmail]
@@ -214,6 +226,95 @@ Resources:
       Domain: vpc
       InstanceId: !Ref Server
       Tags: [{ Key: Name, Value: drive-in }]
+
+  # ---------- Alerts: SNS email, plus CloudWatch alarms for what Grafana can't see ----------
+  # Grafana runs on this server, so it can't report the server itself dying; these alarms can.
+  # All within the free tier (10 alarms, 1,000 SNS emails a month).
+  AlertsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: drive-in-alerts
+      DisplayName: Drive-In alerts
+  AlertsSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasAlertEmail
+    Properties:
+      TopicArn: !Ref AlertsTopic
+      Protocol: email
+      Endpoint: !Ref AlertEmail
+  # Read by deploy.sh for Grafana's contact point.
+  AlertsTopicParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /drive-in/alerts-topic-arn
+      Type: String
+      Value: !Ref AlertsTopic
+
+  # The host failed (hardware, network): EC2 moves the instance to healthy hardware, keeping its disk and IP.
+  SystemStatusAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: drive-in-system-status
+      AlarmDescription: The drive-in server's host failed its status check; EC2 is recovering it.
+      Namespace: AWS/EC2
+      MetricName: StatusCheckFailed_System
+      Dimensions: [{ Name: InstanceId, Value: !Ref Server }]
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions:
+        - !Sub arn:aws:automate:${AWS::Region}:ec2:recover
+        - !Ref AlertsTopic
+      OKActions: [!Ref AlertsTopic]
+  # The OS is hung or out of memory. Needs a reboot or a look over SSM.
+  InstanceStatusAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: drive-in-instance-status
+      AlarmDescription: The drive-in server failed its instance status check (hung, out of memory, or not booting).
+      Namespace: AWS/EC2
+      MetricName: StatusCheckFailed_Instance
+      Dimensions: [{ Name: InstanceId, Value: !Ref Server }]
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 3
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: breaching
+      AlarmActions: [!Ref AlertsTopic]
+      OKActions: [!Ref AlertsTopic]
+  CpuAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: drive-in-cpu-high
+      AlarmDescription: The drive-in server's CPU has been above 90% for 15 minutes.
+      Namespace: AWS/EC2
+      MetricName: CPUUtilization
+      Dimensions: [{ Name: InstanceId, Value: !Ref Server }]
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 3
+      Threshold: 90
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions: [!Ref AlertsTopic]
+      OKActions: [!Ref AlertsTopic]
+  # t4g instances run "unlimited": sustained CPU beyond the earned credits is billed. Any charge is worth knowing about.
+  CpuSurplusChargedAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: drive-in-cpu-surplus-charged
+      AlarmDescription: The drive-in server is being billed for surplus CPU credits (sustained CPU above its baseline).
+      Namespace: AWS/EC2
+      MetricName: CPUSurplusCreditsCharged
+      Dimensions: [{ Name: InstanceId, Value: !Ref Server }]
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions: [!Ref AlertsTopic]
 
   # ---------- DNS ----------
   AppRecord:
@@ -331,3 +432,5 @@ Outputs:
     Value: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com
   DeployRoleArn:
     Value: !GetAtt DeployRole.Arn
+  AlertsTopicArn:
+    Value: !Ref AlertsTopic

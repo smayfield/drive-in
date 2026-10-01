@@ -17,8 +17,17 @@ param() {
     --query Parameter.Value --output text
 }
 
+# serve-apex is managed by the CloudFormation stack (ServeApex parameter).
+if [ "$(param serve-apex)" = "true" ]; then PUBLIC_HOST=drive-in.online; else PUBLIC_HOST=app.drive-in.online; fi
+
 log "Writing .env from SSM Parameter Store"
 umask 077
+# Assigned here, not in the heredoc below, so a missing parameter stops the deploy (set -e) before anything changes.
+GRAFANA_DB_PASSWORD=$(param grafana-db-password)
+ALERTS_TOPIC_ARN=$(param alerts-topic-arn)
+# Grafana's built-in admin password is never used (no login form or basic auth); keep it random.
+GRAFANA_ADMIN_PASSWORD=$(grep -s '^GRAFANA_ADMIN_PASSWORD=' .env | cut -d= -f2- || true)
+GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')}
 cat > .env <<EOF
 REGISTRY=$REGISTRY
 TAG=$TAG
@@ -27,11 +36,14 @@ GOOGLE_CLIENT_ID=$(param google-client-id)
 GOOGLE_CLIENT_SECRET=$(param google-client-secret)
 ADMIN_EMAIL=$(param admin-email)
 GEOCODING_CONTACT_EMAIL=$(param geocoding-contact-email 2>/dev/null || true)
+PUBLIC_HOST=$PUBLIC_HOST
+GRAFANA_DB_PASSWORD=$GRAFANA_DB_PASSWORD
+GRAFANA_ADMIN_PASSWORD=$GRAFANA_ADMIN_PASSWORD
+ALERTS_TOPIC_ARN=$ALERTS_TOPIC_ARN
 EOF
 umask 022
 
-# serve-apex is managed by the CloudFormation stack (ServeApex parameter).
-if [ "$(param serve-apex)" = "true" ]; then
+if [ "$PUBLIC_HOST" = "drive-in.online" ]; then
   log "Serving drive-in.online (live)"
   install -D -m 0644 Caddyfile.live caddy/Caddyfile
 else
@@ -53,8 +65,13 @@ compose up -d --wait postgres
 log "Applying EF Core migrations"
 compose --profile migrate run --rm migrate
 
+log "Granting Grafana's read-only database role"
+compose exec -T -e "GRAFANA_DB_PASSWORD=$GRAFANA_DB_PASSWORD" postgres psql -q -U drivein -d drivein -f - < grafana-ro.sql
+
 log "Starting apps"
-compose up -d --remove-orphans caddy web
+compose up -d --remove-orphans caddy web victoriametrics grafana node-exporter postgres-exporter
+# Grafana reads its provisioning (dashboards, alert rules) at startup; restart it so changed files apply.
+compose restart grafana
 # Caddy doesn't watch its config file; reload picks up a changed Caddyfile without downtime.
 compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile || true
 
