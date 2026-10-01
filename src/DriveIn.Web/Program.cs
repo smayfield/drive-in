@@ -252,7 +252,7 @@ builder.Services.AddScoped<MessagingService>();
 builder.Services.AddHostedService<NotificationEmailService>();
 
 // Theaters' own pages and posts (sanitized rich text) and their image libraries.
-builder.Services.AddSingleton<HtmlContent>();
+builder.Services.AddSingleton(sp => new HtmlContent(sp.GetRequiredService<IOptions<NotificationOptions>>().Value.SiteUrl));
 builder.Services.AddScoped<ContentService>();
 
 var app = builder.Build();

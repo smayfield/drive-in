@@ -426,7 +426,7 @@ public sealed partial class ContentService(
         var body = html.Sanitize(page.BodyHtml, theater.Slug, await LibraryAsync(db, theater.Id));
         var description = page.Summary ?? HtmlContent.Excerpt(HtmlContent.ToPlainText(body), 200);
         var cover = page.CoverImage;
-        var firstImage = HtmlContent.ImageIds(body).Select(id => (int?)id).FirstOrDefault();
+        var firstImage = HtmlContent.FirstImageId(body);
         var shareImage = cover is not null ? cover.Url(theater.Slug)
             : firstImage is int imageId ? TheaterImage.ImageUrl(theater.Slug, imageId)
             : theater.LogoUrl;

@@ -14,8 +14,11 @@ public sealed record LibraryImage(int Id, int Width, int Height, string? AltText
 // Cleans the HTML of theaters' pages and posts (from the editor, or pasted into it) down to an allowlist, so what a
 // theater writes can never run script or pull in anything from elsewhere. Run when content is saved and again when it's
 // shown, so tightening the rules here applies to everything already stored.
-public sealed partial class HtmlContent
+public sealed partial class HtmlContent(string? siteUrl = null)
 {
+    // This site's host (Notifications:SiteUrl, the site's public address), so links back to it stay in the same tab.
+    private readonly string siteHost = Uri.TryCreate(siteUrl ?? "https://drive-in.online/", UriKind.Absolute, out var site) ? site.Host : "";
+
     // Image layout chosen in the editor: width, and where it sits (left and right let text wrap around it).
     public static readonly string[] ImageSizes = ["small", "medium", "full"];
     public static readonly string[] ImageAligns = ["left", "center", "right"];
@@ -100,8 +103,8 @@ public sealed partial class HtmlContent
     }
 
     // Links can't act for the theater's page (no opener) or pass on where readers came from; links off the site open
-    // in a new tab.
-    private static void FixLink(IHtmlAnchorElement a)
+    // in a new tab (absolute links to this site, like relative ones, don't).
+    private void FixLink(IHtmlAnchorElement a)
     {
         var href = a.GetAttribute("href");
         if (string.IsNullOrWhiteSpace(href))
@@ -110,7 +113,8 @@ public sealed partial class HtmlContent
             return;
         }
         a.SetAttribute("rel", "noopener noreferrer nofollow");
-        if (href.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || href.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        if (Uri.TryCreate(href, UriKind.Absolute, out var url) && url.Scheme is "http" or "https"
+            && !string.Equals(url.Host, siteHost, StringComparison.OrdinalIgnoreCase))
             a.SetAttribute("target", "_blank");
     }
 
@@ -155,6 +159,11 @@ public sealed partial class HtmlContent
     // No words and no images: nothing a reader would see.
     public static bool IsEffectivelyEmpty(string? html) =>
         ToPlainText(html).Length == 0 && html?.Contains("<img", StringComparison.OrdinalIgnoreCase) != true;
+
+    // The first library image the HTML places, in document order (the share image when there's no cover).
+    public static int? FirstImageId(string? html) =>
+        html is not null && ImageRef().Match(html) is { Success: true } m
+            ? int.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) : null;
 
     // The library image ids this HTML places: <img> sources only, not links or text that merely mention an image.
     public static IReadOnlySet<int> ImageIds(string? html) =>

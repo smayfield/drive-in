@@ -206,15 +206,20 @@ else
     private Task SaveAsync() => Busy(SaveCoreAsync, "Saved.");
 
     // The schedule is read before saving: saving reloads the form from what's stored, which doesn't have it yet.
-    private Task PublishNowAsync() => Busy(async () =>
+    // For something already live the button reads "Save", and only saves.
+    private async Task PublishNowAsync()
     {
-        var until = Join(untilDate, untilTime);
-        await SaveCoreAsync();
-        if (saved!.IsLive(Time.GetUtcNow()))
-            return;
-        await Content.PublishAsync(User, saved.Id, null, until);
-        await ReloadAsync();
-    }, "Published. It's live now.");
+        var wasLive = saved?.IsLive(Time.GetUtcNow()) == true;
+        await Busy(async () =>
+        {
+            var until = Join(untilDate, untilTime);
+            await SaveCoreAsync();
+            if (saved!.IsLive(Time.GetUtcNow()))
+                return;
+            await Content.PublishAsync(User, saved.Id, null, until);
+            await ReloadAsync();
+        }, wasLive ? "Saved." : "Published. It's live now.");
+    }
 
     private Task ScheduleAsync() => Busy(async () =>
     {

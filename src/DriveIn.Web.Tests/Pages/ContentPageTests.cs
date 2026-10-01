@@ -123,6 +123,11 @@ public class ContentPageTests
         page.WaitForText("Published. It's live now.");
         Assert.True((await w.App.Db().TheaterPages.SingleAsync()).IsLive(w.App.Time.GetUtcNow()));
         Assert.Contains("theaters/starlight/pages/house-rules", page.Markup);
+
+        // Once live, the same button just saves, and says so.
+        page.FindAll("button").Single(b => b.TextContent.Trim() == "Save" && b.ClassList.Contains("mud-button-filled")).Click();
+        page.WaitForText("Saved.");
+        Assert.DoesNotContain("Published. It's live now.", page.Text());
     }
 
     [Fact]

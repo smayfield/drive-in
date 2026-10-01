@@ -45,6 +45,10 @@ public class HtmlContentTests
             Clean("<a href=\"mailto:hi@example.com\">mail</a>"));
         Assert.Equal("<a href=\"theaters/starlight/news\" rel=\"noopener noreferrer nofollow\">news</a>",
             Clean("<a href=\"theaters/starlight/news\">news</a>"));
+        // An absolute link back to this site stays in the same tab, like a relative one.
+        Assert.Equal("<a href=\"https://drive-in.online/theaters/starlight\" rel=\"noopener noreferrer nofollow\">us</a>",
+            Clean("<a href=\"https://drive-in.online/theaters/starlight\">us</a>"));
+        Assert.Contains("target=\"_blank\"", new HtmlContent("http://localhost:5280/").Sanitize("<a href=\"https://drive-in.online/\">x</a>", "s", Library));
     }
 
     [Fact]
@@ -75,6 +79,8 @@ public class HtmlContentTests
         Assert.True(HtmlContent.IsEffectivelyEmpty("<p><br></p>"));
         Assert.False(HtmlContent.IsEffectivelyEmpty("<p><img src=\"theaters/x/images/1\"></p>"));
         Assert.Equal(new HashSet<int> { 7, 8 }, HtmlContent.ImageIds("<img src=\"theaters/x/images/7\"><img alt=\"a\" src=\"theaters/x/images/8?v=1\">"));
+        Assert.Equal(12, HtmlContent.FirstImageId("<p>x</p><img src=\"theaters/x/images/12\"><img src=\"theaters/x/images/3\">"));
+        Assert.Null(HtmlContent.FirstImageId("<p>No images</p>"));
         // Links and text that mention an image address don't count as using it.
         Assert.Empty(HtmlContent.ImageIds("<a href=\"https://example.com/theaters/x/images/9\">see /images/9</a>"));
         Assert.Equal("", Clean("   "));
