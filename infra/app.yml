@@ -36,9 +36,6 @@ Parameters:
     Description: >
       Where alerts are emailed (CloudWatch alarms and Grafana, through the SNS topic). Confirm
       the subscription from the email SNS sends. Blank = no subscription.
-  AmiId:
-    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
 
 Conditions:
   Live: !Equals [!Ref ServeApex, "true"]
@@ -186,7 +183,12 @@ Resources:
   Server:
     Type: AWS::EC2::Instance
     Properties:
-      ImageId: !Ref AmiId
+      # A fixed image, in the template rather than a parameter. It used to follow the "latest Amazon Linux" SSM
+      # parameter, which CloudFormation re-resolves on every update; on 2026-10-01 a newer image replaced the server
+      # (a fresh, empty disk). A parameter would keep its previous value on `cloudformation deploy`, so changing its
+      # default wouldn't take effect; here, changing the image is a reviewed template change. Upgrade deliberately:
+      # see the README.
+      ImageId: ami-065b1b834d2a83a7a # Amazon Linux 2023 arm64, launched 2026-10-01
       InstanceType: !Ref InstanceType
       IamInstanceProfile: !Ref InstanceProfile
       SubnetId: !Ref Subnet
