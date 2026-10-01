@@ -82,13 +82,14 @@ public sealed partial class HtmlContent(string? siteUrl = null)
     }
 
     // Keeps an image only if it's one of the theater's own, and writes its address, size and loading hints from the
-    // library rather than trusting what was submitted.
+    // library rather than trusting what was submitted. Image ids are unique across theaters, so being in this theater's
+    // library is the check; the slug in the address is rewritten to the current one (an admin can rename a theater,
+    // and its saved pages still carry the old address).
     private static void FixImage(IHtmlImageElement img, string imagePath, IReadOnlyDictionary<int, LibraryImage> images)
     {
         var src = img.GetAttribute("src") ?? "";
         var match = ImageSrc().Match(src);
-        if (!match.Success || !string.Equals(match.Groups["path"].Value, imagePath, StringComparison.Ordinal)
-            || !int.TryParse(match.Groups["id"].Value, out var id) || !images.TryGetValue(id, out var image))
+        if (!match.Success || !int.TryParse(match.Groups["id"].Value, out var id) || !images.TryGetValue(id, out var image))
         {
             img.Remove();
             return;

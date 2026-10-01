@@ -64,7 +64,8 @@ public class HtmlContentTests
         Assert.Contains("src=\"theaters/starlight/images/8\"", Clean("<img src=\"/theaters/starlight/images/8\">"));
 
         Assert.Equal("", Clean("<img src=\"theaters/starlight/images/99\">"));       // not in the library
-        Assert.Equal("", Clean("<img src=\"theaters/moonlight/images/7\">"));        // another theater's
+        // In the library under an older address (the theater was renamed): kept, at the current address.
+        Assert.Contains("src=\"theaters/starlight/images/7\"", Clean("<img src=\"theaters/old-name/images/7\">"));
         Assert.Equal("", Clean("<img src=\"https://evil.example/x.png\">"));
         Assert.Equal("", Clean("<img src=\"data:image/png;base64,AAAA\">"));
     }
