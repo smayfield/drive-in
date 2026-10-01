@@ -176,7 +176,8 @@ else
     builder.Services.AddSingleton<IPaymentProcessor, UnavailablePaymentProcessor>();
 builder.Services.AddSingleton<SpotEvents>();
 
-// The forecast for showings (Open-Meteo: no key, 16 days ahead).
+// The forecast for showings (Open-Meteo: no key, 16 days ahead), cached per place in the shared memory cache.
+builder.Services.AddMemoryCache();
 builder.Services.Configure<WeatherOptions>(builder.Configuration.GetSection(WeatherOptions.Section));
 var weatherProvider = builder.Configuration[$"{WeatherOptions.Section}:Provider"] ?? "OpenMeteo";
 if (weatherProvider.Equals("OpenMeteo", StringComparison.OrdinalIgnoreCase))
