@@ -79,10 +79,8 @@ public class WeatherTests
 
         var result = await weather.ForShowingsAsync(Principals.For(user), theater, [lastNight, acrossTheEnd, dayAfter]);
 
-        Assert.Equal([1], result.Keys);
-        Assert.False(weather.IsBeyondForecast(theater, lastNight));
-        Assert.True(weather.IsBeyondForecast(theater, acrossTheEnd));
-        Assert.True(weather.IsBeyondForecast(theater, dayAfter));
+        Assert.Equal([1], result.Weather.Keys);
+        Assert.Equal([2, 3], result.Later.Order());
     }
 
     [Fact]
@@ -130,29 +128,36 @@ public class WeatherTests
 
         var result = await weather.ForShowingsAsync(Principals.For(user), theater, [tonight, past, farOff]);
 
-        Assert.Equal([1], result.Keys);
-        Assert.Equal("Mostly clear · 68°F", result[1].Summary);
+        Assert.Equal([1], result.Weather.Keys);
+        Assert.Equal("Mostly clear · 68°F", result.For(1)!.Summary);
         Assert.Single(app.Weather.Requests); // one fetch for the theater
-        Assert.True(weather.IsBeyondForecast(theater, farOff));
-        Assert.False(weather.IsBeyondForecast(theater, tonight));
+        Assert.True(result.IsLater(3));
+        Assert.False(result.IsLater(1));
+        Assert.False(result.IsLater(2)); // over, not later
     }
 
     [Fact]
-    public async Task No_forecast_without_coordinates_or_for_theaters_the_user_cant_browse()
+    public async Task Nothing_without_coordinates_for_theaters_the_user_cant_browse_or_with_weather_off()
     {
         await using var app = new TestApp();
         var owner = await app.CreateUserAsync("owner@example.com");
         var guest = await app.CreateUserAsync("guest@example.com");
         app.Weather.Forecast = Forecast();
         var weather = app.Get<WeatherService>();
-        var tonight = Showing(1, Today.AddHours(20));
+        ShowtimeView[] showings = [Showing(1, Today.AddHours(20)), Showing(2, Today.AddDays(20))];
 
         var unplaced = await TheaterAsync(app, at: null);
-        Assert.Empty(await weather.ForShowingsAsync(Principals.For(guest), unplaced, [tonight]));
+        Assert.Same(ShowingForecasts.None, await weather.ForShowingsAsync(Principals.For(guest), unplaced, showings));
 
         var demo = await TheaterAsync(app, new GeoPoint(30.27, -97.74), TheaterMode.Demo, ownerId: owner.Id);
-        Assert.Empty(await weather.ForShowingsAsync(Principals.For(guest), demo, [tonight]));
-        Assert.Single(await weather.ForShowingsAsync(Principals.For(owner), demo, [tonight]));
+        Assert.Same(ShowingForecasts.None, await weather.ForShowingsAsync(Principals.For(guest), demo, showings));
+        var forOwner = await weather.ForShowingsAsync(Principals.For(owner), demo, showings);
+        Assert.Single(forOwner.Weather);
+        Assert.True(forOwner.IsLater(2));
+
+        // Weather:Provider = None: no "available later" note either.
+        var off = new WeatherService(new NullWeatherForecaster(), app.Time);
+        Assert.Same(ShowingForecasts.None, await off.ForShowingsAsync(Principals.For(owner), demo, showings));
     }
 
     [Fact]
@@ -165,7 +170,7 @@ public class WeatherTests
 
         var result = await app.Get<WeatherService>().ForShowingsAsync(Principals.For(user), theater, [Showing(1, Today.AddHours(20))]);
 
-        Assert.Equal("Mostly clear · 20°C", result[1].Summary);
+        Assert.Equal("Mostly clear · 20°C", result.For(1)!.Summary);
     }
 
     // --- OpenMeteoForecaster ---
@@ -228,5 +233,9 @@ public class WeatherTests
         Assert.NotNull(await forecaster.GetHourlyAsync(new GeoPoint(30, -97)));
         Assert.Null(await OpenMeteo(new StubHandler(_ => Json("{}"))).GetHourlyAsync(new GeoPoint(30, -97)));
         Assert.Null(await OpenMeteo(new StubHandler(_ => Json("nope"))).GetHourlyAsync(new GeoPoint(30, -97)));
+        // A timestamp DateTimeOffset can't hold is skipped, not thrown on.
+        var odd = await OpenMeteo(new StubHandler(_ => Json("""{"hourly":{"time":[999999999999999,1788220800],"temperature_2m":[20,21],"weather_code":[0,0]}}""")))
+            .GetHourlyAsync(new GeoPoint(30, -97));
+        Assert.Equal([21.0], odd!.Hours.Select(h => h.TemperatureC));
     }
 }

@@ -141,7 +141,8 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   it ends: the worst WMO condition, the temperature at start and end, the highest chance of rain, and wind when it's 25 km/h
   or more. It appears on the theater page's showing stubs, the showing page (with a "check the forecast" chip when rain is
   50%+ likely, there are thunderstorms, or wind reaches 40 km/h), and the ticket page until the car is admitted. It's only
-  for showings that haven't ended, at theaters with coordinates that the user may browse (otherwise nothing is shown). Showings
+  for showings that haven't ended, at theaters with coordinates that the user may browse, with weather turned on (otherwise nothing is shown, not even the
+  "available later" note). Showings
   that end past the forecast range (`WeatherService.ForecastDays`, 16 whole UTC days from
   today) say when the forecast becomes available. A showing's hours are those it overlaps (an end on the hour doesn't take in
   the next). °F/mph when the theater's country is

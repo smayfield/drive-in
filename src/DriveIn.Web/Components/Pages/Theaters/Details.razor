@@ -98,7 +98,7 @@ else
                             </p>
                             @if (weather is not null)
                             {
-                                <WeatherLine Weather="@weather.GetValueOrDefault(s.Id)" BeyondForecast="@Weather.IsBeyondForecast(theater, s)" />
+                                <WeatherLine Weather="@weather.For(s.Id)" BeyondForecast="@weather.IsLater(s.Id)" />
                             }
                         </ChildContent>
                         <Aside>
@@ -172,7 +172,7 @@ else
 
     private Theater? theater;
     private List<ShowtimeView> showings = [];
-    private Dictionary<int, ShowingWeather>? weather;
+    private ShowingForecasts? weather;
     private List<ShowtimeView>? weatherFor;
 
     protected override async Task OnParametersSetAsync()

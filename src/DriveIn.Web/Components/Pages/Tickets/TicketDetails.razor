@@ -69,7 +69,7 @@ else
             <MudText>@s.ScreenName</MudText>
             @if (weather is not null && v.AdmittedLocal is null)
             {
-                <div class="d-flex justify-center"><WeatherLine Weather="@weather.GetValueOrDefault(s.Id)" BeyondForecast="@Weather.IsBeyondForecast(v.Theater, s)" /></div>
+                <div class="d-flex justify-center"><WeatherLine Weather="@weather.For(s.Id)" BeyondForecast="@weather.IsLater(s.Id)" /></div>
             }
             <MudText Typo="Typo.caption" Class="muted d-block mt-2">Spot</MudText>
             <div class="ticket-spot @(t.VehicleSize == VehicleSize.Large ? "mb-1" : "mb-3")">@t.SpotLabel</div>
@@ -126,7 +126,7 @@ else
     private TicketLookup? lookup;
     private string? qr;
     private bool sending;
-    private Dictionary<int, ShowingWeather>? weather;
+    private ShowingForecasts? weather;
     private TicketLookup? weatherFor;
 
     protected override async Task LoadAsync()

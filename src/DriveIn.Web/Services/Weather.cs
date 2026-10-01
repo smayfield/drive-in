@@ -15,6 +15,9 @@ public sealed record ForecastHour(DateTimeOffset At, double TemperatureC, int? P
 // Fetches forecasts. Implementations never throw for provider failures: a forecast that can't be had is null.
 public interface IWeatherForecaster
 {
+    // False when weather is turned off (Weather:Provider = None), so pages don't promise a forecast later.
+    bool IsEnabled => true;
+
     Task<HourlyForecast?> GetHourlyAsync(GeoPoint at, CancellationToken ct = default);
 }
 
@@ -29,6 +32,8 @@ public sealed class WeatherOptions
 
 public sealed class NullWeatherForecaster : IWeatherForecaster
 {
+    public bool IsEnabled => false;
+
     public Task<HourlyForecast?> GetHourlyAsync(GeoPoint at, CancellationToken ct = default) => Task.FromResult<HourlyForecast?>(null);
 }
 
@@ -66,6 +71,9 @@ public sealed class OpenMeteoForecaster(IHttpClientFactory httpFactory, IMemoryC
 
     private sealed record OpenMeteoResponse([property: JsonPropertyName("hourly")] OpenMeteoHourly? Hourly);
 
+    // What DateTimeOffset can represent; anything else in a response is garbage and skipped rather than thrown on.
+    private const long MinUnixSeconds = -62135596800, MaxUnixSeconds = 253402300799;
+
     private sealed record OpenMeteoHourly(
         [property: JsonPropertyName("time")] long[]? Time,
         [property: JsonPropertyName("temperature_2m")] double?[]? Temperature,
@@ -81,7 +89,8 @@ public sealed class OpenMeteoForecaster(IHttpClientFactory httpFactory, IMemoryC
             var hours = new List<ForecastHour>();
             for (var i = 0; i < Time.Length; i++)
             {
-                if (Temperature.ElementAtOrDefault(i) is not double temp || WeatherCode.ElementAtOrDefault(i) is not int code)
+                if (Temperature.ElementAtOrDefault(i) is not double temp || WeatherCode.ElementAtOrDefault(i) is not int code
+                    || Time[i] is < MinUnixSeconds or > MaxUnixSeconds)
                     continue;
                 hours.Add(new ForecastHour(DateTimeOffset.FromUnixTimeSeconds(Time[i]), temp,
                     PrecipitationChance?.ElementAtOrDefault(i), code, Wind?.ElementAtOrDefault(i) ?? 0));
@@ -89,6 +98,15 @@ public sealed class OpenMeteoForecaster(IHttpClientFactory httpFactory, IMemoryC
             return hours.Count == 0 ? null : new HourlyForecast(hours);
         }
     }
+}
+
+// WeatherService.ForShowingsAsync's answer: forecasts by showing id, and the showings too far off for one yet.
+public sealed record ShowingForecasts(IReadOnlyDictionary<int, ShowingWeather> Weather, IReadOnlySet<int> Later)
+{
+    public static readonly ShowingForecasts None = new(new Dictionary<int, ShowingWeather>(), new HashSet<int>());
+
+    public ShowingWeather? For(int showingId) => Weather.GetValueOrDefault(showingId);
+    public bool IsLater(int showingId) => Later.Contains(showingId);
 }
 
 // The weather over one showing, from start to end.
@@ -140,34 +158,33 @@ public sealed class WeatherService(IWeatherForecaster forecaster, TimeProvider t
 {
     public const int ForecastDays = 16;
 
-    // Forecasts for the showings that have one: not over yet, within the forecast range, at a theater with coordinates.
-    public async Task<Dictionary<int, ShowingWeather>> ForShowingsAsync(ClaimsPrincipal user, Theater theater,
+    // Forecasts for the showings that have one (not over yet, ending within the forecast range), and the showings too far
+    // off for one yet. Both are empty when weather is off, the theater has no coordinates, or the user can't browse it
+    // (empty rather than access denied, so a page that can show the showing anyway, like a ticket at a theater that has
+    // since closed, still works).
+    public async Task<ShowingForecasts> ForShowingsAsync(ClaimsPrincipal user, Theater theater,
         IEnumerable<ShowtimeView> showings, CancellationToken ct = default)
     {
-        var result = new Dictionary<int, ShowingWeather>();
-        // Nothing rather than access denied, so a page that can show the showing anyway (a ticket at a theater that has
-        // since closed) still works.
-        if (!TheaterService.CanBrowse(user, theater))
-            return result;
+        if (!forecaster.IsEnabled || !TheaterService.CanBrowse(user, theater) || Geo.Of(theater) is not GeoPoint at)
+            return ShowingForecasts.None;
         var now = time.GetUtcNow();
-        var wanted = showings.Select(s => (s.Id, Starts: s.StartsAt, Ends: s.EndsAt))
-            .Where(s => s.Ends > now && s.Ends <= Horizon).ToList();
-        if (wanted.Count == 0 || Geo.Of(theater) is not GeoPoint at || await forecaster.GetHourlyAsync(at, ct) is not HourlyForecast forecast)
-            return result;
-        var us = string.IsNullOrWhiteSpace(theater.Country) || theater.Country.Trim().ToUpperInvariant() is "US" or "USA" or "UNITED STATES";
-        foreach (var (id, starts, ends) in wanted)
+        // The forecast runs ForecastDays whole days in UTC, starting today, so it ends at midnight UTC after the last one.
+        var horizon = new DateTimeOffset(now.UtcDateTime.Date, TimeSpan.Zero).AddDays(ForecastDays);
+        var upcoming = showings.Where(s => s.EndsAt > now).ToList();
+        var later = upcoming.Where(s => s.EndsAt > horizon).Select(s => s.Id).ToHashSet();
+        var wanted = upcoming.Where(s => s.EndsAt <= horizon).ToList();
+        var weather = new Dictionary<int, ShowingWeather>();
+        if (wanted.Count > 0 && await forecaster.GetHourlyAsync(at, ct) is HourlyForecast forecast)
         {
-            if (Summarize(forecast, starts, ends, us) is ShowingWeather weather)
-                result[id] = weather;
+            var us = string.IsNullOrWhiteSpace(theater.Country) || theater.Country.Trim().ToUpperInvariant() is "US" or "USA" or "UNITED STATES";
+            foreach (var s in wanted)
+            {
+                if (Summarize(forecast, s.StartsAt, s.EndsAt, us) is ShowingWeather w)
+                    weather[s.Id] = w;
+            }
         }
-        return result;
+        return new ShowingForecasts(weather, later);
     }
-
-    // Whether a showing is too far off to have a forecast yet: it doesn't end by the forecast's last hour.
-    public bool IsBeyondForecast(Theater theater, ShowtimeView showing) => showing.EndsAt > Horizon;
-
-    // The forecast runs ForecastDays whole days in UTC, starting today, so it ends at midnight UTC after the last one.
-    private DateTimeOffset Horizon => new DateTimeOffset(time.GetUtcNow().UtcDateTime.Date, TimeSpan.Zero).AddDays(ForecastDays);
 
     // The hours the showing overlaps, [starts, ends): an end exactly on the hour doesn't take in the next one. Null unless
     // the forecast covers them all.

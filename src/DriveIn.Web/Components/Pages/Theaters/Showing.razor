@@ -41,7 +41,7 @@ else
             </MudText>
             @if (weather is not null)
             {
-                <WeatherLine Weather="@weather.GetValueOrDefault(s.Id)" BeyondForecast="@Weather.IsBeyondForecast(sale.Theater, s)" Warn />
+                <WeatherLine Weather="@weather.For(s.Id)" BeyondForecast="@weather.IsLater(s.Id)" Warn />
             }
         </div>
     </div>
@@ -147,7 +147,7 @@ else
     private string? notice;
     private bool busy;
     private Timer? countdown;
-    private Dictionary<int, ShowingWeather>? weather;
+    private ShowingForecasts? weather;
     private ShowingForSale? weatherFor;
 
     private int optionId;

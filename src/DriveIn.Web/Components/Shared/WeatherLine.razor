@@ -2,18 +2,19 @@
 
 @if (Weather is not null)
 {
-    <p class="weather-line @(Weather.IsRough ? "weather-rough" : "")">
+    @* A div, not a p: MudChip renders block elements. *@
+    <div class="weather-line @(Weather.IsRough ? "weather-rough" : "")">
         <MudIcon Icon="@Icon(Weather.WeatherCode)" Size="Size.Small" aria-hidden="true" />
         <span><span class="visually-hidden">Forecast: </span>@Weather.Summary</span>
         @if (Warn && Weather.IsRough)
         {
             <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined" Class="my-0">Check the forecast before you go</MudChip>
         }
-    </p>
+    </div>
 }
 else if (BeyondForecast)
 {
-    <p class="weather-line muted">The forecast is available about @WeatherService.ForecastDays days ahead.</p>
+    <div class="weather-line muted">The forecast is available about @WeatherService.ForecastDays days ahead.</div>
 }
 
 @code {
