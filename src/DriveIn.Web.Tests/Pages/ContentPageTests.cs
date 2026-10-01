@@ -193,6 +193,23 @@ public class ContentPageTests
     }
 
     [Fact]
+    public async Task Moving_to_another_page_starts_a_new_editor_with_its_content()
+    {
+        await using var w = await SetUpAsync();
+        var rules = await w.Content.CreateAsync(w.OwnerUser, w.Theater.Id, PageKind.Page, Input("Rules", "<p>Be kind</p>"));
+        var snacks = await w.Content.CreateAsync(w.OwnerUser, w.Theater.Id, PageKind.Page, Input("Snacks", "<p>Popcorn</p>"));
+        await using var host = new PageHost(w.App).SignIn(w.Owner);
+        var module = EditorModule(host, "");
+
+        var page = host.Render<ManageContentEdit>(p => p.Add(x => x.Id, w.Theater.Id).Add(x => x.PageId, rules.Id));
+        page.WaitForAssertion(() => Assert.Single(module.Invocations["create"]));
+        page.Render(p => p.Add(x => x.Id, w.Theater.Id).Add(x => x.PageId, snacks.Id));
+
+        page.WaitForAssertion(() => Assert.Equal(2, module.Invocations["create"].Count));
+        Assert.Equal("<p>Popcorn</p>", module.Invocations["create"][1].Arguments[1]);
+    }
+
+    [Fact]
     public async Task Reopening_a_decorative_cover_keeps_it_decorative()
     {
         await using var w = await SetUpAsync();

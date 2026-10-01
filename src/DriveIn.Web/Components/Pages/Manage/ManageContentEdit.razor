@@ -48,7 +48,8 @@ else
             </div>
 
             <MudText Typo="Typo.subtitle2" Class="mb-1">Content</MudText>
-            <RichTextEditor @ref="editor" Theater="theater" Html="@body" Label="Content"
+            @* Keyed by page: the editor reads its content once, and this page is reused when the route changes. *@
+            <RichTextEditor @key="@(PageId?.ToString() ?? $"new-{kind}")" @ref="editor" Theater="theater" Html="@body" Label="Content"
                             Placeholder="Write here. Use the image button (or paste or drop a picture) to add images." />
         </MudItem>
 
