@@ -113,7 +113,7 @@ public sealed record ShowingForecasts(IReadOnlyDictionary<int, ShowingWeather> W
 public sealed record ShowingWeather(int WeatherCode, double StartC, double EndC, int? PrecipitationChance, double MaxWindKmh, bool UsUnits)
 {
     // Rain likely, a thunderstorm, or strong wind: worth a heads-up before buying.
-    public bool IsRough => PrecipitationChance >= 50 || WeatherCode >= 95 || MaxWindKmh >= 40;
+    public bool IsRough => PrecipitationChance is >= 50 || WeatherCode >= 95 || MaxWindKmh >= 40;
 
     public string Condition => Wmo.Describe(WeatherCode);
 
