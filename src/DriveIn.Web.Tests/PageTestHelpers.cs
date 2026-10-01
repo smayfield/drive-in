@@ -108,11 +108,15 @@ public sealed class PageHost : IAsyncDisposable
     // Where open selects and menus render their items (see Select).
     public IRenderedComponent<MudPopoverProvider>? Popovers { get; private set; }
 
-    // Renders the page alongside a MudPopoverProvider so selects and menus can open.
+    // Where dialogs (IDialogService: confirmations, the image picker) render.
+    public IRenderedComponent<MudDialogProvider>? Dialogs { get; private set; }
+
+    // Renders the page alongside a MudPopoverProvider and MudDialogProvider so selects, menus and dialogs can open.
     public IRenderedComponent<TPage> Render<TPage>(Action<ComponentParameterCollectionBuilder<TPage>>? parameters = null)
         where TPage : IComponent
     {
         Popovers ??= Context.Render<MudPopoverProvider>();
+        Dialogs ??= Context.Render<MudDialogProvider>();
         return Context.Render(parameters);
     }
 

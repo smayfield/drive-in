@@ -1,0 +1,125 @@
+@* The rich text editor for a theater's pages and posts (Quill, via wwwroot/rich-text.js). Images come from the theater's
+   library: the toolbar's image button opens ImagePickerDialog, and pasted or dropped image files are uploaded to the
+   library first. Read the content with GetHtmlAsync; the service sanitizes it when it's saved. *@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject IDialogService Dialogs
+@inject ContentService Content
+
+<div class="rich-text" aria-label="@Label">
+    <div @ref="host" class="rich-text-host"></div>
+</div>
+<Alerts Error="@error" />
+
+@code {
+    [Parameter, EditorRequired] public Theater Theater { get; set; } = default!;
+    [Parameter] public string? Html { get; set; }
+    [Parameter] public string? Placeholder { get; set; }
+    [Parameter] public string Label { get; set; } = "Content";
+
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private ElementReference host;
+    private IJSObjectReference? module;
+    private DotNetObjectReference<RichTextEditor>? self;
+    private int? editorId;
+    private string? error;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+        self = DotNetObjectReference.Create(this);
+        module = await JS.InvokeAsync<IJSObjectReference>("import", "./rich-text.js");
+        editorId = await module.InvokeAsync<int>("create", host, Html ?? "", Placeholder ?? "", self);
+    }
+
+    // What's in the editor now (the starting Html until the editor has loaded).
+    public async Task<string> GetHtmlAsync()
+    {
+        if (module is null || editorId is not int id)
+            return Html ?? "";
+        return await module.InvokeAsync<string?>("getHtml", id) ?? Html ?? "";
+    }
+
+    [JSInvokable]
+    public async Task OpenImagePicker()
+    {
+        error = null;
+        var choice = await ImagePickerDialog.ShowAsync(Dialogs, Theater, "insert");
+        if (choice is { Url: not null })
+            await InsertAsync(choice);
+    }
+
+    // A pasted or dropped image file: added to the library, then placed medium-sized and centered. Its description can
+    // be added by clicking it.
+    [JSInvokable]
+    public async Task UploadDropped(IJSStreamReference file, string fileName, long size)
+    {
+        error = null;
+        try
+        {
+            if (size > TheaterImage.MaxBytes)
+                throw new AppValidationException($"Images can be at most {TheaterImage.MaxBytes / (1024 * 1024)} MB.");
+            await using var stream = await file.OpenReadStreamAsync(TheaterImage.MaxBytes);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+            var image = await Content.UploadImageAsync((await AuthState).User, Theater.Id, fileName, buffer.ToArray());
+            await InsertAsync(new ImageChoice(image.Id, image.Url, image.AltText ?? "", image.Width, image.Height, "medium", "center"));
+        }
+        catch (Exception ex) when (ex is AppValidationException or NotFoundException or AccessDeniedException)
+        {
+            error = ex.Message;
+            StateHasChanged();
+            throw; // tells the script to stop uploading the rest
+        }
+    }
+
+    // An image in the text was clicked: change its description, size or position, or remove it.
+    [JSInvokable]
+    public async Task EditImage(PlacedImage image)
+    {
+        var (size, align) = ImageChoice.Layout(image.ClassName);
+        var choice = await ImagePickerDialog.ShowAsync(Dialogs, Theater, "edit", image.Alt, size, align);
+        if (choice is null || module is null || editorId is not int id)
+            return;
+        if (choice.IsRemoved)
+            await module.InvokeVoidAsync("updateImage", id, null);
+        else
+            await module.InvokeVoidAsync("updateImage", id, new { alt = choice.Alt, className = choice.ClassName });
+    }
+
+    private async Task InsertAsync(ImageChoice choice)
+    {
+        if (module is null || editorId is not int id)
+            return;
+        await module.InvokeVoidAsync("insertImage", id, new
+        {
+            src = choice.Url,
+            alt = choice.Alt,
+            width = choice.Width,
+            height = choice.Height,
+            className = choice.ClassName,
+        });
+    }
+
+    public sealed record PlacedImage(string Src, string Alt, string ClassName);
+
+    public async ValueTask DisposeAsync()
+    {
+        if (module is not null)
+        {
+            try
+            {
+                if (editorId is int id)
+                    await module.InvokeVoidAsync("dispose", id);
+                await module.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+                // The circuit is gone; so is the editor.
+            }
+        }
+        self?.Dispose();
+    }
+}

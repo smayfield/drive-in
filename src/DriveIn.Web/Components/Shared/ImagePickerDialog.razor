@@ -1,0 +1,207 @@
+@* Choosing an image for a page or post: from the theater's library or a new upload, with its description and (inline)
+   its size and position. Also edits an image already placed (Mode "edit"), or picks a cover (Mode "cover"). *@
+@inject ContentService Content
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(Mode switch { "edit" => "Image settings", "cover" => "Cover image", _ => "Add an image" })</MudText>
+    </TitleContent>
+    <DialogContent>
+        <Alerts Error="@error" />
+        @if (Mode != "edit")
+        {
+            <MudTabs @bind-ActivePanelIndex="tab" Elevation="0" Class="mb-3">
+                <MudTabPanel Text="Library">
+                    @if (library is null)
+                    {
+                        <MudProgressCircular Indeterminate Size="Size.Small" Class="ma-2" aria-label="Loading images" />
+                    }
+                    else if (library.Count == 0)
+                    {
+                        <MudText Class="muted pa-2">No images yet. Upload one.</MudText>
+                    }
+                    else
+                    {
+                        <div class="image-grid image-grid-picker" role="listbox" aria-label="Images">
+                            @foreach (var image in library)
+                            {
+                                var current = image;
+                                <button type="button" role="option" aria-selected="@(selected?.Id == current.Id ? "true" : "false")"
+                                        class="image-tile @(selected?.Id == current.Id ? "selected" : null)" @onclick="() => Select(current)"
+                                        title="@current.FileName">
+                                    <img src="@current.Url" alt="@(current.AltText ?? current.FileName)" loading="lazy" />
+                                </button>
+                            }
+                        </div>
+                    }
+                </MudTabPanel>
+                <MudTabPanel Text="Upload">
+                    <MudFileUpload T="IBrowserFile" Accept=".jpg,.jpeg,.png,.gif,.webp" FilesChanged="UploadAsync">
+                        <CustomContent>
+                            <MudButton OnClick="@context.OpenFilePickerAsync" Variant="Variant.Outlined" Disabled="busy">Choose an image</MudButton>
+                        </CustomContent>
+                    </MudFileUpload>
+                    <MudText Typo="Typo.caption" Class="muted d-block mt-1">
+                        JPG, PNG, GIF or WebP, up to @(TheaterImage.MaxBytes / (1024 * 1024)) MB. It's added to the theater's image library.
+                    </MudText>
+                </MudTabPanel>
+            </MudTabs>
+        }
+        @if (selected is not null || Mode == "edit")
+        {
+            @if (selected is not null)
+            {
+                <div class="image-picker-preview mb-2"><img src="@selected.Url" alt="" /></div>
+            }
+            <MudTextField T="string" @bind-Value="alt" Label="Description (alt text)" Variant="Variant.Outlined" Disabled="decorative"
+                          HelperText="What the image shows, for people who can't see it." MaxLength="@TheaterImage.MaxAltLength" Immediate />
+            <MudCheckBox T="bool" @bind-Value="decorative" Label="Decorative only (no description needed)" Dense />
+            @if (Mode != "cover")
+            {
+                <div class="d-flex flex-wrap gap-4 mt-2">
+                    <MudRadioGroup T="string" @bind-Value="size" aria-label="Size">
+                        <MudText Typo="Typo.subtitle2">Size</MudText>
+                        <MudRadio T="string" Value="@("small")" Dense>Small</MudRadio>
+                        <MudRadio T="string" Value="@("medium")" Dense>Medium</MudRadio>
+                        <MudRadio T="string" Value="@("full")" Dense>Full width</MudRadio>
+                    </MudRadioGroup>
+                    <MudRadioGroup T="string" @bind-Value="align" aria-label="Position">
+                        <MudText Typo="Typo.subtitle2">Position</MudText>
+                        <MudRadio T="string" Value="@("left")" Dense>Left (text wraps)</MudRadio>
+                        <MudRadio T="string" Value="@("center")" Dense>Center</MudRadio>
+                        <MudRadio T="string" Value="@("right")" Dense>Right (text wraps)</MudRadio>
+                    </MudRadioGroup>
+                </div>
+            }
+        }
+    </DialogContent>
+    <DialogActions>
+        @if (Mode == "edit")
+        {
+            <MudButton Color="Color.Error" OnClick="Remove">Remove image</MudButton>
+            <MudSpacer />
+        }
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!CanDone)" OnClick="Done">
+            @(Mode switch { "edit" => "Save", "cover" => "Use as cover", _ => "Insert" })
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    [Parameter, EditorRequired] public Theater Theater { get; set; } = default!;
+
+    // "insert" (into the text), "cover" or "edit" (an image already in the text).
+    [Parameter] public string Mode { get; set; } = "insert";
+    [Parameter] public string? InitialAlt { get; set; }
+    [Parameter] public string InitialSize { get; set; } = "medium";
+    [Parameter] public string InitialAlign { get; set; } = "center";
+    [Parameter] public int? SelectedId { get; set; }
+
+    private List<ImageView>? library;
+    private ImageView? selected;
+    private string? alt;
+    private bool decorative;
+    private string size = "medium";
+    private string align = "center";
+    private int tab;
+    private bool busy;
+    private string? error;
+
+    private bool CanDone => (Mode == "edit" || selected is not null) && (decorative || !string.IsNullOrWhiteSpace(alt)) && !busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        size = HtmlContent.ImageSizes.Contains(InitialSize) ? InitialSize : "medium";
+        align = HtmlContent.ImageAligns.Contains(InitialAlign) ? InitialAlign : "center";
+        alt = InitialAlt;
+        // An image already placed with no description, or a cover chosen as decorative (empty, not null), is decorative.
+        decorative = (Mode == "edit" && string.IsNullOrEmpty(InitialAlt)) || (Mode == "cover" && InitialAlt == "");
+        if (Mode == "edit")
+            return;
+        await LoadLibraryAsync();
+        selected = library?.FirstOrDefault(i => i.Id == SelectedId);
+        if (selected is not null && InitialAlt is null)
+            alt = selected.AltText;
+        if (library is { Count: 0 })
+            tab = 1;
+    }
+
+    private async Task LoadLibraryAsync()
+    {
+        try
+        {
+            library = await Content.ListImagesAsync((await AuthState).User, Theater.Id);
+        }
+        catch (Exception ex) when (ex is AppValidationException or NotFoundException or AccessDeniedException)
+        {
+            (library, error) = ([], ex.Message);
+        }
+    }
+
+    private void Select(ImageView image)
+    {
+        selected = image;
+        alt = image.AltText;
+        decorative = false;
+    }
+
+    private async Task UploadAsync(IBrowserFile? file)
+    {
+        if (file is null)
+            return;
+        (busy, error) = (true, null);
+        try
+        {
+            if (file.Size > TheaterImage.MaxBytes)
+                throw new AppValidationException($"Images can be at most {TheaterImage.MaxBytes / (1024 * 1024)} MB.");
+            using var stream = new MemoryStream();
+            await file.OpenReadStream(TheaterImage.MaxBytes).CopyToAsync(stream);
+            var image = await Content.UploadImageAsync((await AuthState).User, Theater.Id, file.Name, stream.ToArray());
+            library = [image, .. library ?? []];
+            Select(image);
+            tab = 0;
+        }
+        catch (Exception ex) when (ex is AppValidationException or NotFoundException or AccessDeniedException)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private void Done()
+    {
+        var description = decorative ? "" : alt?.Trim() ?? "";
+        Dialog.Close(DialogResult.Ok(new ImageChoice(selected?.Id, selected?.Url, description, selected?.Width ?? 0,
+            selected?.Height ?? 0, size, align)));
+    }
+
+    private void Remove() => Dialog.Close(DialogResult.Ok(ImageChoice.Removed));
+
+    private void Cancel() => Dialog.Cancel();
+
+    // Opens the dialog; null if it was cancelled.
+    public static async Task<ImageChoice?> ShowAsync(IDialogService dialogs, Theater theater, string mode,
+        string? alt = null, string size = "medium", string align = "center", int? selectedId = null)
+    {
+        var parameters = new DialogParameters<ImagePickerDialog>
+        {
+            { x => x.Theater, theater },
+            { x => x.Mode, mode },
+            { x => x.InitialAlt, alt },
+            { x => x.InitialSize, size },
+            { x => x.InitialAlign, align },
+            { x => x.SelectedId, selectedId },
+        };
+        var dialog = await dialogs.ShowAsync<ImagePickerDialog>(null, parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseOnEscapeKey = true });
+        var result = await dialog.Result;
+        return result is { Canceled: false, Data: ImageChoice choice } ? choice : null;
+    }
+}

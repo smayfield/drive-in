@@ -1,0 +1,266 @@
+@page "/manage/{Id:int}/content/new"
+@page "/manage/{Id:int}/content/{PageId:int}"
+@attribute [Authorize]
+@inherits AppComponentBase
+@inject TheaterService Theaters
+@inject ContentService Content
+@inject IDialogService Dialogs
+@inject TimeProvider Time
+
+<PageTitle>@(Heading) · Manage · Drive-In Online</PageTitle>
+
+@if (theater is null)
+{
+    <Alerts Error="@Error" />
+    @if (Error is null) { <MudProgressCircular Indeterminate Size="Size.Small" aria-label="Loading" /> }
+}
+else
+{
+    <ManageHeader Theater="theater" Title="@Heading" Current="content" />
+    <MudLink Href="@($"manage/{Id}/content")" Class="d-inline-block mb-3">&larr; Pages &amp; posts</MudLink>
+
+    <Alerts Error="@Error" Success="@Success" />
+
+    <MudGrid Spacing="4">
+        <MudItem xs="12" md="8">
+            <MudTextField T="string" @bind-Value="title" Label="Title" Variant="Variant.Outlined" Class="mb-3"
+                          MaxLength="@TheaterPage.MaxTitleLength" Immediate />
+            <MudTextField T="string" @bind-Value="slug" Label="Web address" Variant="Variant.Outlined" Class="mb-3"
+                          HelperText="@($"drive-in.online/theaters/{theater.Slug}/{(kind == PageKind.Page ? "pages" : "news")}/{(string.IsNullOrWhiteSpace(slug) ? "(made from the title)" : slug)}")"
+                          MaxLength="@TheaterPage.MaxSlugLength" />
+            <MudTextField T="string" @bind-Value="summary" Label="Summary (optional)" Variant="Variant.Outlined" Lines="2" Class="mb-3"
+                          HelperText="@(kind == PageKind.Post ? "Shown on the news card. Also used by search engines and link previews." : "Used by search engines and link previews.")"
+                          MaxLength="@TheaterPage.MaxSummaryLength" Counter="@TheaterPage.MaxSummaryLength" />
+
+            <MudText Typo="Typo.subtitle2" Class="mb-1">Cover image</MudText>
+            <div class="d-flex flex-wrap align-center gap-3 mb-3">
+                @if (coverUrl is not null)
+                {
+                    <img src="@coverUrl" alt="@coverAlt" class="cover-preview" />
+                }
+                <div class="d-flex flex-column gap-1">
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="ChooseCoverAsync">@(coverUrl is null ? "Choose a cover image" : "Change cover")</MudButton>
+                    @if (coverUrl is not null)
+                    {
+                        <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Error" OnClick="RemoveCover">Remove cover</MudButton>
+                    }
+                </div>
+            </div>
+
+            <MudText Typo="Typo.subtitle2" Class="mb-1">Content</MudText>
+            @* Keyed by page: the editor reads its content once, and this page is reused when the route changes. *@
+            <RichTextEditor @key="@(PageId?.ToString() ?? $"new-{kind}")" @ref="editor" Theater="theater" Html="@body" Label="Content"
+                            Placeholder="Write here. Use the image button (or paste or drop a picture) to add images." />
+        </MudItem>
+
+        <MudItem xs="12" md="4">
+            <MudPaper Outlined Class="pa-3 mb-3">
+                <MudText Typo="Typo.h6" Class="mb-1">Publishing</MudText>
+                @if (saved is not null)
+                {
+                    <div class="mb-2"><ContentStatus Theater="theater" Status="saved.StatusAt(Time.GetUtcNow())" PublishAt="saved.PublishAt" UnpublishAt="saved.UnpublishAt" /></div>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="muted mb-2">Not saved yet.</MudText>
+                }
+                <div class="d-flex flex-wrap gap-2">
+                    <MudButton Variant="Variant.Outlined" Disabled="busy" OnClick="SaveAsync">@(saved?.PublishAt is null ? "Save draft" : "Save")</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="busy" OnClick="PublishNowAsync">
+                        @(saved?.IsLive(Time.GetUtcNow()) == true ? "Save" : "Publish now")
+                    </MudButton>
+                    @if (saved is not null)
+                    {
+                        <MudButton Href="@ContentService.PublicHref(theater.Slug, saved)" Target="_blank" Rel="noopener noreferrer" Variant="Variant.Text">Preview</MudButton>
+                    }
+                </div>
+
+                <MudDivider Class="my-3" />
+                <MudText Typo="Typo.subtitle2">Schedule</MudText>
+                <MudText Typo="Typo.caption" Class="muted d-block mb-2">In your theater's time zone (@TheaterTime.ZoneOf(theater).Id).</MudText>
+                <div class="d-flex flex-wrap gap-2">
+                    <MudDatePicker @bind-Date="fromDate" Label="Show from" Variant="Variant.Outlined" Margin="Margin.Dense" Editable Clearable Class="field-grow" />
+                    <MudTimePicker @bind-Time="fromTime" Label="at" Variant="Variant.Outlined" Margin="Margin.Dense" AmPm Editable Class="field-grow" />
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                    <MudDatePicker @bind-Date="untilDate" Label="Until (optional)" Variant="Variant.Outlined" Margin="Margin.Dense" Editable Clearable Class="field-grow" />
+                    <MudTimePicker @bind-Time="untilTime" Label="at" Variant="Variant.Outlined" Margin="Margin.Dense" AmPm Editable Class="field-grow" />
+                </div>
+                <MudButton Variant="Variant.Outlined" Class="mt-2" Disabled="@(busy || fromDate is null)" OnClick="ScheduleAsync">Schedule</MudButton>
+
+                @if (saved?.PublishAt is not null)
+                {
+                    <MudDivider Class="my-3" />
+                    <MudButton Variant="Variant.Text" Disabled="busy" OnClick="UnpublishAsync">Unpublish (back to draft)</MudButton>
+                }
+            </MudPaper>
+
+            <MudPaper Outlined Class="pa-3 mb-3">
+                @if (kind == PageKind.Page)
+                {
+                    <MudCheckBox T="bool" @bind-Value="showInMenu" Label="Show in the theater's menu" Dense />
+                    <MudText Typo="Typo.caption" Class="muted d-block">Change the order on the Pages &amp; posts list.</MudText>
+                }
+                else
+                {
+                    <MudCheckBox T="bool" @bind-Value="pinned" Label="Pin to the top of News & events" Dense />
+                    <MudText Typo="Typo.subtitle2" Class="mt-2">Event (optional)</MudText>
+                    <MudText Typo="Typo.caption" Class="muted d-block mb-1">For a special event: when it starts. Upcoming events come before older news.</MudText>
+                    <div class="d-flex flex-wrap gap-2">
+                        <MudDatePicker @bind-Date="eventDate" Label="Event date" Variant="Variant.Outlined" Margin="Margin.Dense" Editable Clearable Class="field-grow" />
+                        <MudTimePicker @bind-Time="eventTime" Label="Starts at" Variant="Variant.Outlined" Margin="Margin.Dense" AmPm Editable Class="field-grow" />
+                    </div>
+                }
+            </MudPaper>
+
+            @if (saved is not null)
+            {
+                <MudButton Variant="Variant.Text" Color="Color.Error" Disabled="busy" OnClick="DeleteAsync">Delete @(kind == PageKind.Page ? "page" : "post")</MudButton>
+            }
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+    [Parameter] public int? PageId { get; set; }
+    [SupplyParameterFromQuery(Name = "kind")] public string? KindQuery { get; set; }
+
+    private Theater? theater;
+    private TheaterPage? saved;
+    private RichTextEditor? editor;
+    private PageKind kind;
+    private string? title, slug, summary, body;
+    private int? coverId;
+    private string? coverUrl, coverAlt;
+    private bool showInMenu = true, pinned, busy;
+    private DateTime? fromDate, untilDate, eventDate;
+    private TimeSpan? fromTime, untilTime, eventTime;
+
+    private string Heading => saved is not null ? saved.Title : kind == PageKind.Page ? "New page" : "New post";
+
+    protected override async Task LoadAsync()
+    {
+        theater = await Theaters.GetForManageAsync(User, Id);
+        if (PageId is int pageId)
+        {
+            var (owner, page) = await Content.GetForEditAsync(User, pageId);
+            if (owner.Id != Id)
+                throw new NotFoundException("Page not found.");
+            Load(page);
+        }
+        else
+        {
+            kind = string.Equals(KindQuery, "post", StringComparison.OrdinalIgnoreCase) ? PageKind.Post : PageKind.Page;
+            // Can they write here at all? (The list throws AccessDenied for staff without content.manage.)
+            await Content.ListForManageAsync(User, Id);
+        }
+    }
+
+    private void Load(TheaterPage page)
+    {
+        saved = page;
+        kind = page.Kind;
+        (title, slug, summary, body) = (page.Title, page.Slug, page.Summary, page.BodyHtml);
+        (coverId, coverAlt) = (page.CoverImageId, page.CoverAlt);
+        coverUrl = page.CoverImageId is int id ? TheaterImage.ImageUrl(theater!.Slug, id) : null;
+        (showInMenu, pinned) = (page.ShowInMenu, page.IsPinned);
+        (fromDate, fromTime) = Split(page.PublishAt);
+        (untilDate, untilTime) = Split(page.UnpublishAt);
+        (eventDate, eventTime) = Split(page.EventStartsAt);
+    }
+
+    private (DateTime?, TimeSpan?) Split(DateTimeOffset? at)
+    {
+        if (at is not DateTimeOffset value)
+            return (null, null);
+        var local = TheaterTime.ToLocal(theater!, value);
+        return (local.Date, local.TimeOfDay);
+    }
+
+    private DateTimeOffset? Join(DateTime? date, TimeSpan? time) => date is DateTime d
+        ? TheaterTime.ToUtc(theater!, DateOnly.FromDateTime(d), TimeOnly.FromTimeSpan(time ?? TimeSpan.Zero))
+        : null;
+
+    private async Task<PageInput> InputAsync()
+    {
+        body = editor is null ? body : await editor.GetHtmlAsync();
+        return new PageInput(title ?? "", slug, summary, body, coverId, coverAlt, showInMenu, pinned, Join(eventDate, eventTime));
+    }
+
+    // Saves the fields (creating the page the first time), keeping its publishing as it is.
+    private async Task SaveCoreAsync()
+    {
+        var input = await InputAsync();
+        if (saved is null)
+        {
+            var created = await Content.CreateAsync(User, Id, kind, input);
+            Load(created);
+            Nav.NavigateTo($"manage/{Id}/content/{created.Id}", replace: true);
+        }
+        else
+        {
+            Load(await Content.UpdateAsync(User, saved.Id, input));
+        }
+    }
+
+    private Task SaveAsync() => Busy(SaveCoreAsync, "Saved.");
+
+    // The schedule is read before saving: saving reloads the form from what's stored, which doesn't have it yet.
+    // For something already live the button reads "Save", and only saves.
+    private async Task PublishNowAsync()
+    {
+        var wasLive = saved?.IsLive(Time.GetUtcNow()) == true;
+        await Busy(async () =>
+        {
+            var until = Join(untilDate, untilTime);
+            await SaveCoreAsync();
+            if (saved!.IsLive(Time.GetUtcNow()))
+                return;
+            await Content.PublishAsync(User, saved.Id, null, until);
+            await ReloadAsync();
+        }, wasLive ? "Saved." : "Published. It's live now.");
+    }
+
+    private Task ScheduleAsync() => Busy(async () =>
+    {
+        var (from, until) = (Join(fromDate, fromTime), Join(untilDate, untilTime));
+        await SaveCoreAsync();
+        await Content.PublishAsync(User, saved!.Id, from, until);
+        await ReloadAsync();
+    }, "Scheduled.");
+
+    private Task UnpublishAsync() => Busy(async () =>
+    {
+        await Content.UnpublishAsync(User, saved!.Id);
+        await ReloadAsync();
+    }, "Unpublished. It's a draft again; only staff can see it.");
+
+    private async Task ReloadAsync() => Load((await Content.GetForEditAsync(User, saved!.Id)).Page);
+
+    private async Task Busy(Func<Task> action, string success)
+    {
+        busy = true;
+        await RunAsync(action, success);
+        busy = false;
+    }
+
+    private async Task ChooseCoverAsync()
+    {
+        var choice = await ImagePickerDialog.ShowAsync(Dialogs, theater!, "cover", coverAlt, selectedId: coverId);
+        if (choice is { Id: int id })
+            (coverId, coverUrl, coverAlt) = (id, choice.Url, choice.Alt);
+    }
+
+    private void RemoveCover() => (coverId, coverUrl, coverAlt) = (null, null, null);
+
+    private async Task DeleteAsync()
+    {
+        var confirmed = await Dialogs.ShowMessageBoxAsync($"Delete \"{saved!.Title}\"?",
+            "It's removed from your theater's site straight away. This can't be undone.", yesText: "Delete", cancelText: "Cancel");
+        if (confirmed != true)
+            return;
+        if (await RunAsync(() => Content.DeleteAsync(User, saved.Id)))
+            Nav.NavigateTo($"manage/{Id}/content");
+    }
+}

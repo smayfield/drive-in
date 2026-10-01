@@ -31,6 +31,7 @@ public static class TheaterPermissions
     public const string ManageBilling = "billing.manage";
     public const string ViewMessages = "messages.view";
     public const string ReplyMessages = "messages.reply";
+    public const string ManageContent = "content.manage";
 
     public static readonly IReadOnlyList<TheaterPermission> All =
     [
@@ -55,6 +56,7 @@ public static class TheaterPermissions
         new(ManageBilling, "Billing", "Manage billing", "Change where invoices are emailed, and cancel the theater's subscription."),
         new(ViewMessages, "Messages", "View messages", "Read the messages customers send the theater, and get notified of new ones."),
         new(ReplyMessages, "Messages", "Reply to messages", "Reply to customers' messages, and close or reopen conversations. Needs \"View messages\" to see them."),
+        new(ManageContent, "Content", "Manage pages and posts", "Write, publish, schedule and delete the theater's own pages (in its menu) and posts (news and events), and manage its image library."),
     ];
 
     public static readonly IReadOnlySet<string> AllKeys = All.Select(p => p.Key).ToHashSet();
@@ -72,8 +74,9 @@ public static class DefaultTheaterRoles
     [
         ("Manager", "Runs the theater day to day, including staff and roles.",
             TheaterPermissions.All.Select(p => p.Key).Where(k => !TheaterPermissions.Billing.Contains(k)).ToArray()),
-        ("Operations", "Keeps the theater's details, screens and schedule up to date.",
-            [TheaterPermissions.EditProfile, TheaterPermissions.ManageScreens, TheaterPermissions.ManageSchedule]),
+        ("Operations", "Keeps the theater's details, screens, schedule, pages and posts up to date.",
+            [TheaterPermissions.EditProfile, TheaterPermissions.ManageScreens, TheaterPermissions.ManageSchedule,
+                TheaterPermissions.ManageContent]),
         ("Ticketing", "Gate and box office staff: sells tickets at the gate, checks tickets, admits guests and moves cars to other spots.",
             [TheaterPermissions.AdmitGuests, TheaterPermissions.SellAtGate, TheaterPermissions.MoveTickets]),
         ("Concessions", "Snack bar staff. Concessions actions will be added here as concessions features ship.",

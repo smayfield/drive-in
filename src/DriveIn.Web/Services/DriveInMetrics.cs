@@ -36,6 +36,7 @@ public sealed class DriveInMetrics
     private readonly Counter<long> errorsLogged;
     private readonly Counter<long> messagesSent;
     private readonly Counter<long> notificationsEmailed;
+    private readonly Counter<long> contentPublished;
 
     public DriveInMetrics(IMeterFactory meterFactory)
     {
@@ -74,6 +75,8 @@ public sealed class DriveInMetrics
             "In-app messages sent (kind: theater, support; side: customer, theater, support).");
         notificationsEmailed = meter.CreateCounter<long>("drivein.notifications.emailed", "{email}",
             "Notification digests emailed (one email per user per run, however many notifications it lists).");
+        contentPublished = meter.CreateCounter<long>("drivein.content.published", "{item}",
+            "Theater pages and posts published for the first time (kind: page, post).");
     }
 
     public void UserRegistered(string method) => usersRegistered.Add(1, new KeyValuePair<string, object?>("method", method));
@@ -122,4 +125,7 @@ public sealed class DriveInMetrics
         messagesSent.Add(1, new TagList { { "kind", kind.ToString().ToLowerInvariant() }, { "side", side.ToString().ToLowerInvariant() } });
 
     public void NotificationEmailed() => notificationsEmailed.Add(1);
+
+    public void ContentPublished(PageKind kind) =>
+        contentPublished.Add(1, new KeyValuePair<string, object?>("kind", kind.ToString().ToLowerInvariant()));
 }

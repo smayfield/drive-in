@@ -33,7 +33,7 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   employees, whose permissions are a subset of their own.
 - Default roles for a *new* theater (`DefaultTheaterRoles`): Manager (all but `billing.*`, which stay with the owner unless granted;
   migration `AddMessaging` gave existing Manager roles `messages.*`), Operations (`theater.edit`, `screens.manage`,
-  `schedule.manage`), Ticketing (`tickets.admit`, `tickets.sell`, `tickets.move`), Concessions (none). Changing defaults doesn't touch existing
+  `schedule.manage`, `content.manage`; migration `AddTheaterContent` gave existing Manager and Operations roles `content.manage`), Ticketing (`tickets.admit`, `tickets.sell`, `tickets.move`), Concessions (none). Changing defaults doesn't touch existing
   theaters; that needs a data migration.
 
 | Key | Name | Gates |
@@ -59,6 +59,7 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 | `billing.manage` | Manage billing | Billing email, cancel the subscription (sees the subscription, not invoices, without `billing.view`) |
 | `messages.view` | View messages | The theater's inbox: read customers' conversations, be notified of new ones |
 | `messages.reply` | Reply to messages | Reply, close and reopen conversations (needs `messages.view` to see them) |
+| `content.manage` | Manage pages and posts | The theater's own pages and posts (write, publish, schedule, delete, preview drafts) and its image library |
 
 ## 3. Theater modes and sign-up
 
@@ -103,7 +104,7 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   with an address but no coordinates once at startup.
 - **Season:** optional opens/closes (either end optional). Showings must fall inside; can't be changed to exclude scheduled showings.
 - **Logo** (`theater_logos`): JPG/GIF/PNG, max 2 MB, type sniffed from bytes (no SVG), stored in DB; served at
-  `/theaters/{slug}/logo` to users who can browse the theater.
+  `/theaters/{slug}/logo` to anyone who can browse the theater (signed in or not).
 - **Screens:** 1 to 4 per theater (new theaters start with "Screen 1"); order sets lot-map position. Spot layout = list of rows,
   nearest the screen first, each with its own spot count, centered. Label schemes per screen: row letter + spot number (`B7`),
   row number + spot letter (`2G`), single number (`207`). Spots numbered left to right facing the screen. A screen with sales can't
@@ -119,7 +120,7 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   (`Screen.HasSizeLimits`); buyers are only asked their vehicle on such screens.
 - **Lot map:** screens 1 and 2 face each other; 3 and 4 face each other at 90 degrees; drawn around the central building.
 - **Films** (`films`): title, rating, runtime, year, genres, director, cast, description. Poster (`film_posters`): JPG/GIF/PNG, max
-  2 MB, served at `/films/{id}/poster` to users who can browse the theater. No external movie database. A film with sales can't be deleted.
+  2 MB, served at `/films/{id}/poster` to anyone who can browse the theater (signed in or not). No external movie database. A film with sales can't be deleted.
 - **Showings** (`showtimes`, `showtime_features`): one ticket on one screen; 1 to 4 films back to back (double feature) with an
   intermission between them. Theater default intermission prefills new showings and can be overridden per showing; changing the
   default doesn't move existing ones. No overlap on a screen from first film's start to last film's end (intermissions included).
@@ -132,6 +133,9 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 
 ## 5. Buying online (`TicketSalesService`)
 
+- **Public theater pages**: `/theaters/{slug}` (showings, news, the theater's menu) and its pages and posts (section 16) need no
+  sign-in; `CanBrowse` still hides demo and inactive theaters from everyone but their members. Signed-out visitors see "Sign in to
+  buy" on showings. The theater list and near-me search, the showing (spot map) and gift-card pages, and buying all need sign-in.
 - **Near me** (`/theaters`): a ZIP code or city (geocoded by `TheaterService.FindPlaceAsync`), or **Use my location**
   (`wwwroot/geo.js`, browser geolocation rounded to 2 decimals), within 25/50/100 (default)/250 miles or any distance.
   `TheaterService.ListNearAsync` applies the same visibility as the list (`CanBrowse`: demo theaters only for members),
@@ -283,6 +287,7 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 
 ## 12. Static and marketing pages
 
+- Interactive pages open to signed-out visitors: a theater's page, its pages and posts, and its news (section 16).
 - `[ExcludeFromInteractiveRouting]` static SSR with plain CSS (`static.css`, `marketing.css`): `/`, `/features`, `/pricing`,
   `/faq`, `/legal`, `/legal/terms`, `/legal/privacy`, `/legal/license`, `/invite/{token}`, `/Error`, `/not-found`, account pages.
 - Config: `Plans:PricePerScreenPerMonth`, `Billing:PaymentTermsDays`, `Company:*` (legal name, mailing address, governing state, contact email, effective date).
@@ -315,7 +320,8 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   every deploy): read-only sessions, 30 s statement timeout, `pg_monitor`, and column-level SELECT on every table except
   `user_claims`, `user_logins`, `user_passkeys` and `user_tokens`, leaving out bearer codes (`code`, `short_code`), hashes,
   `security_stamp`, image bytes (`data`), `payment_reference`, any `*email*` column and what people write in the app
-  (`messages.body`, `conversations.subject`, `notifications.title`); on `users` only `id`, `created_at`,
+  (`messages.body`, `conversations.subject`, `notifications.title`) and theaters' page text (`theater_pages.body_html`,
+  `theater_pages.summary`); on `users` only `id`, `created_at`,
   `email_confirmed`, `employee_theater_id`, `lockout_end` and `two_factor_enabled`.
 - **The app's metrics** go over OTLP (http/protobuf, every 15 s) to VictoriaMetrics when `Metrics:OtlpEndpoint` is set
   (production compose; locally `appsettings.Development.json` points at the `monitoring` compose profile). Built-in meters:
@@ -333,7 +339,8 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   `drivein.jobs.failures{job=hold_expiry|billing|geocoding|business_gauges|notification_email}`, `drivein.invoices.issued`,
   `drivein.invoices.payments` (dollars), and `drivein.errors.logged{category, level}` (every Error/Critical log message,
   `ErrorCountingLoggerProvider`: failures inside Blazor circuits never become 5xx responses),
-  `drivein.messages.sent{kind=theater|support, side=customer|theater|support}` and `drivein.notifications.emailed` (digests).
+  `drivein.messages.sent{kind=theater|support, side=customer|theater|support}`, `drivein.notifications.emailed` (digests),
+  and `drivein.content.published{kind=page|post}` (a page or post's first publish).
 - **`BusinessGauges`** (hosted service, only when `Metrics:OtlpEndpoint` is set) reads totals every minute and reports them as gauges: `drivein.users{kind=customer|employee}`,
   `drivein.theaters{mode}` (active), `drivein.screens.live`, `drivein.showings.upcoming` (next 7 days, live theaters),
   `drivein.theaters.go_live_pending`, `drivein.free_admission.pending`, `drivein.invoices.outstanding` (dollars). Nothing is
@@ -343,7 +350,7 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   - **Drive-In: Business**: totals (customers, new accounts, live/demo theaters, go-live requests, live screens, tickets, revenue,
     cars admitted, gift cards, invoiced, owed) and daily trends from SQL (real sales only; test tickets and gift cards left out),
     top theaters and pending go-lives, plus live activity from the counters (sales, payments, sign-ups, abandoned holds, open
-    sessions, emails, messages and notification emails).
+    sessions, emails, messages and notification emails, content published per day).
   - **Drive-In: Site performance**: requests, 5xx, latency (p50/95/99, leaving out the Blazor circuit's connection), busiest and
     slowest routes, errors logged by category, unhandled exceptions, job failures, payments, emails, circuits and connections,
     sign-ins, outbound calls, database time and pool, EF Core, and the .NET runtime (memory, CPU, GC, thread pool).
@@ -391,12 +398,52 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   addresses, and not to anyone who turned it off at Account → Notifications (`ApplicationUser.EmailNotifications`, on by
   default).
 
-## 16. Not built
+## 16. Theater pages and posts (`ContentService`, `HtmlContent`)
+
+- **What**: each theater writes its own customer-facing content (`theater_pages`):
+  - **Pages** (`PageKind.Page`, e.g. Rules, Concessions, FAQ) at `/theaters/{slug}/pages/{page}`. Live pages with "Show in menu" are
+    listed in the theater's menu, in the order set on the manage list (up/down).
+  - **Posts** (`PageKind.Post`: announcements and special events) at `/theaters/{slug}/news/{post}`, listed under "News & events" on
+    the theater page (3 cards, "All news & events" when there are more) and at `/theaters/{slug}/news` (20 a page). Order: pinned,
+    then upcoming events (soonest first), then everything else newest first. A post can have an event date and time, shown on it.
+- **The theater's menu** (`TheaterMasthead`): under the marquee on the theater page and its content pages: Showings, each live menu
+  page, News & events (when there are live posts), Gift cards (when sold). New pages appear there as soon as they're live.
+- **Managing** (`content.manage`; tab "Pages & posts" on `ManageHeader`): `/manage/{id}/content` (list with status, publish,
+  unpublish, delete with confirmation, reorder pages), `/manage/{id}/content/new?kind=page|post` and `/manage/{id}/content/{pageId}`
+  (title, web address made from the title if left blank, summary, cover image, content, menu or pin and event fields, publishing).
+  Web addresses: lowercase letters, digits and hyphens, unique per theater and kind; pages can't use `news`, `pages`, `showings`,
+  `giftcards`, `logo`, `images`, `new` or `edit`.
+- **Publishing**: a draft until published (`PublishAt` null). Publish now, or schedule a start (`PublishAt`) and optional end
+  (`UnpublishAt`) in the theater's time zone; shown only between them. Status: Draft, Scheduled, Live, Ended. Unpublish returns it
+  to a draft. Publishing needs some text or a cover image. Staff with `content.manage` see drafts and scheduled items at their public
+  address with a "Preview: only staff can see this" banner (and `noindex`); everyone else gets "Page not found" (404 when prerendered).
+- **Editor** (`RichTextEditor`: Quill 2, vendored in `wwwroot/lib/quill`, via `wwwroot/rich-text.js`): headings (H2 to H4), bold,
+  italic, underline, strike, lists, indent, quote, link, alignment, images. Pasted HTML keeps only this theater's library images.
+- **Images**: the theater's library (`theater_images`, `/manage/{id}/content/images`): JPG, PNG, GIF or WebP, up to 5 MB each and
+  250 per theater, type sniffed from the bytes (no SVG), width and height read from the header, kept as uploaded (no resizing).
+  Each has a default description (alt text). The editor's image button opens `ImagePickerDialog` (Library or Upload tab), which asks
+  for a description (or "decorative"), a size (small 33%, medium 60%, full width) and a position (left or right with text wrapping,
+  or centered); pasted or dropped image files are uploaded to the library and placed medium and centered; clicking a placed image
+  changes those or removes it. A page or post can have a cover image (hero on the page, thumbnail on news cards, and the link
+  preview image; its alt text can be overridden per page). The library lists where each image is used; an image in use can't be
+  deleted. Images are served at `/theaters/{slug}/images/{id}` to anyone who can browse the theater (public theaters' cached for a
+  week: an image never changes, a new upload gets a new id).
+- **Safety** (`HtmlContent.Sanitize`, HtmlSanitizer): applied when content is saved and again when it's shown. Allowed: `p br h2 h3
+  h4 strong em u s a ul ol li blockquote hr img`; `href` only http, https, mailto or tel (links get `rel="noopener noreferrer
+  nofollow"`, external ones open in a new tab); `img` only from this theater's library, with width, height and `loading="lazy"`
+  written from the library; classes only `ql-align-*`, `ql-indent-1..8`, `img-small|medium|full`, `img-left|center|right`. No styles,
+  scripts, frames, forms or event attributes (a script's or frame's contents are dropped too).
+- **Sharing**: pages and posts set a meta description (the summary, or the start of the text) and Open Graph title, description and
+  image (cover, else first image, else the theater's logo).
+
+## 17. Not built
 
 - A real payment processor (production can't sell until `Payments:Provider` is set to one).
-- Concessions ordering, announcements (the Concessions role has no permissions yet).
+- Concessions ordering (the Concessions role has no permissions yet).
 - Paying invoices online (payments are recorded by an admin), sales tax on invoices, and overdue reminders or suspension for
   non-payment.
 - Multi-server deployment (in-process `SpotEvents`, `MessageEvents`, `NotificationEvents`).
+- Theater pages: image resizing or thumbnails (images are served as uploaded), revision history, a sitemap, and the theater's menu
+  on the showing and gift-card pages (they keep a link back to the theater).
 - Message attachments, theater-initiated conversations (a theater writing to a customer first), blocking a sender, and
   notification kinds other than messages (e.g. go-live decisions, free-admission requests).

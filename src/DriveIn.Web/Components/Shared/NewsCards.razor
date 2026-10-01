@@ -1,0 +1,37 @@
+@* A theater's posts as cards: cover thumbnail, title, when (the event's date and time, or when it was posted), summary. *@
+
+<div class="news-cards">
+    @foreach (var post in Posts)
+    {
+        <article class="news-card @(post.CoverUrl is null ? null : "has-cover")" @key="post.Id">
+            @if (post.CoverUrl is not null)
+            {
+                <a href="@post.Href" class="news-card-cover" tabindex="-1" aria-hidden="true"><img src="@post.CoverUrl" alt="" loading="lazy" /></a>
+            }
+            <div class="news-card-body">
+                <h3 class="news-card-title"><a href="@post.Href">@post.Title</a></h3>
+                <p class="news-card-meta">
+                    @if (post.IsPinned) { <span class="news-pin">Pinned · </span> }
+                    @if (post.EventStartsAt is DateTimeOffset at)
+                    {
+                        <span>Event: @TheaterTime.ToLocal(Theater, at).ToString("dddd, MMMM d · h:mm tt")</span>
+                    }
+                    else
+                    {
+                        <span>@TheaterTime.ToLocal(Theater, post.PublishedAt).ToString("MMMM d, yyyy")</span>
+                    }
+                </p>
+                @if (!string.IsNullOrWhiteSpace(post.Summary))
+                {
+                    <p class="news-card-summary">@post.Summary</p>
+                }
+                <a href="@post.Href" class="news-card-more">Read more<span class="visually-hidden"> about @post.Title</span></a>
+            </div>
+        </article>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Theater Theater { get; set; } = default!;
+    [Parameter, EditorRequired] public List<PostCard> Posts { get; set; } = [];
+}

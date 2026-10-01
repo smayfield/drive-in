@@ -1,0 +1,28 @@
+@* A page or post's status for staff: Draft, Scheduled (from...), Live (until...), Ended. Times in the theater's zone. *@
+@switch (Status)
+{
+    case PageStatus.Draft:
+        <MudChip T="string" Size="Size.Small" Class="my-0">Draft</MudChip>
+        break;
+    case PageStatus.Scheduled:
+        <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="my-0">Scheduled</MudChip>
+        <span class="muted">from @Local(PublishAt)</span>
+        break;
+    case PageStatus.Live:
+        <MudChip T="string" Size="Size.Small" Color="Color.Success" Class="my-0">Live</MudChip>
+        @if (UnpublishAt is not null) { <span class="muted">until @Local(UnpublishAt)</span> }
+        break;
+    default:
+        <MudChip T="string" Size="Size.Small" Class="my-0">Ended</MudChip>
+        <span class="muted">@Local(UnpublishAt)</span>
+        break;
+}
+
+@code {
+    [Parameter, EditorRequired] public Theater Theater { get; set; } = default!;
+    [Parameter] public PageStatus Status { get; set; }
+    [Parameter] public DateTimeOffset? PublishAt { get; set; }
+    [Parameter] public DateTimeOffset? UnpublishAt { get; set; }
+
+    private string Local(DateTimeOffset? at) => at is DateTimeOffset t ? TheaterTime.ToLocal(Theater, t).ToString("MMM d, h:mm tt") : "";
+}

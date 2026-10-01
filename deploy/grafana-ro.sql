@@ -40,7 +40,10 @@ BEGIN
                         AND column_name NOT LIKE '%email%'
                         -- What people write to each other in the app (and notification titles naming them).
                         AND (t.table_name, column_name) NOT IN (('messages', 'body'), ('conversations', 'subject'),
-                                                                ('notifications', 'title'))
+                                                                ('notifications', 'title'),
+                                                                -- Theaters' unpublished drafts are theirs alone.
+                                                                ('theater_pages', 'body_html'),
+                                                                ('theater_pages', 'summary'))
               END;
         IF cols IS NOT NULL THEN
             EXECUTE format('GRANT SELECT (%s) ON %I TO grafana_ro', cols, t.table_name);

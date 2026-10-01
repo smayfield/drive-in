@@ -1,0 +1,169 @@
+@page "/manage/{Id:int}/content"
+@attribute [Authorize]
+@inherits AppComponentBase
+@inject TheaterService Theaters
+@inject ContentService Content
+@inject IDialogService Dialogs
+@inject TimeProvider Time
+
+<PageTitle>Pages & posts · Manage · Drive-In Online</PageTitle>
+
+@if (theater is null)
+{
+    <Alerts Error="@Error" />
+    @if (Error is null) { <MudProgressCircular Indeterminate Size="Size.Small" aria-label="Loading pages" /> }
+}
+else
+{
+    <ManageHeader Theater="theater" Title="Pages & posts" Current="content" />
+    <ContentTabs TheaterId="Id" Current="content" />
+
+    <Alerts Error="@Error" Success="@Success" />
+
+    <div class="manage-section">
+        <div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2">
+            <MudText Typo="Typo.h5">Pages</MudText>
+            <MudButton Href="@($"manage/{Id}/content/new?kind=page")" Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small">New page</MudButton>
+        </div>
+        <MudText Typo="Typo.body2" Class="muted mb-2">
+            Pages like Rules, Concessions or FAQ. Live pages marked "In menu" appear in your theater's menu, in this order.
+        </MudText>
+        @if (pages.Count == 0)
+        {
+            <MudText Class="muted">No pages yet.</MudText>
+        }
+        else
+        {
+            <MudSimpleTable Dense Outlined Class="manage-table">
+                <thead><tr><th>Order</th><th>Title</th><th>Status</th><th>In menu</th><th>Updated</th><th></th></tr></thead>
+                <tbody>
+                    @for (var i = 0; i < pages.Count; i++)
+                    {
+                        var index = i;
+                        var item = pages[i];
+                        <tr @key="item.Id">
+                            <td class="text-nowrap">
+                                <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward" Size="Size.Small" Disabled="@(index == 0)"
+                                               aria-label="@($"Move {item.Title} up")" OnClick="() => MoveAsync(index, -1)" />
+                                <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward" Size="Size.Small" Disabled="@(index == pages.Count - 1)"
+                                               aria-label="@($"Move {item.Title} down")" OnClick="() => MoveAsync(index, 1)" />
+                            </td>
+                            <td><MudLink Href="@($"manage/{Id}/content/{item.Id}")">@item.Title</MudLink></td>
+                            <td><ContentStatus Theater="theater" Status="item.Status" PublishAt="item.PublishAt" UnpublishAt="item.UnpublishAt" /></td>
+                            <td>@(item.ShowInMenu ? "Yes" : "No")</td>
+                            <td class="muted">@Updated(item)</td>
+                            <td class="text-end text-nowrap">@Actions(item)</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+    </div>
+
+    <div class="manage-section">
+        <div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2">
+            <MudText Typo="Typo.h5">Posts</MudText>
+            <MudButton Href="@($"manage/{Id}/content/new?kind=post")" Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small">New post</MudButton>
+        </div>
+        <MudText Typo="Typo.body2" Class="muted mb-2">
+            Announcements and special events, shown under "News &amp; events" on your theater's page. Pinned posts come first.
+        </MudText>
+        @if (posts.Count == 0)
+        {
+            <MudText Class="muted">No posts yet.</MudText>
+        }
+        else
+        {
+            <MudSimpleTable Dense Outlined Class="manage-table">
+                <thead><tr><th>Title</th><th>Status</th><th>Event</th><th>Updated</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var p in posts)
+                    {
+                        var post = p;
+                        <tr @key="post.Id">
+                            <td>
+                                <MudLink Href="@($"manage/{Id}/content/{post.Id}")">@post.Title</MudLink>
+                                @if (post.IsPinned) { <MudChip T="string" Size="Size.Small" Class="ms-1 my-0">Pinned</MudChip> }
+                            </td>
+                            <td><ContentStatus Theater="theater" Status="post.Status" PublishAt="post.PublishAt" UnpublishAt="post.UnpublishAt" /></td>
+                            <td>@(post.EventStartsAt is DateTimeOffset at ? TheaterTime.ToLocal(theater, at).ToString("ddd, MMM d h:mm tt") : "")</td>
+                            <td class="muted">@Updated(post)</td>
+                            <td class="text-end text-nowrap">@Actions(post)</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private Theater? theater;
+    private List<PageListItem> pages = [];
+    private List<PageListItem> posts = [];
+
+    protected override async Task LoadAsync()
+    {
+        theater = await Theaters.GetForManageAsync(User, Id);
+        await LoadListsAsync();
+    }
+
+    private async Task LoadListsAsync()
+    {
+        var items = await Content.ListForManageAsync(User, Id);
+        pages = items.Where(i => i.Kind == PageKind.Page).ToList();
+        posts = items.Where(i => i.Kind == PageKind.Post).ToList();
+    }
+
+    private string Updated(PageListItem item) =>
+        When.Ago(item.UpdatedAt, Time.GetUtcNow()) + (item.UpdatedBy is null ? "" : $" · {item.UpdatedBy}");
+
+    // Preview or view it, publish now or take it down, delete.
+    private RenderFragment Actions(PageListItem item) => @<text>
+        <MudButton Href="@item.PublicHref" Target="_blank" Rel="noopener noreferrer" Size="Size.Small">@(item.Status == PageStatus.Live ? "View" : "Preview")</MudButton>
+        @if (item.Status == PageStatus.Draft)
+        {
+            <MudButton Size="Size.Small" Color="Color.Primary" OnClick="() => PublishAsync(item)">Publish</MudButton>
+        }
+        else
+        {
+            <MudButton Size="Size.Small" OnClick="() => UnpublishAsync(item)">Unpublish</MudButton>
+        }
+        <MudButton Size="Size.Small" Color="Color.Error" OnClick="() => DeleteAsync(item)">Delete</MudButton>
+    </text>;
+
+    private Task PublishAsync(PageListItem item) => RunAsync(async () =>
+    {
+        await Content.PublishAsync(User, item.Id);
+        await LoadListsAsync();
+    }, $"\"{item.Title}\" is live.");
+
+    private Task UnpublishAsync(PageListItem item) => RunAsync(async () =>
+    {
+        await Content.UnpublishAsync(User, item.Id);
+        await LoadListsAsync();
+    }, $"\"{item.Title}\" is back to a draft. Only staff can see it.");
+
+    private Task MoveAsync(int index, int by) => RunAsync(async () =>
+    {
+        var ids = pages.Select(p => p.Id).ToList();
+        (ids[index], ids[index + by]) = (ids[index + by], ids[index]);
+        await Content.ReorderPagesAsync(User, Id, ids);
+        await LoadListsAsync();
+    });
+
+    private async Task DeleteAsync(PageListItem item)
+    {
+        var confirmed = await Dialogs.ShowMessageBoxAsync($"Delete \"{item.Title}\"?",
+            "It's removed from your theater's site straight away. This can't be undone.", yesText: "Delete", cancelText: "Cancel");
+        if (confirmed != true)
+            return;
+        await RunAsync(async () =>
+        {
+            await Content.DeleteAsync(User, item.Id);
+            await LoadListsAsync();
+        }, $"Deleted \"{item.Title}\".");
+    }
+}

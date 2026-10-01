@@ -34,6 +34,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<Message> Messages => Set<Message>();
     public DbSet<ConversationRead> ConversationReads => Set<ConversationRead>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<TheaterPage> TheaterPages => Set<TheaterPage>();
+    public DbSet<TheaterImage> TheaterImages => Set<TheaterImage>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -442,6 +444,39 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .WithMany()
                 .HasForeignKey(x => x.ConversationId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<TheaterPage>(p =>
+        {
+            p.Property(x => x.Kind).HasConversion<string>().HasMaxLength(20);
+            p.HasIndex(x => new { x.TheaterId, x.Kind, x.Slug }).IsUnique();
+            p.HasIndex(x => new { x.TheaterId, x.Kind, x.PublishAt });
+            p.HasOne(x => x.Theater)
+                .WithMany()
+                .HasForeignKey(x => x.TheaterId)
+                .OnDelete(DeleteBehavior.Cascade);
+            // ContentService won't delete an image a page uses; SetNull is only the backstop.
+            p.HasOne(x => x.CoverImage)
+                .WithMany()
+                .HasForeignKey(x => x.CoverImageId)
+                .OnDelete(DeleteBehavior.SetNull);
+            p.HasOne(x => x.UpdatedBy)
+                .WithMany()
+                .HasForeignKey(x => x.UpdatedById)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<TheaterImage>(i =>
+        {
+            i.HasIndex(x => new { x.TheaterId, x.UploadedAt });
+            i.HasOne(x => x.Theater)
+                .WithMany()
+                .HasForeignKey(x => x.TheaterId)
+                .OnDelete(DeleteBehavior.Cascade);
+            i.HasOne(x => x.UploadedBy)
+                .WithMany()
+                .HasForeignKey(x => x.UploadedById)
+                .OnDelete(DeleteBehavior.SetNull);
         });
     }
 }
