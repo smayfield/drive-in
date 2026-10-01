@@ -9,7 +9,7 @@ namespace DriveIn.Web.Tests;
 
 public class WeatherTests
 {
-    // TestApp's clock: 2026-09-01 12:00 UTC.
+    // Midnight UTC on the TestApp clock's day (the clock itself reads 2026-09-01 12:00 UTC).
     private static readonly DateTimeOffset Today = new(2026, 9, 1, 0, 0, 0, TimeSpan.Zero);
 
     // Hourly for 16 days from today; the evening of Sep 2 (UTC) cools from 25°C by a degree an hour, with rain from 22:00.
