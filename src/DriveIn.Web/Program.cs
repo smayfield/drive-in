@@ -184,7 +184,7 @@ if (weatherProvider.Equals("OpenMeteo", StringComparison.OrdinalIgnoreCase))
 {
     builder.Services.AddHttpClient(OpenMeteoForecaster.HttpClientName, (sp, client) =>
     {
-        client.BaseAddress = new Uri(sp.GetRequiredService<IOptions<WeatherOptions>>().Value.BaseUrl);
+        client.BaseAddress = new Uri(sp.GetRequiredService<IOptions<WeatherOptions>>().Value.BaseUrl.TrimEnd('/') + "/");
         client.Timeout = TimeSpan.FromSeconds(5);
     });
     builder.Services.AddSingleton<IWeatherForecaster, OpenMeteoForecaster>();
