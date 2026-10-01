@@ -2,6 +2,7 @@
 @attribute [Authorize]
 @inject TheaterService Theaters
 @inject TicketSalesService Sales
+@inject WeatherService Weather
 
 @if (theater is null)
 {
@@ -95,6 +96,10 @@ else
                                     @($" · {s.Features.Count} films, {s.IntermissionMinutes} min intermission")
                                 }
                             </p>
+                            @if (weather is not null)
+                            {
+                                <WeatherLine Weather="@weather.GetValueOrDefault(s.Id)" BeyondForecast="@Weather.IsBeyondForecast(theater, s)" />
+                            }
                         </ChildContent>
                         <Aside>
                             <span class="stub-time">@s.StartsLocal.ToString("h:mm tt")</span>
@@ -167,10 +172,22 @@ else
 
     private Theater? theater;
     private List<ShowtimeView> showings = [];
+    private Dictionary<int, ShowingWeather>? weather;
+    private string? weatherFor;
 
     protected override async Task OnParametersSetAsync()
     {
         theater = await Theaters.GetBySlugAsync((await AuthState).User, Slug);
         showings = theater is null ? [] : (await Sales.ListOnSaleAsync((await AuthState).User, Slug)).Showings;
+    }
+
+    // The forecast comes once the page is interactive, so a slow weather service never holds up the showings.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (theater is null || weatherFor == Slug)
+            return;
+        weatherFor = Slug;
+        weather = await Weather.ForShowingsAsync((await AuthState).User, theater, showings);
+        StateHasChanged();
     }
 }

@@ -5,6 +5,7 @@
 @inject TicketSalesService Sales
 @inject SpotEvents Events
 @inject TimeProvider Time
+@inject WeatherService Weather
 
 <PageTitle>@(sale?.Showing.Title ?? "Showing") · Tickets · Drive-In Online</PageTitle>
 
@@ -38,6 +39,10 @@ else
                     @($" · {rating}")
                 }
             </MudText>
+            @if (weather is not null)
+            {
+                <WeatherLine Weather="@weather.GetValueOrDefault(s.Id)" BeyondForecast="@Weather.IsBeyondForecast(sale.Theater, s)" Warn />
+            }
         </div>
     </div>
 
@@ -142,6 +147,8 @@ else
     private string? notice;
     private bool busy;
     private Timer? countdown;
+    private Dictionary<int, ShowingWeather>? weather;
+    private int? weatherFor;
 
     private int optionId;
     private IReadOnlySet<int> addOnIds = new HashSet<int>();
@@ -182,6 +189,16 @@ else
             throw new NotFoundException("Showing not found.");
         optionId = sale.Prices.Options.FirstOrDefault()?.Id ?? 0;
         availability = await Sales.GetAvailabilityAsync(User, ShowtimeId);
+    }
+
+    // The forecast comes once the page is interactive, so a slow weather service never holds up the spot map.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (sale is null || weatherFor == sale.Showing.Id)
+            return;
+        weatherFor = sale.Showing.Id;
+        weather = await Weather.ForShowingsAsync(User, sale.Theater, [sale.Showing]);
+        StateHasChanged();
     }
 
     private Task HoldAsync(LotSpot spot) => RunAsync(async () =>

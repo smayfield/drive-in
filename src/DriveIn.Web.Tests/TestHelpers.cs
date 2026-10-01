@@ -51,6 +51,7 @@ public sealed class TestApp : IAsyncDisposable
     public FakePaymentProcessor Payments { get; } = new();
     public SpotEvents Events { get; } = new();
     public FakeGeocoder Geocoder { get; } = new();
+    public FakeWeatherForecaster Weather { get; } = new();
     public FakeTimeProvider Time { get; } = new(new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero));
 
     public TestApp(string? adminEmail = null)
@@ -82,6 +83,8 @@ public sealed class TestApp : IAsyncDisposable
         services.AddSingleton<IEmailSender<ApplicationUser>, IdentityEmailSender>();
         services.AddSingleton<TimeProvider>(Time);
         services.AddSingleton<IGeocoder>(Geocoder);
+        services.AddSingleton<IWeatherForecaster>(Weather);
+        services.AddScoped<WeatherService>();
         services.AddScoped<TheaterService>();
         services.AddScoped<ScreenService>();
         services.AddScoped<ScheduleService>();
@@ -197,5 +200,18 @@ public sealed class FakeGeocoder : IGeocoder
     {
         Queries.Add(query);
         return Task.FromResult(Places.GetValueOrDefault(query));
+    }
+}
+
+// Returns Forecast (null by default) for any place, and records where it was asked for.
+public sealed class FakeWeatherForecaster : IWeatherForecaster
+{
+    public HourlyForecast? Forecast { get; set; }
+    public List<GeoPoint> Requests { get; } = [];
+
+    public Task<HourlyForecast?> GetHourlyAsync(GeoPoint at, CancellationToken ct = default)
+    {
+        Requests.Add(at);
+        return Task.FromResult(Forecast);
     }
 }

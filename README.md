@@ -98,6 +98,9 @@ invitee sets a password or continues with Google using the invited address.
   lookups off). Its usage policy asks for a contact address in the User-Agent: `Geocoding:ContactEmail`, falling back
   to `Company:ContactEmail`. The public server allows about one lookup a second, which is fine at this scale; a busier
   site would switch `IGeocoder` to a paid provider.
+- Showings show the **weather forecast** for the theater's location over the showing's hours, from Open-Meteo
+  (`Weather:Provider`, free and keyless, up to 16 days ahead; `None` turns it off), on the theater, showing and
+  ticket pages.
 - Choosing a spot **holds** it for 10 minutes while the buyer picks a ticket option and add-ons and pays; the first
   to hold a spot gets it (a unique index on showing + spot), and anyone else who tries is told to choose another.
   A buyer holds one spot at a time. Expired holds are released every 10 seconds (`HoldExpiryService`).

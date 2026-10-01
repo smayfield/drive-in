@@ -1,0 +1,39 @@
+@* The forecast for one showing on the public pages. Renders nothing when there's no forecast to show. *@
+
+@if (Weather is not null)
+{
+    <p class="weather-line @(Weather.IsRough ? "weather-rough" : "")">
+        <MudIcon Icon="@Icon(Weather.WeatherCode)" Size="Size.Small" aria-hidden="true" />
+        <span><span class="visually-hidden">Forecast: </span>@Weather.Summary</span>
+        @if (Warn && Weather.IsRough)
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined" Class="my-0">Check the forecast before you go</MudChip>
+        }
+    </p>
+}
+else if (BeyondForecast)
+{
+    <p class="weather-line muted">The forecast is available about @WeatherService.ForecastDays days ahead.</p>
+}
+
+@code {
+    [Parameter] public ShowingWeather? Weather { get; set; }
+
+    // Too far off for a forecast yet; says when to check back.
+    [Parameter] public bool BeyondForecast { get; set; }
+
+    // Adds a warning chip when rain, storms or strong wind are likely.
+    [Parameter] public bool Warn { get; set; }
+
+    // Showings are at night, so clear skies get a moon.
+    private static string Icon(int code) => code switch
+    {
+        0 or 1 => Icons.Material.Filled.Nightlight,
+        2 => Icons.Material.Filled.NightsStay,
+        45 or 48 => Icons.Material.Filled.Dehaze,
+        (>= 71 and <= 77) or 85 or 86 => Icons.Material.Filled.AcUnit,
+        >= 95 => Icons.Material.Filled.Thunderstorm,
+        >= 51 and <= 82 => Icons.Material.Filled.Umbrella,
+        _ => Icons.Material.Filled.Cloud,
+    };
+}
