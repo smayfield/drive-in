@@ -1,7 +1,12 @@
-@* SVG map of spot layouts: one screen's field, or (Theater) all of a theater's screens around its central building. *@
+@* SVG map of spot layouts: one screen's field, or (Theater) all of a theater's screens around its central building.
+   An interactive map (OnSpotClick set) is a group of spot buttons with a single tab stop: lot-map.js moves focus between
+   spots with the arrow keys and Home/End, and Enter or Space clicks the focused one. Every spot stays a button (unavailable
+   ones are aria-disabled), so focus and the arrow keys keep their place when a spot changes under them, and lot-map.js
+   announces a change to the focused spot in the live region below the map. A map that only shows a layout is one image. *@
 @using static LotPlan
 
-<svg class="lot-map" viewBox="@plan.ViewBox.ViewBox" role="img" aria-label="@AriaLabel"
+<svg class="lot-map" viewBox="@plan.ViewBox.ViewBox" role="@(Interactive ? "group" : "img")" aria-label="@AriaLabel"
+     aria-describedby="@(Interactive ? helpId : null)" data-roving="@(Interactive ? "" : null)"
      style="aspect-ratio: @N(plan.ViewBox.Width) / @N(plan.ViewBox.Height)">
     @if (plan.Building is LotRect b)
     {
@@ -35,41 +40,45 @@
                 var labelY = row.Y + SpotDepth / 2;
                 var labelX = row.HalfWidth + RowLabelGap + RowLabelWidth / 2;
                 <g class="lot-row">
-                    <text class="lot-row-label" x="@N(-labelX)" y="@N(labelY)" transform="@placed.Upright(-labelX, labelY)">@row.Label</text>
-                    <text class="lot-row-label" x="@N(labelX)" y="@N(labelY)" transform="@placed.Upright(labelX, labelY)">@row.Label</text>
+                    <text class="lot-row-label" x="@N(-labelX)" y="@N(labelY)" transform="@placed.Upright(-labelX, labelY)" aria-hidden="@AriaHidden">@row.Label</text>
+                    <text class="lot-row-label" x="@N(labelX)" y="@N(labelY)" transform="@placed.Upright(labelX, labelY)" aria-hidden="@AriaHidden">@row.Label</text>
                     @foreach (var spot in row.Spots)
                     {
-                        var cx = spot.X + SpotWidth / 2;
-                        var markY = spot.Y + SpotDepth - LargeMarkInset;
-                        var large = sizeLimits.Contains(field.Screen.Id) && field.Screen.AllowsLarge(spot.Row, spot.Number);
-                        var status = SpotStatus?.Invoke(spot.Row, spot.Number);
-                        var title = $"Spot {spot.Label}{(large ? " (large vehicles OK)" : "")}{(status is null ? "" : $": {status.Value.Label}")}";
-                        @if (OnSpotClick.HasDelegate && status is { Clickable: true })
-                        {
-                            <g class="lot-spot-group lot-clickable @status.Value.CssClass" role="button" tabindex="0" aria-label="@title"
-                               @onclick="() => OnSpotClick.InvokeAsync(spot)"
-                               @onkeydown="e => OnSpotKeyAsync(e, spot)">
-                                <title>@title</title>
-                                <rect class="lot-spot" x="@N(spot.X)" y="@N(spot.Y)" width="@N(SpotWidth)" height="@N(SpotDepth)" rx="4" />
-                                <text class="lot-spot-label" x="@N(cx)" y="@N(labelY)" transform="@placed.Upright(cx, labelY)">@spot.Label</text>
-                                @if (large) { <g><text class="lot-large-mark" x="@N(cx)" y="@N(markY)" transform="@placed.Upright(cx, markY)">L</text></g> }
-                            </g>
-                        }
-                        else
-                        {
-                            <g class="lot-spot-group @status?.CssClass">
-                                <title>@title</title>
-                                <rect class="lot-spot" x="@N(spot.X)" y="@N(spot.Y)" width="@N(SpotWidth)" height="@N(SpotDepth)" rx="4" />
-                                <text class="lot-spot-label" x="@N(cx)" y="@N(labelY)" transform="@placed.Upright(cx, labelY)">@spot.Label</text>
-                                @if (large) { <g><text class="lot-large-mark" x="@N(cx)" y="@N(markY)" transform="@placed.Upright(cx, markY)">L</text></g> }
-                            </g>
-                        }
+                        var shape = new SpotDrawing(spot, SpotStatus?.Invoke(spot.Row, spot.Number),
+                            sizeLimits.Contains(field.Screen.Id) && field.Screen.AllowsLarge(spot.Row, spot.Number));
+                        var picked = spot; // a copy for the click handler
+                        var clickable = Interactive && shape.Status is { Clickable: true };
+                        @* In an interactive map every spot is a button; in others the attributes below are left out. *@
+                        <g class="lot-spot-group @(clickable ? "lot-clickable" : null) @shape.Status?.CssClass"
+                           role="@(Interactive ? "button" : null)" tabindex="@(Interactive ? "-1" : null)"
+                           aria-label="@(Interactive ? shape.Title : null)" aria-disabled="@(Interactive && !clickable ? "true" : null)"
+                           data-row="@(Interactive ? spot.Row.ToString() : null)" data-spot="@(Interactive ? spot.Number.ToString() : null)"
+                           data-x="@(Interactive ? N(shape.CenterX) : null)"
+                           @onclick="() => ClickAsync(picked)" @key="(spot.Row, spot.Number)">
+                            <title>@shape.Title</title>
+                            <rect class="lot-spot" x="@N(spot.X)" y="@N(spot.Y)" width="@N(SpotWidth)" height="@N(SpotDepth)" rx="4" />
+                            @if (shape.MarkPath is string path)
+                            {
+                                <path class="@shape.MarkClass" d="@path" />
+                            }
+                            <text class="lot-spot-label" x="@N(shape.CenterX)" y="@N(labelY)" transform="@placed.Upright(shape.CenterX, labelY)">@spot.Label</text>
+                            @if (shape.Large)
+                            {
+                                <g><text class="lot-large-mark" x="@N(shape.CenterX)" y="@N(shape.MarkY)" transform="@placed.Upright(shape.CenterX, shape.MarkY)">L</text></g>
+                            }
+                        </g>
                     }
                 </g>
             }
         </g>
     }
 </svg>
+@if (Interactive)
+{
+    <span id="@helpId" class="visually-hidden">Use the arrow keys to move between spots, and Enter or Space to choose one.</span>
+    @* Written only by lot-map.js (Blazor always renders it empty), when the focused spot changes state. *@
+    <div class="visually-hidden" aria-live="polite" data-lot-live></div>
+}
 
 @code {
     [Parameter, EditorRequired] public IReadOnlyList<Screen> Screens { get; set; } = [];
@@ -84,25 +93,61 @@
     [Parameter] public Func<int, int, LotSpotStatus?>? SpotStatus { get; set; }
     [Parameter] public EventCallback<LotSpot> OnSpotClick { get; set; }
 
+    // What assistive tech calls the map (e.g. with how many spots are free). By default, a description of the layout.
+    [Parameter] public string? Label { get; set; }
+
     private const double NameY = NameHeight / 2 + 1;
     private const double EmptyY = NameHeight + ScreenThickness + ScreenToFirstRow / 2 + 2;
     private const double LargeMarkInset = 7;
+    private const double CrossInset = 4;
 
     private LotPlan plan = default!;
 
     // Screens whose spots aren't all alike: only these get the "L" on spots that take large vehicles.
     private HashSet<int> sizeLimits = [];
 
-    private string AriaLabel => Theater
-        ? $"Lot map: {Screens.Count} screen{(Screens.Count == 1 ? "" : "s")}, {Screens.Sum(s => s.SpotCount)} spots"
-        : $"Spot layout for {Screens.FirstOrDefault()?.Name}: {Screens.FirstOrDefault()?.SpotCount ?? 0} spots";
+    // Ties an interactive map to its keyboard help; unique, as a page can show more than one map.
+    private readonly string helpId = $"lot-help-{Guid.NewGuid():N}";
 
-    private Task OnSpotKeyAsync(KeyboardEventArgs e, LotSpot spot) =>
-        e.Key is "Enter" or " " ? OnSpotClick.InvokeAsync(spot) : Task.CompletedTask;
+    private bool Interactive => OnSpotClick.HasDelegate;
+
+    // In an interactive map the spots' aria labels say everything, so the drawn text is hidden from assistive tech.
+    private string? AriaHidden => Interactive ? "true" : null;
+
+    private string AriaLabel => Label ?? (Theater
+        ? $"Lot map: {Screens.Count} screen{(Screens.Count == 1 ? "" : "s")}, {Screens.Sum(s => s.SpotCount)} spots"
+        : $"Spot layout for {Screens.FirstOrDefault()?.Name}: {Screens.FirstOrDefault()?.SpotCount ?? 0} spots");
 
     protected override void OnParametersSet()
     {
         plan = Theater || Screens.Count == 0 ? ForTheater(Screens) : ForScreen(Screens[0]);
         sizeLimits = Screens.Where(s => s.HasSizeLimits).Select(s => s.Id).ToHashSet();
+    }
+
+    // Every spot of an interactive map is a button, but only those the status allows do anything. Checked here too (not
+    // just by aria-disabled), since the spot may have changed since it was drawn.
+    private Task ClickAsync(LotSpot spot) =>
+        SpotStatus?.Invoke(spot.Row, spot.Number) is { Clickable: true } ? OnSpotClick.InvokeAsync(spot) : Task.CompletedTask;
+
+    private sealed record SpotDrawing(LotSpot Spot, LotSpotStatus? Status, bool Large)
+    {
+        public double CenterX => Spot.X + SpotWidth / 2;
+        public double MarkY => Spot.Y + SpotDepth - LargeMarkInset;
+
+        public string Title =>
+            $"Spot {Spot.Label}{(Large ? " (large vehicles OK)" : "")}{(Status is null ? "" : $": {Status.Value.Label}")}";
+
+        // Sold spots are crossed out and held ones hatched, so their state doesn't rest on color alone.
+        public string? MarkPath => Status?.Mark switch
+        {
+            LotSpotMark.Cross =>
+                $"M{N(Spot.X + CrossInset)} {N(Spot.Y + CrossInset)}L{N(Spot.X + SpotWidth - CrossInset)} {N(Spot.Y + SpotDepth - CrossInset)}" +
+                $"M{N(Spot.X + SpotWidth - CrossInset)} {N(Spot.Y + CrossInset)}L{N(Spot.X + CrossInset)} {N(Spot.Y + SpotDepth - CrossInset)}",
+            LotSpotMark.Hatch => string.Concat(LotMarks.Hatch(Spot.X, Spot.Y, SpotWidth, SpotDepth)
+                .Select(l => $"M{N(l.X1)} {N(l.Y1)}L{N(l.X2)} {N(l.Y2)}")),
+            _ => null,
+        };
+
+        public string MarkClass => Status?.Mark == LotSpotMark.Cross ? "lot-mark lot-mark-cross" : "lot-mark lot-mark-hatch";
     }
 }

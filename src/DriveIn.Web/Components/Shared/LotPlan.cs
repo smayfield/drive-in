@@ -1,5 +1,6 @@
 using System.Globalization;
 using DriveIn.Web.Data;
+using DriveIn.Web.Services;
 
 namespace DriveIn.Web.Components.Shared;
 
@@ -144,5 +145,49 @@ public readonly record struct LotRect(double X, double Y, double Width, double H
     public string ViewBox => $"{LotPlan.N(X)} {LotPlan.N(Y)} {LotPlan.N(Width)} {LotPlan.N(Height)}";
 }
 
-// How LotMap shows one spot: a CSS class, the word for it in the tooltip (e.g. "available"), and whether it can be clicked.
-public readonly record struct LotSpotStatus(string CssClass, string Label, bool Clickable);
+// How LotMap shows one spot: a CSS class, the word for it in the tooltip and aria label (e.g. "available"), whether it can
+// be clicked, and a mark drawn over it so its state doesn't rest on color alone.
+public readonly record struct LotSpotStatus(string CssClass, string Label, bool Clickable, LotSpotMark Mark = LotSpotMark.None);
+
+public enum LotSpotMark
+{
+    None,
+    Cross, // sold
+    Hatch, // on hold for someone else
+}
+
+// The diagonal hatching for LotSpotMark.Hatch: 45-degree lines across a spot's rectangle, clipped to it by hand (so no
+// clipPath or pattern ids, which would have to be unique on a page with several maps).
+public static class LotMarks
+{
+    public const double HatchStep = 9;
+
+    public static IEnumerable<(double X1, double Y1, double X2, double Y2)> Hatch(double x, double y, double width, double height)
+    {
+        // Each line is x' + y' = o in the spot's own coordinates, from its left or bottom edge to its top or right edge.
+        for (var o = HatchStep; o < width + height; o += HatchStep)
+            yield return (x + Math.Max(0, o - height), y + Math.Min(o, height), x + Math.Min(o, width), y + Math.Max(0, o - width));
+    }
+}
+
+// "Best available": the free spot that fits the vehicle in the row nearest the screen, as near the middle of that row as
+// possible (the left one of two equally central spots). A buyer who wants somewhere else picks it on the map or from the list.
+public static class SpotChoice
+{
+    public static (int Row, int Spot)? Best(Screen screen, SpotAvailability availability, VehicleSize vehicle) =>
+        Available(screen, availability, vehicle)
+            .OrderBy(s => s.Row)
+            .ThenBy(s => Math.Abs(2 * s.Spot - (screen.RowSpots[s.Row - 1] + 1)))
+            .ThenBy(s => s.Spot)
+            .Select(s => ((int, int)?)s)
+            .FirstOrDefault();
+
+    // Every spot that's free right now and fits the vehicle, front row first, left to right.
+    public static IEnumerable<(int Row, int Spot)> Available(Screen screen, SpotAvailability availability, VehicleSize vehicle)
+    {
+        for (var row = 1; row <= screen.RowSpots.Count; row++)
+            for (var spot = 1; spot <= screen.RowSpots[row - 1]; spot++)
+                if (availability[row, spot] == SpotState.Available && screen.Fits(row, spot, vehicle))
+                    yield return (row, spot);
+    }
+}

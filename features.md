@@ -166,6 +166,21 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   stored on the ticket (`Ticket.VehicleSize`), shown on the receipt, ticket page, My tickets and at the gate.
 - **Live maps:** holds/releases/sales are published through in-process `SpotEvents` to open maps. Single-server only; multiple
   servers would need a shared bus (e.g. Postgres LISTEN/NOTIFY).
+- **Accessible seat maps** (`SeatMap` / `LotMap`, `lot-map.js`; online checkout, the gate's sale and move, free admission, and the
+  screen page's large-vehicle marking):
+  - An interactive map is a labelled `role="group"` (e.g. "Spots at North: 42 of 120 available", plus how many fit a large
+    vehicle when one is chosen) of spot buttons with **one tab stop**. The arrow keys move between spots (up is toward the screen;
+    up/down go to the nearest spot across, as rows are centered), Home/End go to the ends of the row, Enter or Space picks.
+    Focus moves in the browser (`lot-map.js`), with no round trip; picking goes through Blazor as a click.
+  - Every spot stays a button: unavailable ones (held, sold, too small for the vehicle) are `aria-disabled`, so focus and the arrow
+    keys keep their place when a spot changes under them. When the focused spot changes state, the map's polite live region says so;
+    `SeatMap` also announces when the viewer's own hold starts or ends.
+  - States don't rest on color: held spots are hatched, sold ones crossed out, cars-only ones dashed; the key (a list, read by
+    screen readers) shows the same marks. Spot labels are at least 4.5:1 against their spot. Instructions say "available", not "green".
+  - **Best available** picks the free spot that fits the vehicle in the row nearest the screen, as near that row's middle as
+    possible (the left one of two equally central; `SpotChoice.Best`). **Or choose a spot** lists every free, fitting spot by label
+    and row. Both pick exactly as clicking the map would.
+  - Maps that only show a layout (the lot map, a read-only screen layout) stay a single `role="img"` with a summary label.
 - **Payment** (`IPaymentProcessor`, `Payments.cs`): credit card only. `Payments:Provider=Dummy` approves everything without
   charging (set in `appsettings.Development.json`); unset (production) means nothing can be sold online or at the gate. Only card
   brand and last four are stored. Total $0 after discounts needs no card.
