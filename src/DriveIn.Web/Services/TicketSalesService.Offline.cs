@@ -136,7 +136,9 @@ public sealed partial class TicketSalesService
                 : Result(OfflineSyncOutcomes.AlreadyUsed,
                     $"Already used: admitted {TheaterTime.ToLocal(ticket.Showtime!.Screen!.Theater!, used):ddd, MMM d h:mm tt} by another check-in.");
 
-        // A device clock ahead of ours can't admit a car in the future.
+        // A device clock ahead of ours can't admit a car in the future. (Such a check-in is stored as now, so if its answer is
+        // lost and the ticket is moved before the retry, neither the Stamp nor the time matches and the retry shows as
+        // already_used: rare, and harmless since the car is in, so not worth storing the check-in id separately.)
         var at = admission.AdmittedAt > now ? now : admission.AdmittedAt;
         if (AdmitProblem(ticket, at) is string problem)
             return Result(OfflineSyncOutcomes.NotValid, $"When it was checked in: {problem}");

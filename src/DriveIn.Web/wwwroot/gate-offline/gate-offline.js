@@ -87,6 +87,17 @@ function start(root) {
         return text.trim();
     }
 
+    // crypto.randomUUID is newer than SubtleCrypto in some browsers; a v4 UUID from getRandomValues does the same job.
+    function newId() {
+        if (crypto.randomUUID)
+            return crypto.randomUUID();
+        const b = crypto.getRandomValues(new Uint8Array(16));
+        b[6] = (b[6] & 0x0f) | 0x40;
+        b[8] = (b[8] & 0x3f) | 0x80;
+        const h = [...b].map(x => x.toString(16).padStart(2, "0")).join("");
+        return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+    }
+
     async function sha256(text) {
         const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)));
         return [...bytes].map(b => b.toString(16).padStart(2, "0")).join("");
@@ -174,7 +185,7 @@ function start(root) {
     async function admit(ticket) {
         if (problemOf(ticket))
             return renderResults();
-        state.queue.push({ admissionId: crypto.randomUUID(), ticketId: ticket.id, admittedAt: new Date().toISOString(), spot: ticket.spot });
+        state.queue.push({ admissionId: newId(), ticketId: ticket.id, admittedAt: new Date().toISOString(), spot: ticket.spot });
         await write(keys.queue, state.queue);
         renderResults(ticket.id);
         renderStatus();
@@ -382,7 +393,7 @@ function start(root) {
 
     els.form.addEventListener("submit", e => {
         e.preventDefault();
-        find(els.code.value);
+        find(els.code.value).catch(() => showResultMessage("Something went wrong looking that code up. Try again, or use the online gate."));
     });
     els.sync.addEventListener("click", () => sync());
     els.clearConflicts.addEventListener("click", async () => {

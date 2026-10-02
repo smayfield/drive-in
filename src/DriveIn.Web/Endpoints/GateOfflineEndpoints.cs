@@ -41,13 +41,12 @@ public static class GateOfflineEndpoints
             // Fresh each time; the page sends the latest one it has with its syncs.
             http.Response.Headers[TokenHeader] = antiforgery.GetAndStoreTokens(http).RequestToken;
 
-            var body = JsonSerializer.SerializeToUtf8Bytes(list, json);
             // Everything but when it was made, so the same list has the same tag.
             var etag = $"\"{Convert.ToHexStringLower(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(list with { GeneratedAt = default }, json)))[..32]}\"";
             http.Response.Headers.ETag = etag;
             if (http.Request.Headers.IfNoneMatch.Contains(etag))
                 return Results.StatusCode(StatusCodes.Status304NotModified);
-            return Results.Bytes(body, "application/json");
+            return Results.Bytes(JsonSerializer.SerializeToUtf8Bytes(list, json), "application/json");
         }).RequireAuthorization();
 
         // Check-ins made on the device. Needs the token from the data endpoint (see TokenHeader): the sign-in cookie
