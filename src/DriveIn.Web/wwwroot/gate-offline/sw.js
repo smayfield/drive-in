@@ -1,15 +1,19 @@
 // The offline gate page's service worker (served at /manage/{id}/gate/offline-sw.js, scope /manage/{id}/gate/offline).
 // It keeps the page and its scripts and styles so the page opens with no signal. The admit list and check-ins don't go
 // through here: the page keeps those in IndexedDB and talks to the server itself.
-const CACHE = "drivein-gate-v1";
+// One cache per worker, i.e. per theater's gate (Cache Storage is shared by the whole site): a device used at two theaters'
+// gates keeps both, and each worker only ever prunes its own.
+const VERSION = "v1";
+const CACHE = `drivein-gate-${VERSION} ${self.registration.scope}`;
 const NAVIGATION_TIMEOUT_MS = 5000;
 
 self.addEventListener("install", () => self.skipWaiting());
 
 self.addEventListener("activate", event => {
     event.waitUntil((async () => {
+        // Older versions of this worker's own cache only.
         for (const key of await caches.keys())
-            if (key.startsWith("drivein-gate-") && key !== CACHE)
+            if (key.startsWith("drivein-gate-") && key.endsWith(` ${self.registration.scope}`) && key !== CACHE)
                 await caches.delete(key);
         await self.clients.claim();
     })());
