@@ -252,6 +252,8 @@ builder.Services.AddScoped<WeatherService>();
 builder.Services.AddScoped<TicketSalesService>();
 builder.Services.AddScoped<ReportService>();
 builder.Services.AddHostedService<HoldExpiryService>();
+// Settles charges whose outcome checkout never heard (a timeout, or a crash mid-charge) by asking the processor.
+builder.Services.AddHostedService<PaymentReconcileService>();
 builder.Services.AddHostedService<BillingJobService>();
 
 // In-app messages and the notification bell; unread notifications are emailed (links only) after a delay.
@@ -396,6 +398,11 @@ app.MapGet("/admin/billing/{kind}.csv", async (string kind, string? from, string
 }).RequireAuthorization(Policies.Admin);
 
 // Asked by Caddy before every request to the metrics site (/grafana/): admits site admins only. See GrafanaAuth.
+// Stripe's payment webhook (signed; off without Payments:Stripe:WebhookSecret). See StripeWebhook.
+app.MapPost(StripeWebhook.Path, (HttpContext http, IOptions<StripeOptions> stripe, IOptions<NotificationOptions> notifications,
+        TicketSalesService sales, ILogger<StripePaymentProcessor> logger) =>
+    StripeWebhook.HandleAsync(http.Request, stripe.Value.WebhookSecret, sales, notifications.Value.SiteUrl, logger, http.RequestAborted));
+
 app.MapGet("/ops/grafana-auth", (HttpContext http) =>
 {
     var decision = GrafanaAuth.Check(http.User, http.Request.Headers["X-Forwarded-Uri"]);

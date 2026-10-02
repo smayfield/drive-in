@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 
@@ -44,6 +45,24 @@ public sealed record PaymentResult(bool Approved, string? Reference, string? Dec
     public static PaymentResult Declined(string reason) => new(false, null, reason);
 }
 
+// What the processor knows about a charge, looked up by its idempotency key (and its reference, when the server has
+// it, e.g. from a webhook). Result is set when it Succeeded (with the card's brand and last four) or Failed.
+public enum PaymentState
+{
+    NotFound,  // the processor has no such charge (it never got there), or can't find it yet
+    Pending,   // still going (e.g. a card reader waiting for the card)
+    Succeeded,
+    Failed,
+}
+
+public sealed record PaymentLookup(string IdempotencyKey, string? Reference = null);
+
+public sealed record PaymentStatus(PaymentState State, PaymentResult? Result = null)
+{
+    public static readonly PaymentStatus NotFound = new(PaymentState.NotFound);
+    public static readonly PaymentStatus Pending = new(PaymentState.Pending);
+}
+
 public interface IPaymentProcessor
 {
     // False when no processor is configured: nothing can be sold online.
@@ -52,7 +71,11 @@ public interface IPaymentProcessor
     // What checkout pages need to tokenize a card for this processor.
     PaymentClient Client { get; }
 
+    // Charges once per IdempotencyKey: asking again with the same key returns the first attempt's outcome.
     Task<PaymentResult> ChargeAsync(PaymentRequest request, CancellationToken ct = default);
+
+    // Whether a charge went through, for one whose outcome the server didn't hear (PaymentReconcileService).
+    Task<PaymentStatus> GetStatusAsync(PaymentLookup lookup, CancellationToken ct = default);
 }
 
 // A card-present charge on the processor's card reader at the gate (tap, dip or swipe), so the card's details never
@@ -131,28 +154,40 @@ public static partial class TestCardTokens
 }
 
 // Stand-in until real card processing is added: approves everything and charges nothing. Online it takes the test
-// card form's tokens (and declines the "decline" test card); at the gate it approves the card-present charge.
+// card form's tokens (and declines the "decline" test card); at the gate it approves the card-present charge. Like a
+// real processor it remembers each key's outcome (in memory, until the app restarts; a forgotten charge is NotFound,
+// which is right: no money was ever taken).
 public sealed class DummyPaymentProcessor(ILogger<DummyPaymentProcessor> logger) : IPaymentProcessor
 {
+    private readonly ConcurrentDictionary<string, PaymentResult> outcomes = new();
+
     public bool IsAvailable => true;
 
     public PaymentClient Client => PaymentClient.Test;
 
-    public Task<PaymentResult> ChargeAsync(PaymentRequest request, CancellationToken ct = default)
+    public Task<PaymentResult> ChargeAsync(PaymentRequest request, CancellationToken ct = default) =>
+        Task.FromResult(outcomes.GetOrAdd(request.IdempotencyKey, _ => Charge(request)));
+
+    public Task<PaymentStatus> GetStatusAsync(PaymentLookup lookup, CancellationToken ct = default) =>
+        Task.FromResult(outcomes.TryGetValue(lookup.IdempotencyKey, out var result)
+            ? new PaymentStatus(result.Approved ? PaymentState.Succeeded : PaymentState.Failed, result)
+            : PaymentStatus.NotFound);
+
+    private PaymentResult Charge(PaymentRequest request)
     {
         TestCardTokens.TestCard? card = null;
         if (!request.CardPresent)
         {
             card = TestCardTokens.Parse(request.PaymentMethodId);
             if (card is null)
-                return Task.FromResult(PaymentResult.Declined("this isn't a test card"));
+                return PaymentResult.Declined("this isn't a test card");
             if (card.Declines)
-                return Task.FromResult(PaymentResult.Declined("your card was declined (test card)"));
+                return PaymentResult.Declined("your card was declined (test card)");
         }
         var reference = "TEST-" + Convert.ToHexString(RandomNumberGenerator.GetBytes(6));
         logger.LogWarning("Dummy payment processor approved {Amount} for {Description} ({Reference}); no money was taken.",
             request.Amount, request.Description, reference);
-        return Task.FromResult(new PaymentResult(true, reference, CardBrand: card?.Brand, CardLast4: card?.Last4));
+        return new PaymentResult(true, reference, CardBrand: card?.Brand, CardLast4: card?.Last4);
     }
 }
 
@@ -164,4 +199,7 @@ public sealed class UnavailablePaymentProcessor : IPaymentProcessor
 
     public Task<PaymentResult> ChargeAsync(PaymentRequest request, CancellationToken ct = default) =>
         Task.FromResult(PaymentResult.Declined("Online payment isn't available yet."));
+
+    public Task<PaymentStatus> GetStatusAsync(PaymentLookup lookup, CancellationToken ct = default) =>
+        Task.FromResult(PaymentStatus.NotFound);
 }

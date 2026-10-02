@@ -200,20 +200,37 @@ public sealed class FakePaymentProcessor : IPaymentProcessor
     public bool IsAvailable { get; set; } = true;
     public PaymentClient Client { get; set; } = PaymentClient.Test;
     public string? DeclineWith { get; set; }
-    // When set, the charge fails with this (the processor erroring, as opposed to declining).
+    // When set, the charge fails with this before reaching the processor (it has no record of it), as opposed to declining.
     public Exception? FailWith { get; set; }
+    // When set, the charge goes through but the caller gets this instead of the answer: a timeout after the card was
+    // charged, or the server dying mid-charge.
+    public Exception? LoseAnswerWith { get; set; }
     public List<PaymentRequest> Charges { get; } = [];
+    // What the processor knows, by idempotency key; tests may set an outcome (or Pending) directly.
+    public Dictionary<string, PaymentStatus> Outcomes { get; } = [];
+    public List<PaymentLookup> Lookups { get; } = [];
 
     public Task<PaymentResult> ChargeAsync(PaymentRequest request, CancellationToken ct = default)
     {
+        // Like a real processor, a repeated key gets the first answer and isn't charged again.
+        if (Outcomes.TryGetValue(request.IdempotencyKey, out var known) && known.Result is not null)
+            return Task.FromResult(known.Result);
         Charges.Add(request);
         if (FailWith is not null)
             return Task.FromException<PaymentResult>(FailWith);
         // Reports the brand and last four of a test card token, as a real processor reports the card it charged.
         var card = TestCardTokens.Parse(request.PaymentMethodId);
-        return Task.FromResult(DeclineWith is null
+        var result = DeclineWith is null
             ? new PaymentResult(true, $"FAKE-{Charges.Count}", CardBrand: card?.Brand, CardLast4: card?.Last4)
-            : PaymentResult.Declined(DeclineWith));
+            : PaymentResult.Declined(DeclineWith);
+        Outcomes[request.IdempotencyKey] = new PaymentStatus(result.Approved ? PaymentState.Succeeded : PaymentState.Failed, result);
+        return LoseAnswerWith is null ? Task.FromResult(result) : Task.FromException<PaymentResult>(LoseAnswerWith);
+    }
+
+    public Task<PaymentStatus> GetStatusAsync(PaymentLookup lookup, CancellationToken ct = default)
+    {
+        Lookups.Add(lookup);
+        return Task.FromResult(Outcomes.GetValueOrDefault(lookup.IdempotencyKey) ?? PaymentStatus.NotFound);
     }
 }
 
