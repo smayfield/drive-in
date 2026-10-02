@@ -305,6 +305,10 @@ public sealed partial class TicketSalesService(
             if (string.IsNullOrEmpty(buyerEmail))
                 throw new AppValidationException("Your account needs an email address to receive tickets.");
         }
+        // Worked out before Paying, so nothing between going to Paying and charging can fail and strand the spot.
+        var description = cardAmount == 0 ? ""
+            : $"{theater.Name}: {ScheduleService.ToView(theater, await WithFeaturesAsync(db, showtime)).Title}, spot {ticket.SpotLabel}";
+
         // Paying: the hold can no longer expire out from under the charge. The gift card's share comes off its balance in
         // the same save, so a balance can't be spent twice; a concurrent spend makes this fail rather than overdraw it.
         ticket.Status = TicketStatus.Paying;
@@ -346,7 +350,6 @@ public sealed partial class TicketSalesService(
             result = new PaymentResult(true, null);
         else
         {
-            var description = $"{theater.Name}: {ScheduleService.ToView(theater, await WithFeaturesAsync(db, showtime)).Title}, spot {ticket.SpotLabel}";
             try
             {
                 result = await ProcessorFor(theater).ChargeAsync(TicketCharge(ticket, theater, cardAmount, description, paymentMethod));
