@@ -208,7 +208,8 @@ invitee sets a password or continues with Google using the invited address.
   top of `wwwroot/app.css`; `marketing.css` has its own copy.
 - **Public pages** (theaters, showings, tickets) are the showy ones: a bulb-lit marquee header per theater and
   ticket-stub showings and tickets (`wwwroot/public.css`, `Components/Shared/Stub.razor`). **Manage and admin pages** are meant to stay plain and dense.
-- Fonts: Bungee for display headings, Barlow for everything else (both from Google Fonts).
+- Fonts: Bungee for display headings, Barlow for everything else. Both are self-hosted (`wwwroot/fonts`, SIL Open Font
+  License; Latin and Latin Extended subsets from Fontsource), so pages load nothing from Google.
 
 ## Local development
 
