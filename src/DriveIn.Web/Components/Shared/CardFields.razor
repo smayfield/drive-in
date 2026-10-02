@@ -10,6 +10,12 @@
     <legend class="mud-typography mud-typography-h6 mb-2">Credit card</legend>
     @if (Client.Kind == PaymentClientKind.Stripe)
     {
+        @if (loadFailed)
+        {
+            <MudAlert Severity="Severity.Warning" Dense Class="mb-2">
+                The card form couldn't load. Check your connection (and any content blocker), then reload the page.
+            </MudAlert>
+        }
         <div @ref="host" class="stripe-card mb-2"></div>
     }
     else if (Client.Kind == PaymentClientKind.Test)
@@ -46,36 +52,55 @@
     private IJSObjectReference? module;
     private bool stripeMounted;
     private long mountedCents;
+    // Stripe.js couldn't be loaded or mounted (blocked, offline): say so, and don't keep retrying on every render.
+    private bool loadFailed;
 
     private long Cents => PaymentRequest.ToCents(Amount);
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (Client.Kind != PaymentClientKind.Stripe)
+        if (Client.Kind != PaymentClientKind.Stripe || loadFailed)
             return;
-        if (!stripeMounted)
+        try
         {
-            module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./payments.js");
-            stripeMounted = await module.InvokeAsync<bool>("mountStripe", host, Client.PublishableKey, Cents, Client.Currency);
-            mountedCents = Cents;
+            if (!stripeMounted)
+            {
+                module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./payments.js");
+                stripeMounted = await module.InvokeAsync<bool>("mountStripe", host, Client.PublishableKey, Cents, Client.Currency);
+                mountedCents = Cents;
+            }
+            else if (mountedCents != Cents && module is not null)
+            {
+                mountedCents = Cents;
+                await module.InvokeVoidAsync("updateStripe", host, Cents);
+            }
         }
-        else if (mountedCents != Cents && module is not null)
+        catch (JSException)
         {
-            mountedCents = Cents;
-            await module.InvokeVoidAsync("updateStripe", host, Cents);
+            // An exception thrown from rendering would end the buyer's circuit; show a message instead.
+            loadFailed = true;
+            StateHasChanged();
         }
     }
 
     // The payment method token for the card entered. Throws AppValidationException (shown to the buyer) if the card
-    // can't be used, e.g. a mistyped number.
+    // can't be used, e.g. a mistyped number, or the card form didn't load.
     public async Task<string> TokenizeAsync()
     {
         if (Client.Kind == PaymentClientKind.None)
             throw new AppValidationException("Online payment isn't available yet.");
-        module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./payments.js");
-        var token = Client.Kind == PaymentClientKind.Stripe
-            ? await module.InvokeAsync<CardToken?>("tokenizeStripe", host)
-            : await module.InvokeAsync<CardToken?>("tokenizeTest", host, Time.GetUtcNow().ToString("O"));
+        CardToken? token;
+        try
+        {
+            module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./payments.js");
+            token = Client.Kind == PaymentClientKind.Stripe
+                ? await module.InvokeAsync<CardToken?>("tokenizeStripe", host)
+                : await module.InvokeAsync<CardToken?>("tokenizeTest", host, Time.GetUtcNow().ToString("O"));
+        }
+        catch (JSException)
+        {
+            throw new AppValidationException("The card form isn't working. Check your connection, reload the page and try again.");
+        }
         if (token?.Id is not string pm)
             throw new AppValidationException(token?.Error ?? "Your card details didn't come through. Enter them again.");
         return pm;

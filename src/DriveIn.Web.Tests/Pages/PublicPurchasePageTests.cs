@@ -140,6 +140,27 @@ public class PublicPurchasePageTests
     }
 
     [Fact]
+    public async Task If_Stripe_cant_load_the_buyer_is_told_instead_of_the_page_breaking()
+    {
+        var (s, host) = await BuyerAsync();
+        await using var _ = host;
+        await using var __ = s;
+        s.App.Payments.Client = new PaymentClient(PaymentClientKind.Stripe, "pk_test_123");
+        var stripe = host.Context.JSInterop.SetupModule("./payments.js");
+        stripe.Setup<bool>("mountStripe", _ => true).SetException(new Microsoft.JSInterop.JSException("Couldn't load Stripe."));
+        stripe.Setup<CardFields.CardToken>("tokenizeStripe", _ => true).SetException(new Microsoft.JSInterop.JSException("not mounted"));
+        var page = OpenShowing(host, s);
+        page.Find("g[aria-label='Spot A1: available']").Click();
+
+        page.WaitForText("The card form couldn't load.");
+        page.ClickButton("Pay $10.00");
+
+        page.WaitForText("The card form isn't working.");
+        Assert.Empty(s.App.Payments.Charges);
+        Assert.Contains("Spot A1 is yours for", page.Text());
+    }
+
+    [Fact]
     public async Task Choosing_a_different_spot_releases_the_hold()
     {
         var (s, host) = await BuyerAsync();
