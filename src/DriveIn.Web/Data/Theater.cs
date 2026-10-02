@@ -52,6 +52,13 @@ public class Theater
     // is turned off). Saved separately from the profile (TheaterService.UpdateGiftCardSettingsAsync).
     public bool GiftCardsEnabled { get; set; }
 
+    // Where the theater's ticket and gift card money goes: its connected account at the payment processor (a Stripe
+    // Connect account, acct_...), set up by the owner under Manage → Payouts (PayoutService). With Stripe, a live
+    // theater sells by card only once its account is Enabled; demo theaters never need one.
+    [MaxLength(100)] public string? PayoutAccountId { get; set; }
+    public PayoutStatus PayoutStatus { get; set; }
+    public DateTimeOffset? PayoutStatusCheckedAt { get; set; }
+
     // Admin switch: an inactive theater is hidden and sells nothing, whatever its mode.
     public bool IsActive { get; set; } = true;
 
@@ -119,4 +126,12 @@ public enum TheaterMode
 {
     Demo,
     Live,
+}
+
+// Stored by name. The theater's payout account at the payment processor (Theater.PayoutAccountId).
+public enum PayoutStatus
+{
+    None,     // not started
+    Pending,  // created, but the owner hasn't finished the processor's onboarding (or it's being verified)
+    Enabled,  // can take charges and receive payouts
 }

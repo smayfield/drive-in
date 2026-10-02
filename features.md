@@ -57,6 +57,7 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 | `reports.view` | View reports | Sales, attendance and gift card reports, CSV downloads |
 | `billing.view` | View billing | The theater's subscription, issued invoices and payments (Billing tab) |
 | `billing.manage` | Manage billing | Billing email, cancel the subscription (sees the subscription, not invoices, without `billing.view`) |
+| `payouts.manage` | Manage payouts | Set up and check the theater's payout account (Payouts tab). Like billing, no default role gets it |
 | `messages.view` | View messages | The theater's inbox: read customers' conversations, be notified of new ones |
 | `messages.reply` | Reply to messages | Reply, close and reopen conversations (needs `messages.view` to see them) |
 | `content.manage` | Manage pages and posts | The theater's own pages and posts (write, publish, schedule, delete, preview drafts) and its image library |
@@ -94,6 +95,7 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 | `/manage/{id}/reports` | Sales, attendance and gift card reports |
 | `/manage/{id}/billing` | Subscription, invoices, billing email, cancel (`billing.view` / `billing.manage`) |
 | `/manage/{id}/billing/invoices/{invoiceId}` | One issued invoice, printable (`billing.view`) |
+| `/manage/{id}/payouts` | The theater's payout account: set up (the processor's hosted onboarding), status (`payouts.manage`) |
 
 - **Profile:** name, unique slug (public URL), address/contact, description, IANA time zone. Times are entered/shown in that zone,
   stored in UTC.
@@ -181,6 +183,17 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   (free-admission request; never swept), Sold. On approval: sold to buyer, receipt emailed
   (`TicketReceipt`): QR code (inline image) linking to `tickets/{code}` (random 128-bit code) and a 4-character gate code
   (no look-alike characters, e.g. `K7QM`). Receipts can be resent from My tickets.
+- **Payout accounts** (`Payouts.cs`, `PayoutService`, Manage → Payouts, `payouts.manage`): the theater's money goes to its own
+  account at the processor (`theaters.payout_account_id`, `payout_status` None / Pending / Enabled, `payout_status_checked_at`).
+  With Stripe that's a Connect Express account (`StripeConnectAccounts`): "Set up payouts" creates it (idempotent per theater) and
+  sends the owner to Stripe's hosted onboarding (an account link), which returns to `/manage/{id}/payouts?done=1` (status is
+  checked then, or with "Check status"; `?expired=1` asks for a new link). Enabled = Stripe's charges_enabled and payouts_enabled.
+  Charges are destination charges on the theater's behalf (`on_behalf_of` + `transfer_data.destination`, `PaymentRequest.PayoutAccountId`)
+  with `application_fee_amount` from `Payments:ApplicationFeePercent` (0: a placeholder until fees are decided). When the processor
+  needs one (`IPaymentProcessor.RequiresPayoutAccount`: Stripe), a live theater sells nothing by card (online, gift cards, the
+  gate) until it's Enabled; demo theaters (dummy processor) never need one. `Payments:Provider=Dummy` uses `DummyPayoutAccounts`
+  (onboarding finishes at once); unset uses none (the page says there's nothing to set up). Admins see each theater's status on
+  `/admin/theaters` and its admin page. The platform's own billing of theaters stays in-house (`BillingService`), not Stripe Billing.
 - **Settling payments** (`TicketSalesService.Payments.cs`): going to Paying saves everything the sale needs (option, add-ons,
   total, gate code, buyer email, gate seller) plus `tickets.payment_key` (the idempotency key) and `payment_started_at`. Only a
   definite decline undoes it at checkout (back to Held, details cleared, gift card money restored); a processor error leaves it

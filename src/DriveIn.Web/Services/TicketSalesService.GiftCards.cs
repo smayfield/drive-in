@@ -98,8 +98,7 @@ public sealed partial class TicketSalesService
         try
         {
             // The purchase's key: a retry can't charge twice, and buying another card is a new purchase and a new charge.
-            var charge = new PaymentRequest(PaymentRequest.ToCents(amount), paymentOptions.Value.Currency, $"{theater.Name}: gift card",
-                paymentMethod, purchase.PaymentKey,
+            var charge = Charge(theater, amount, $"{theater.Name}: gift card", paymentMethod, purchase.PaymentKey,
                 new Dictionary<string, string>
                 {
                     ["kind"] = "gift_card", ["gift_card_purchase_id"] = purchase.Id.ToString(), ["theater_id"] = theater.Id.ToString(),
@@ -221,6 +220,7 @@ public sealed partial class TicketSalesService
     private string? GiftCardsNotAvailableReason(Theater theater) =>
         !theater.GiftCardsEnabled ? "This theater isn't selling gift cards."
         : !ProcessorFor(theater).IsAvailable ? "Online payment isn't available yet, so gift cards can't be sold."
+        : NeedsPayoutAccount(theater) ? "This theater isn't selling gift cards online yet."
         : null;
 
     private static string? Clean(string? text) => string.IsNullOrWhiteSpace(text) ? null : text.Trim();

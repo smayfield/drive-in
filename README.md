@@ -216,6 +216,12 @@ invitee sets a password or continues with Google using the invited address.
   reviews and issues them at `/admin/billing` (emailed to the owner, due `Billing:PaymentTermsDays` later) and records
   payments as they arrive (each emails a receipt). There's no card processor for this yet. Owners see their plan and
   invoices under Manage → Billing (owner-only unless granted). Details in [features.md](features.md).
+- **Payouts**: ticket and gift card money belongs to each theater, so with Stripe every charge is a destination charge to the
+  theater's own Stripe Connect (Express) account, which the owner sets up under Manage → Payouts (owner-only unless granted
+  "Manage payouts") through Stripe's hosted onboarding; Stripe collects and verifies the business and bank details. A live
+  theater can't take cards until its account is enabled. The platform's fee per charge is `Payments:ApplicationFeePercent` (0
+  for now). Untested against Stripe, like the rest of the Stripe code; the subscription billing above stays in-house rather than
+  moving to Stripe Billing, which can be revisited once there's a Stripe account.
 
 ## Look and feel
 

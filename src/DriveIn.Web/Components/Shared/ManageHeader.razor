@@ -36,7 +36,7 @@
     [Parameter, EditorRequired] public string Title { get; set; } = "";
 
     // Which tab is active: "overview", "schedule", "pricing", "lot", "gate", "comps", "giftcards", "reports", "employees",
-    // "roles", "content", "messages" or "billing". Leave null on pages that aren't a tab (a screen's setup).
+    // "roles", "content", "messages", "billing" or "payouts". Leave null on pages that aren't a tab (a screen's setup).
     [Parameter] public string? Current { get; set; } = "overview";
 
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
@@ -71,6 +71,8 @@
                 yield return new("messages", $"manage/{Theater.Id}/messages", "Messages");
             if (Can(TheaterPermissions.ViewBilling) || Can(TheaterPermissions.ManageBilling))
                 yield return new("billing", $"manage/{Theater.Id}/billing", "Billing");
+            if (Can(TheaterPermissions.ManagePayouts))
+                yield return new("payouts", $"manage/{Theater.Id}/payouts", "Payouts");
         }
     }
 
