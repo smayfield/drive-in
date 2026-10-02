@@ -579,6 +579,17 @@ public class TicketSalesTests
             Assert.Throws<InvalidOperationException>(() => StripeOptions.Validate(options));
     }
 
+    [Fact]
+    public void Stripes_card_element_uses_the_configured_currency()
+    {
+        var stripe = new StripePaymentProcessor(new Stripe.StripeClient("sk_test_x"), new StripeTerminalReader(),
+            Microsoft.Extensions.Options.Options.Create(new StripeOptions { PublishableKey = "pk_test_x", SecretKey = "sk_test_x" }),
+            Microsoft.Extensions.Options.Options.Create(new PaymentOptions { Currency = "cad" }),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<StripePaymentProcessor>.Instance);
+
+        Assert.Equal(new PaymentClient(PaymentClientKind.Stripe, "pk_test_x", "cad"), stripe.Client);
+    }
+
     [Theory]
     [InlineData(25.50, 2550)]
     [InlineData(0.005, 1)]

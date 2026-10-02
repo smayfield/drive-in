@@ -37,11 +37,12 @@ public sealed class StripeOptions
 //   intent's client secret back to the page for stripe.handleNextAction and finishing the sale afterwards.
 // - The PaymentIntent's id is the payment reference stored on the ticket or gift card.
 public sealed class StripePaymentProcessor(IStripeClient client, ICardReader reader, IOptions<StripeOptions> options,
-    ILogger<StripePaymentProcessor> logger) : IPaymentProcessor
+    IOptions<PaymentOptions> payments, ILogger<StripePaymentProcessor> logger) : IPaymentProcessor
 {
     public bool IsAvailable => true;
 
-    public PaymentClient Client => new(PaymentClientKind.Stripe, options.Value.PublishableKey);
+    // The Element is created in the same currency the server charges in (Payments:Currency), or Stripe rejects it.
+    public PaymentClient Client => new(PaymentClientKind.Stripe, options.Value.PublishableKey, payments.Value.Currency);
 
     public async Task<PaymentResult> ChargeAsync(PaymentRequest request, CancellationToken ct = default)
     {
