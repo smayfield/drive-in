@@ -254,6 +254,25 @@ public class PublicTheaterPageTests
     }
 
     [Fact]
+    public async Task A_visitor_who_leaves_stops_the_forecast_request()
+    {
+        var s = await PlacedAsync();
+        s.App.Weather.Pending = new TaskCompletionSource<HourlyForecast?>();
+        await using var host = await BuyerHostAsync(s);
+        using var leaving = new CancellationTokenSource();
+        host.Request.RequestAborted = leaving.Token;
+
+        var page = host.Render<Details>(p => p.Add(x => x.Slug, "starlight"));
+        page.WaitForText("Jaws");
+        Assert.Empty(page.FindComponents<DriveIn.Web.Components.Shared.WeatherLine>());
+
+        leaving.Cancel();
+        // The streamed line settles (its WeatherLine renders, empty) instead of waiting forever or failing the render.
+        page.WaitForAssertion(() => Assert.Single(page.FindComponents<DriveIn.Web.Components.Shared.WeatherLine>()));
+        Assert.DoesNotContain("Forecast:", page.Text());
+    }
+
+    [Fact]
     public async Task A_failing_forecast_leaves_the_showings_without_one()
     {
         var s = await PlacedAsync();

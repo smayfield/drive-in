@@ -242,6 +242,6 @@ public sealed class FakeWeatherForecaster : IWeatherForecaster
         Requests.Add(at);
         if (Failure is not null)
             return Task.FromException<HourlyForecast?>(Failure);
-        return Pending?.Task ?? Task.FromResult(Forecast);
+        return Pending?.Task.WaitAsync(ct) ?? Task.FromResult(Forecast);
     }
 }

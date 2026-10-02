@@ -3,6 +3,7 @@
 @* The statically rendered public pages (a theater's page, its pages and posts): the static top bar (NavMenu) over a page
    as wide as the interactive app's, styled by wwwroot/public.css and static.css rather than MudBlazor, so a visitor
    doesn't need a live connection to the server to read them. *@
+@* The current page's own address, not a bare "#main": with <base href="/"> that would resolve to the home page. *@
 <a class="skip-link" href="@(Nav.Uri.Split('#')[0])#main">Skip to content</a>
 
 <NavMenu />

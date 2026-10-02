@@ -205,12 +205,17 @@ else
             HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
     }
 
-    // The forecast is a nicety: if it fails, the showings are shown without it.
+    // The forecast is a nicety: if it fails, the showings are shown without it. It stops when the visitor goes away.
     private async Task<ShowingForecasts> ForecastAsync(System.Security.Claims.ClaimsPrincipal user, Theater forTheater, List<ShowtimeView> forShowings)
     {
+        var aborted = HttpContext?.RequestAborted ?? CancellationToken.None;
         try
         {
-            return await Weather.ForShowingsAsync(user, forTheater, forShowings);
+            return await Weather.ForShowingsAsync(user, forTheater, forShowings, aborted);
+        }
+        catch (OperationCanceledException) when (aborted.IsCancellationRequested)
+        {
+            return ShowingForecasts.None;
         }
         catch (Exception ex)
         {
