@@ -47,7 +47,6 @@ else
             <span data-ref="queue"></span>
             <button type="button" class="btn btn-outline-secondary" data-ref="sync">Sync now</button>
         </div>
-        <div class="alert alert-warning" data-ref="notice" hidden></div>
 
         <noscript>
             <div class="alert alert-danger">This page needs JavaScript. Use the <a href="@($"manage/{Id}/gate")">online gate</a> instead.</div>
@@ -68,6 +67,9 @@ else
             </p>
             <div data-ref="results" aria-live="assertive"></div>
         </section>
+
+        @* Below the check-in panel so it coming and going (e.g. on losing the signal) doesn't move the Check in button. *@
+        <div class="alert alert-warning" data-ref="notice" hidden></div>
 
         <section aria-labelledby="gate-conflicts-title" class="gate-card" data-ref="conflicts-section" hidden>
             <h2 id="gate-conflicts-title">Needs a look</h2>
