@@ -342,7 +342,7 @@
     {
       "id": 7,
       "type": "stat",
-      "title": "Backup age",
+      "title": "Backup age (pg_dump)",
       "datasource": {
         "type": "prometheus",
         "uid": "victoriametrics"
@@ -1904,13 +1904,220 @@
       }
     },
     {
+      "id": 37,
+      "type": "stat",
+      "title": "Base backup age",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 51,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "time() - max_over_time(drivein_pitr_backup_last_success_timestamp_seconds[30d])",
+          "legendFormat": "__auto",
+          "range": false,
+          "editorMode": "code",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 93600
+              }
+            ]
+          },
+          "noValue": "never",
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      },
+      "description": "Time since the nightly pg_dump to S3 last succeeded (backup.sh records it)."
+    },
+    {
+      "id": 38,
+      "type": "stat",
+      "title": "Last WAL archived",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 51,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "pg_stat_archiver_last_archive_age",
+          "legendFormat": "__auto",
+          "range": false,
+          "editorMode": "code",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 86400
+              }
+            ]
+          },
+          "noValue": "never",
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      },
+      "description": "Time since the nightly pg_dump to S3 last succeeded (backup.sh records it)."
+    },
+    {
+      "id": 39,
+      "type": "stat",
+      "title": "WAL archive failures (1h)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 51,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "increase(pg_stat_archiver_failed_count[1h])",
+          "legendFormat": "__auto",
+          "range": false,
+          "editorMode": "code",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      },
+      "description": "Time since the nightly pg_dump to S3 last succeeded (backup.sh records it)."
+    },
+    {
       "id": 31,
       "type": "row",
       "title": "Monitoring",
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 51,
+        "y": 55,
         "w": 24,
         "h": 1
       },
@@ -1926,7 +2133,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 52,
+        "y": 56,
         "w": 4,
         "h": 4
       },
@@ -1990,7 +2197,7 @@
       },
       "gridPos": {
         "x": 4,
-        "y": 52,
+        "y": 56,
         "w": 4,
         "h": 4
       },
@@ -2058,7 +2265,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 52,
+        "y": 56,
         "w": 4,
         "h": 4
       },
@@ -2123,7 +2330,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 52,
+        "y": 56,
         "w": 4,
         "h": 4
       },
@@ -2187,7 +2394,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 52,
+        "y": 56,
         "w": 8,
         "h": 4
       },

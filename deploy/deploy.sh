@@ -28,9 +28,13 @@ ALERTS_TOPIC_ARN=$(param alerts-topic-arn)
 # Grafana's built-in admin password is never used (no login form or basic auth); keep it random.
 GRAFANA_ADMIN_PASSWORD=$(grep -s '^GRAFANA_ADMIN_PASSWORD=' .env | cut -d= -f2- || true)
 GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')}
+# PostgreSQL's image is tagged by its Dockerfile's hash, as the Deploy workflow tags it.
+PG_TAG="pg-$(sha256sum "$DIR/postgres/Dockerfile" | cut -c1-12)"
 cat > .env <<EOF
 REGISTRY=$REGISTRY
 TAG=$TAG
+PG_TAG=$PG_TAG
+OPS_BUCKET=$BUCKET
 DB_PASSWORD=$(param db-password)
 GOOGLE_CLIENT_ID=$(param google-client-id)
 GOOGLE_CLIENT_SECRET=$(param google-client-secret)
@@ -69,6 +73,11 @@ docker run --rm --log-driver awslogs --log-opt awslogs-region="$REGION" --log-op
 log "Starting PostgreSQL"
 compose up -d --wait postgres
 
+# pgBackRest's repository in S3 (point-in-time recovery). stanza-create is a no-op once it exists. A failure here doesn't
+# stop the deploy: the database still works, WAL waits in pg_wal, and the "WAL archiving failing" alert fires.
+log "Checking the WAL archive"
+compose exec -T -u postgres postgres pgbackrest stanza-create --log-level-console=warn   || echo "WARNING: pgBackRest stanza-create failed; WAL isn't being archived. See README: Backups and restores." >&2
+
 log "Applying EF Core migrations"
 compose --profile migrate run --rm migrate
 
@@ -81,6 +90,13 @@ compose up -d --remove-orphans caddy web victoriametrics grafana node-exporter p
 compose restart grafana
 # Caddy doesn't watch its config file; reload picks up a changed Caddyfile without downtime.
 compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile || true
+
+# Archived WAL is only useful on top of a base backup; take the first one now if there's none yet (later ones are
+# backup.sh's). Not fatal, like stanza-create above.
+if ! compose exec -T -u postgres postgres pgbackrest info --output=json 2>/dev/null | grep -q '"label"'; then
+  log "Taking the first base backup"
+  compose exec -T -u postgres postgres pgbackrest backup --type=full --log-level-console=info     || echo "WARNING: the first base backup failed; the nightly backup will try again." >&2
+fi
 
 log "Installing nightly backup timer"
 install -m 0755 "$DIR/backup.sh" /usr/local/bin/drive-in-backup
