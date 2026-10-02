@@ -249,6 +249,8 @@ public class TicketSalesTests
     [InlineData("  ", "Enter your card details")]
     [InlineData("4242424242424242", "didn't come through")]
     [InlineData("pm_<script>", "didn't come through")]
+    [InlineData("pm_4242424242424242", "didn't come through")] // a card number dressed up as a token
+    [InlineData("pm_test_visa_4242_4242424242424", "didn't come through")]
     public async Task Missing_or_malformed_card_tokens_are_rejected_before_charging(string? token, string message)
     {
         await using var s = await SetUpAsync();
@@ -571,6 +573,7 @@ public class TicketSalesTests
     [InlineData("pk_test_a", "sk_test_b", true)]
     [InlineData("pk_live_a", "sk_live_b", false)] // no real money until the integration has been tried
     [InlineData("pk_test_a", "", false)]
+    [InlineData("pk_test_", "sk_test_", false)] // placeholders
     [InlineData("", "", false)]
     public void Stripe_accepts_only_test_mode_keys(string? publishable, string? secret, bool ok)
     {
