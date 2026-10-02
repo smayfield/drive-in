@@ -4,6 +4,7 @@ using DriveIn.Web.Authorization;
 using DriveIn.Web.Components;
 using DriveIn.Web.Components.Account;
 using DriveIn.Web.Data;
+using DriveIn.Web.Endpoints;
 using DriveIn.Web.Services;
 using MudBlazor.Services;
 using Microsoft.AspNetCore.Authentication;
@@ -283,6 +284,9 @@ app.MapRazorComponents<App>()
 
 // Add additional endpoints required by the Identity /Account Razor components.
 app.MapAdditionalIdentityEndpoints();
+
+// The offline gate page's admit list, sync, service worker and manifest.
+app.MapGateOfflineEndpoints();
 
 // A theater's logo, for whoever may browse the theater (signed in or not, like the theater's page).
 app.MapGet("/theaters/{slug}/logo", async (string slug, HttpContext http, TheaterService theaters) =>

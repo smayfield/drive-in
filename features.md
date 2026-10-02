@@ -89,6 +89,7 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 | `/manage/{id}/employees` | Employees and invitations |
 | `/manage/{id}/roles` | Role editor (lists the permission catalog automatically) |
 | `/manage/{id}/gate` | Check-in, gate sales, moving tickets |
+| `/manage/{id}/gate/offline` | Offline check-in (static page + JS, installable; `tickets.admit`) |
 | `/manage/{id}/comps` | Free admission |
 | `/manage/{id}/giftcards` | Gift cards |
 | `/manage/{id}/reports` | Sales, attendance and gift card reports |
@@ -192,6 +193,26 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   expired hold is fine) and fit the vehicle. The ticket keeps its codes, payment and check-in; spot, label and vehicle change.
   Each move is a `ticket_moves` row (from/to spot, label and vehicle, who, when). Moving alone lets staff look tickets up at the
   gate but not check them in. Manager and Ticketing roles get `tickets.move` by default (a migration added it to existing ones).
+- **Offline check-in** (`tickets.admit`, `/manage/{id}/gate/offline`, linked from the Check in panel): for when the lot's signal
+  drops. A static page plus plain JS (`wwwroot/gate-offline/`, `Endpoints/GateOfflineEndpoints.cs`,
+  `TicketSalesService.Offline.cs`), not a Blazor circuit, installable to a home screen (web manifest; a service worker scoped to
+  the page keeps the page, scripts and styles, network first for the page with a 5-second fallback to the copy).
+  - **Admit list** (`GET .../gate/offline/data`, JSON, `no-store`, ETag so an unchanged list is a 304): the showings the gate can
+    admit to today (as for gate sales) and every sold ticket for them, used or not: id, showing, spot, large vehicle, kind
+    (online / gate / comp), test, gate code, check-in time, and the ticket code only as a SHA-256 hash, with no names or emails, so a lost
+    device holds no usable ticket links. Gate codes are kept as they are (they're read out at the gate and only admit at this
+    theater today). Kept in IndexedDB; fetched on open and every 30 s while reachable, which also picks up new sales.
+  - **Checking in** works like the online panel (gate code, ticket code, or a scanned ticket link; then Check in) with the same
+    rules judged on the device's clock: once, from 3 hours before the showing until it ends. Tickets for other days aren't on the
+    device, so they aren't found. Check-ins are queued on the device (each with a random id) and shown as used straight away.
+  - **Sync** (`POST .../gate/offline/sync`, up to 200 check-ins; the antiforgery token from the list's `X-Gate-Token` header goes
+    back in `RequestVerificationToken`): applied with the same rules as of when the car came in (a device clock ahead of the
+    server counts as now), so a check-in synced after the showing ended still counts. Idempotent: the ticket's `Stamp` is set to the
+    check-in's id, so a retried sync answers `already_synced`. Conflicts (`already_used` by another check-in, `not_found` for a
+    withdrawn free ticket or another theater's, `not_valid` at the time) are listed on the page under "Needs a look" until
+    cleared, since the car is already in; a ticket moved since is admitted and reports its new spot.
+  - The page shows Online / Offline / Signed out / No access, when the list was last updated (and that later sales aren't on it
+    while offline), and how many check-ins are waiting to sync.
 
 ## 7. Free admission (`TicketSalesService.Comps.cs`, `/manage/{id}/comps`)
 
@@ -332,7 +353,8 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   `drivein.users.registered{method=password|google|invite|admin}`, `drivein.theaters.signed_up`,
   `drivein.theaters.go_live_requested`, `drivein.theaters.activated{how=go_live|admin_created}`,
   `drivein.tickets.sold` and `drivein.tickets.revenue` (dollars) `{channel=online|gate|comp, test}`,
-  `drivein.tickets.admitted{how=scan|sold_at_gate}`, `drivein.tickets.moved`, `drivein.holds.expired`,
+  `drivein.tickets.admitted{how=scan|sold_at_gate|offline}`, `drivein.tickets.moved`, `drivein.holds.expired`,
+  `drivein.gate.offline_admissions{outcome=synced|conflict}` (offline check-ins as they sync; a retried one isn't counted again),
   `drivein.payments{for=ticket|gift_card, result=approved|declined|error, test}`, `drivein.gift_cards.sold{test}` and
   `drivein.gift_cards.revenue{test}` (dollars), `drivein.emails{result=sent|failed}` (every sender is wrapped in `MeteredEmailSender`; a send the caller
   cancels isn't counted),
@@ -350,7 +372,7 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   - **Drive-In: Business**: totals (customers, new accounts, live/demo theaters, go-live requests, live screens, tickets, revenue,
     cars admitted, gift cards, invoiced, owed) and daily trends from SQL (real sales only; test tickets and gift cards left out),
     top theaters and pending go-lives, plus live activity from the counters (sales, payments, sign-ups, abandoned holds, open
-    sessions, emails, messages and notification emails, content published per day).
+    sessions, emails, messages and notification emails, content published per day, offline gate check-ins synced vs conflicts).
   - **Drive-In: Site performance**: requests, 5xx, latency (p50/95/99, leaving out the Blazor circuit's connection), busiest and
     slowest routes, errors logged by category, unhandled exceptions, job failures, payments, emails, circuits and connections,
     sign-ins, outbound calls, database time and pool, EF Core, and the .NET runtime (memory, CPU, GC, thread pool).
