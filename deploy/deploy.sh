@@ -76,7 +76,8 @@ compose up -d --wait postgres
 # pgBackRest's repository in S3 (point-in-time recovery). stanza-create is a no-op once it exists. A failure here doesn't
 # stop the deploy: the database still works, WAL waits in pg_wal, and the "WAL archiving failing" alert fires.
 log "Checking the WAL archive"
-compose exec -T -u postgres postgres pgbackrest stanza-create --log-level-console=warn   || echo "WARNING: pgBackRest stanza-create failed; WAL isn't being archived. See README: Backups and restores." >&2
+compose exec -T -u postgres postgres pgbackrest stanza-create --log-level-console=warn \
+  || echo "WARNING: pgBackRest stanza-create failed; WAL isn't being archived. See README: Backups and restores." >&2
 
 log "Applying EF Core migrations"
 compose --profile migrate run --rm migrate
@@ -95,7 +96,8 @@ compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddy
 # backup.sh's). Not fatal, like stanza-create above.
 if ! compose exec -T -u postgres postgres pgbackrest info --output=json 2>/dev/null | grep -q '"label"'; then
   log "Taking the first base backup"
-  compose exec -T -u postgres postgres pgbackrest backup --type=full --log-level-console=info     || echo "WARNING: the first base backup failed; the nightly backup will try again." >&2
+  compose exec -T -u postgres postgres pgbackrest backup --type=full --log-level-console=info \
+    || echo "WARNING: the first base backup failed; the nightly backup will try again." >&2
 fi
 
 log "Installing nightly backup timer"
