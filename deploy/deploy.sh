@@ -63,7 +63,7 @@ compose --profile migrate pull
 # is still running: this fails if the stack's log group or the instance role's log permissions aren't there yet.
 log "Checking CloudWatch Logs access"
 docker run --rm --log-driver awslogs --log-opt awslogs-region="$REGION" --log-opt awslogs-group=/drive-in/containers \
-  --log-opt tag=deploy-check caddy:2 true \
+  --log-opt 'tag=deploy-check/{{.ID}}' caddy:2 true \
   || { echo "Can't write to the /drive-in/containers log group. Apply infra/app.yml first (see the README)." >&2; exit 1; }
 
 log "Starting PostgreSQL"
