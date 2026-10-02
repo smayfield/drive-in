@@ -270,7 +270,7 @@ function start(root) {
                     const item = batch.find(q => q.admissionId === r.admissionId);
                     const ticket = state.list?.data.tickets.find(t => t.id === r.ticketId);
                     const showing = ticket ? showingOf(ticket) : null;
-                    const what = `Spot ${item?.spot ?? "?"}${showing ? ` · ${showing.screen} · ${showing.title}` : ""}, checked in ${dayTimeOf(Date.parse(item?.admittedAt ?? Date.now()))}`;
+                    const what = `Spot ${item?.spot ?? "?"}${showing ? ` · ${showing.screen} · ${showing.title}` : ""}, checked in ${dayTimeOf(item ? Date.parse(item.admittedAt) : Date.now())}`;
                     if (CONFLICTS.has(r.outcome))
                         state.conflicts.push({ id: r.admissionId, info: false, what, message: r.message });
                     else if (r.currentSpot)

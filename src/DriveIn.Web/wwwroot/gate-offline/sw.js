@@ -65,7 +65,8 @@ async function navigate(event) {
     const cache = await caches.open(CACHE);
     const key = new URL(request.url).origin + new URL(request.url).pathname;
     const network = fetch(request).then(async response => {
-        if (response.ok && response.type === "basic")
+        // A redirect (e.g. to sign in) comes back opaque and isn't kept; checked here too so it never replaces the page.
+        if (response.ok && !response.redirected && response.type === "basic")
             await cache.put(key, response.clone());
         return response;
     });

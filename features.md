@@ -208,7 +208,8 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   - **Sync** (`POST .../gate/offline/sync`, up to 200 check-ins; the antiforgery token from the list's `X-Gate-Token` header goes
     back in `RequestVerificationToken`): applied with the same rules as of when the car came in (a device clock ahead of the
     server counts as now), so a check-in synced after the showing ended still counts. Idempotent: the ticket's `Stamp` is set to the
-    check-in's id, so a retried sync answers `already_synced`. Conflicts (`already_used` by another check-in, `not_found` for a
+    check-in's id, so a retried sync answers `already_synced` (also matched by the exact check-in time, since a later move gives
+    the ticket a new `Stamp`). Conflicts (`already_used` by another check-in, `not_found` for a
     withdrawn free ticket or another theater's, `not_valid` at the time) are listed on the page under "Needs a look" until
     cleared, since the car is already in; a ticket moved since is admitted and reports its new spot.
   - The page shows Online / Offline / Signed out / No access, when the list was last updated (and that later sales aren't on it

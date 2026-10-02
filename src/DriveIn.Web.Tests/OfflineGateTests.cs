@@ -147,6 +147,28 @@ public class OfflineGateTests
     }
 
     [Fact]
+    public async Task A_retry_after_the_ticket_was_moved_is_still_recognized()
+    {
+        await using var s = await SetUpAsync();
+        var sold = await BuyOnlineAsync(s);
+        s.App.Time.SetUtcNow(GatesOpen.AddHours(1));
+        var attendant = await StaffAsync(s, AdmitGuests);
+        var admission = Admission(sold, GatesOpen.AddMinutes(30));
+        await s.Sales.SyncOfflineAdmissionsAsync(attendant, s.Theater.Id, [admission]);
+        await using (var db = s.App.Db())
+        {
+            // What a move does: a new spot and a new Stamp.
+            var ticket = await db.Tickets.SingleAsync(t => t.Id == sold.Ticket.Id);
+            (ticket.Row, ticket.Spot, ticket.SpotLabel, ticket.Stamp) = (2, 4, "B4", Guid.NewGuid());
+            await db.SaveChangesAsync();
+        }
+
+        var again = Assert.Single(await s.Sales.SyncOfflineAdmissionsAsync(attendant, s.Theater.Id, [admission]));
+
+        Assert.Equal((OfflineSyncOutcomes.AlreadySynced, "B4"), (again.Outcome, again.CurrentSpot));
+    }
+
+    [Fact]
     public async Task A_ticket_already_used_elsewhere_is_a_conflict_and_keeps_the_first_check_in()
     {
         await using var s = await SetUpAsync();

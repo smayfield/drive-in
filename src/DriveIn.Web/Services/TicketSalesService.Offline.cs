@@ -128,8 +128,10 @@ public sealed partial class TicketSalesService
         if (ticket is null)
             return Result(OfflineSyncOutcomes.NotFound,
                 "This ticket is no longer valid here (a withdrawn free ticket, or not one of this theater's).");
+        // Ours from an earlier sync: the Stamp we set (see below), or, if the ticket changed since (e.g. it was moved, which
+        // gives it a new Stamp), the same check-in time to the microsecond.
         if (ticket.AdmittedAt is DateTimeOffset used)
-            return ticket.Stamp == admission.AdmissionId
+            return ticket.Stamp == admission.AdmissionId || used == admission.AdmittedAt
                 ? Result(OfflineSyncOutcomes.AlreadySynced, null)
                 : Result(OfflineSyncOutcomes.AlreadyUsed,
                     $"Already used: admitted {TheaterTime.ToLocal(ticket.Showtime!.Screen!.Theater!, used):ddd, MMM d h:mm tt} by another check-in.");
