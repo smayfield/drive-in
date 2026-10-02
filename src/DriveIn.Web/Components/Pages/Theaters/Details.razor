@@ -1,121 +1,128 @@
 @page "/theaters/{Slug}"
-@* Public: anyone can see a live theater's page, signed in or not (buying a ticket asks them to sign in). *@
+@attribute [ExcludeFromInteractiveRouting]
+@layout PublicLayout
+@* Public: anyone can see a live theater's page, signed in or not (buying a ticket asks them to sign in). Statically
+   rendered, so visitors and crawlers don't hold a live connection; "Choose a spot" opens the interactive showing page. *@
 @inject TheaterService Theaters
 @inject ContentService Content
 @inject TicketSalesService Sales
 @inject WeatherService Weather
+@inject ILogger<Details> Log
 
 @if (theater is null)
 {
     <PageTitle>Theater not found · Drive-In Online</PageTitle>
-    <MudText Typo="Typo.h3" HtmlTag="h1" Class="mb-2">Theater not found</MudText>
-    <MudLink Href="theaters">Back to all theaters</MudLink>
+    <h1 class="mb-2">Theater not found</h1>
+    <a href="theaters">Back to all theaters</a>
 }
 else
 {
     <PageTitle>@theater.Name · Drive-In Online</PageTitle>
+    @if (!string.IsNullOrWhiteSpace(theater.Description))
+    {
+        <HeadContent><meta name="description" content="@theater.Description" /></HeadContent>
+    }
 
-    <MudLink Href="theaters" Class="d-inline-block mb-3">&larr; All theaters</MudLink>
+    <a href="theaters" class="d-inline-block mb-3">&larr; All theaters</a>
 
     <TheaterMasthead Theater="theater" Current="@($"theaters/{theater.Slug}")" />
 
-    <MudGrid Spacing="4">
-        <MudItem xs="12" md="8">
+    <div class="row public-columns">
+        <div class="col-md-8">
             @if (!string.IsNullOrWhiteSpace(theater.Description))
             {
-                <MudText Class="mb-4" Style="white-space: pre-line">@theater.Description</MudText>
+                <p class="mb-4" style="white-space: pre-line">@theater.Description</p>
             }
 
             @if (news.Count > 0)
             {
                 <section class="mb-5" aria-labelledby="news-heading">
                     <div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2 mb-2">
-                        <MudText Typo="Typo.h4" HtmlTag="h2" id="news-heading">News &amp; events</MudText>
+                        <h2 class="h4" id="news-heading">News &amp; events</h2>
                         @if (newsTotal > news.Count)
                         {
-                            <MudLink Href="@($"theaters/{theater.Slug}/news")">All news &amp; events</MudLink>
+                            <a href="@($"theaters/{theater.Slug}/news")">All news &amp; events</a>
                         }
                     </div>
                     <NewsCards Theater="theater" Posts="news" />
                 </section>
             }
 
-            <MudText Typo="Typo.h4" Class="mb-2">Showings</MudText>
-            @if (showings.Count == 0)
-            {
-                <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined">No upcoming showings are scheduled. Check back soon.</MudAlert>
-            }
-            @foreach (var day in showings.GroupBy(s => s.StartsLocal.Date))
-            {
-                <MudText Typo="Typo.h5" Class="mt-4 mb-2">@day.Key.ToString("dddd, MMMM d")</MudText>
-                @foreach (var s in day)
+            <section aria-labelledby="showings-heading">
+                <h2 class="h4" id="showings-heading">Showings</h2>
+                @if (showings.Count == 0)
                 {
-                    <Stub>
-                        <Poster>
-                            @foreach (var f in s.Features.Where(f => f.PosterUrl is not null))
-                            {
-                                <img src="@f.PosterUrl" alt="Poster for @f.Title" loading="lazy" />
-                            }
-                        </Poster>
-                        <ChildContent>
-                            @foreach (var f in s.Features)
-                            {
-                                <div class="stub-feature">
-                                <h2 class="stub-title">
-                                    @f.Title
-                                    @if (f.Year is not null) { <span class="stub-year"> (@f.Year)</span> }
-                                    @if (!string.IsNullOrWhiteSpace(f.Rating)) { <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ms-1 my-0">@f.Rating</MudChip> }
-                                </h2>
-                                @if (s.IsMultiFeature)
+                    <p class="public-note">No upcoming showings are scheduled. Check back soon.</p>
+                }
+                @foreach (var day in showings.GroupBy(s => s.StartsLocal.Date))
+                {
+                    <h3 class="h5 mt-4 mb-2">@day.Key.ToString("dddd, MMMM d")</h3>
+                    @foreach (var s in day)
+                    {
+                        <Stub>
+                            <Poster>
+                                @foreach (var f in s.Features.Where(f => f.PosterUrl is not null))
                                 {
-                                    <p class="stub-meta">@f.StartsLocal.ToString("h:mm tt")</p>
+                                    <img src="@f.PosterUrl" alt="Poster for @f.Title" loading="lazy" />
                                 }
-                                @if (f.Genres is not null || f.Directors is not null || f.Cast is not null || f.Overview is not null)
+                            </Poster>
+                            <ChildContent>
+                                @foreach (var f in s.Features)
                                 {
-                                    <div class="stub-detail">
-                                        @if (f.Genres is not null) { <div>@f.Genres</div> }
-                                        @if (f.Directors is not null) { <div>Directed by @f.Directors</div> }
-                                        @if (f.Cast is not null) { <div>Starring @f.Cast</div> }
-                                        @if (f.Overview is not null)
+                                    <div class="stub-feature">
+                                        <h4 class="stub-title">
+                                            @f.Title
+                                            @if (f.Year is not null) { <span class="stub-year"> (@f.Year)</span> }
+                                            @if (!string.IsNullOrWhiteSpace(f.Rating)) { <span class="stub-rating"><span class="visually-hidden">Rated </span>@f.Rating</span> }
+                                        </h4>
+                                        @if (s.IsMultiFeature)
                                         {
-                                            <details>
-                                                <summary>About this film</summary>
-                                                <p>@f.Overview</p>
-                                            </details>
+                                            <p class="stub-meta">@f.StartsLocal.ToString("h:mm tt")</p>
+                                        }
+                                        @if (f.Genres is not null || f.Directors is not null || f.Cast is not null || f.Overview is not null)
+                                        {
+                                            <div class="stub-detail">
+                                                @if (f.Genres is not null) { <div>@f.Genres</div> }
+                                                @if (f.Directors is not null) { <div>Directed by @f.Directors</div> }
+                                                @if (f.Cast is not null) { <div>Starring @f.Cast</div> }
+                                                @if (f.Overview is not null)
+                                                {
+                                                    <details>
+                                                        <summary>About this film</summary>
+                                                        <p>@f.Overview</p>
+                                                    </details>
+                                                }
+                                            </div>
                                         }
                                     </div>
                                 }
-                                </div>
-                            }
-                            <p class="stub-meta mt-2">
-                                @s.ScreenName
-                                @if (s.IsMultiFeature)
-                                {
-                                    @($" · {s.Features.Count} films, {s.IntermissionMinutes} min intermission")
-                                }
-                            </p>
-                            @if (weather is not null)
-                            {
-                                <WeatherLine Weather="@weather.For(s.Id)" BeyondForecast="@weather.IsLater(s.Id)" />
-                            }
-                        </ChildContent>
-                        <Aside>
-                            <span class="stub-time">@s.StartsLocal.ToString("h:mm tt")</span>
-                            <span class="stub-note">ends @s.EndsLocal.ToString("h:mm tt")</span>
-                            <MudButton Href="@($"theaters/{theater.Slug}/showings/{s.Id}")" Variant="Variant.Filled" Color="Color.Primary" Size="Size.Medium">@(signedIn ? "Choose a spot" : "Sign in to buy")</MudButton>
-                        </Aside>
-                    </Stub>
+                                <p class="stub-meta mt-2">
+                                    @s.ScreenName
+                                    @if (s.IsMultiFeature)
+                                    {
+                                        @($" · {s.Features.Count} films, {s.IntermissionMinutes} min intermission")
+                                    }
+                                </p>
+                                <StreamedWeatherLine Forecasts="weather" ShowingId="s.Id" />
+                            </ChildContent>
+                            <Aside>
+                                <span class="stub-time">@s.StartsLocal.ToString("h:mm tt")</span>
+                                <span class="stub-note">ends @s.EndsLocal.ToString("h:mm tt")</span>
+                                <a href="@($"theaters/{theater.Slug}/showings/{s.Id}")" class="btn btn-primary">@(signedIn ? "Choose a spot" : "Sign in to buy")</a>
+                            </Aside>
+                        </Stub>
+                    }
                 }
-            }
-            @if (showings.Count > 0 && !TheaterTime.IsValidZone(theater.TimeZone))
-            {
-                <MudText Typo="Typo.caption" Class="muted">Times are UTC.</MudText>
-            }
-        </MudItem>
+                @if (showings.Count > 0 && !TheaterTime.IsValidZone(theater.TimeZone))
+                {
+                    <p class="small muted">Times are UTC.</p>
+                }
+            </section>
+        </div>
 
-        <MudItem xs="12" md="4">
-            <MudPaper Outlined Class="pa-4 mb-4">
-                <MudText Typo="Typo.h6" Class="mb-2">Find us</MudText>
+        <div class="col-md-4">
+            <section class="card card-body mb-4" aria-labelledby="find-us-heading">
+                <h2 class="h6" id="find-us-heading">Find us</h2>
                 <address class="mb-2">
                     @if (!string.IsNullOrWhiteSpace(theater.AddressLine1)) { @theater.AddressLine1<br /> }
                     @if (!string.IsNullOrWhiteSpace(theater.AddressLine2)) { @theater.AddressLine2<br /> }
@@ -123,36 +130,36 @@ else
                 </address>
                 @if (!string.IsNullOrWhiteSpace(theater.Phone))
                 {
-                    <div>Phone: <MudLink Href="@($"tel:{theater.Phone}")">@theater.Phone</MudLink></div>
+                    <div>Phone: <a href="@($"tel:{theater.Phone}")">@theater.Phone</a></div>
                 }
                 @if (Uri.TryCreate(theater.Website, UriKind.Absolute, out var site) && (site.Scheme == "https" || site.Scheme == "http"))
                 {
-                    <div><MudLink Href="@site.ToString()" Target="_blank" rel="noopener">@site.Host</MudLink></div>
+                    <div><a href="@site.ToString()" target="_blank" rel="noopener">@site.Host</a></div>
                 }
                 @if (!staff)
                 {
-                    <MudButton Href="@($"messages/new?theater={Uri.EscapeDataString(theater.Slug)}")" Variant="Variant.Outlined" Color="Color.Primary" Class="mt-3">Message the theater</MudButton>
+                    <div class="mt-3"><a href="@($"messages/new?theater={Uri.EscapeDataString(theater.Slug)}")" class="btn btn-outline-primary">Message the theater</a></div>
                 }
-            </MudPaper>
+            </section>
 
             @if (theater.GiftCardsEnabled)
             {
-                <MudPaper Outlined Class="pa-4 mb-4">
-                    <MudText Typo="Typo.h6" Class="mb-1">Gift cards</MudText>
-                    <MudText Class="muted mb-2">Give a night at the drive-in. It pays toward tickets, and the rest stays on the card.</MudText>
-                    <MudButton Href="@($"theaters/{theater.Slug}/giftcards")" Variant="Variant.Outlined" Color="Color.Primary">Buy a gift card</MudButton>
-                </MudPaper>
+                <section class="card card-body mb-4" aria-labelledby="gift-cards-heading">
+                    <h2 class="h6" id="gift-cards-heading">Gift cards</h2>
+                    <p class="muted mb-2">Give a night at the drive-in. It pays toward tickets, and the rest stays on the card.</p>
+                    <div><a href="@($"theaters/{theater.Slug}/giftcards")" class="btn btn-outline-primary">Buy a gift card</a></div>
+                </section>
             }
 
-            <MudPaper Outlined Class="pa-4">
-                <MudText Typo="Typo.h6" Class="mb-2">Screens</MudText>
+            <section class="card card-body" aria-labelledby="screens-heading">
+                <h2 class="h6" id="screens-heading">Screens</h2>
                 @if (theater.Screens.Count == 0)
                 {
-                    <MudText Class="muted">No screens listed.</MudText>
+                    <p class="muted mb-0">No screens listed.</p>
                 }
                 else
                 {
-                    <MudSimpleTable Dense Style="box-shadow: none; background: transparent">
+                    <table class="table table-dense mb-0">
                         <thead><tr><th>Screen</th><th class="text-end">Spots</th></tr></thead>
                         <tbody>
                             @foreach (var s in theater.Screens)
@@ -160,17 +167,18 @@ else
                                 <tr><td>@s.Name</td><td class="text-end">@s.SpotCount</td></tr>
                             }
                         </tbody>
-                    </MudSimpleTable>
+                    </table>
                 }
-            </MudPaper>
-        </MudItem>
-    </MudGrid>
+            </section>
+        </div>
+    </div>
 }
 
 @code {
     [Parameter] public string Slug { get; set; } = "";
 
     [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
 
     private Theater? theater;
     private bool staff;
@@ -178,8 +186,7 @@ else
     private List<PostCard> news = [];
     private int newsTotal;
     private List<ShowtimeView> showings = [];
-    private ShowingForecasts? weather;
-    private List<ShowtimeView>? weatherFor;
+    private Task<ShowingForecasts> weather = Task.FromResult(ShowingForecasts.None);
 
     protected override async Task OnParametersSetAsync()
     {
@@ -191,21 +198,24 @@ else
             && (theater.OwnerId == userId || user.GetEmployeeTheaterId() == theater.Id);
         showings = theater is null ? [] : (await Sales.ListOnSaleAsync(user, Slug)).Showings;
         (news, newsTotal) = theater is null ? ([], 0) : await Content.ListLivePostsAsync(user, theater);
+        // Started last, once nothing else uses the page's services; each showing's StreamedWeatherLine waits for it, and
+        // the rest of the page is sent without waiting.
+        weather = theater is null ? Task.FromResult(ShowingForecasts.None) : ForecastAsync(user, theater, showings);
+        if (theater is null && HttpContext is { Response.HasStarted: false })
+            HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
     }
 
-    // The forecast comes once the page is interactive, so a slow weather service never holds up the showings.
-    // Keyed on the loaded showings, not the route, so navigating to another theater mid-load can't leave it without one.
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    // The forecast is a nicety: if it fails, the showings are shown without it.
+    private async Task<ShowingForecasts> ForecastAsync(System.Security.Claims.ClaimsPrincipal user, Theater forTheater, List<ShowtimeView> forShowings)
     {
-        if (theater is null || ReferenceEquals(weatherFor, showings))
-            return;
-        var (forTheater, forShowings) = (theater, showings);
-        (weatherFor, weather) = (forShowings, null);
-        var found = await Weather.ForShowingsAsync((await AuthState).User, forTheater, forShowings);
-        if (ReferenceEquals(showings, forShowings))
+        try
         {
-            weather = found;
-            StateHasChanged();
+            return await Weather.ForShowingsAsync(user, forTheater, forShowings);
+        }
+        catch (Exception ex)
+        {
+            Log.LogWarning(ex, "Couldn't get the forecast for theater {TheaterId}", forTheater.Id);
+            return ShowingForecasts.None;
         }
     }
 }

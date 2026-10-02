@@ -199,9 +199,10 @@ invitee sets a password or continues with Google using the invited address.
 ## Look and feel
 
 - **MudBlazor** (MIT, free for commercial use) provides the components for every signed-in page; the app shell is
-  `Components/Layout/AppLayout.razor`. Marketing pages, legal pages and the Identity account pages stay statically
-  rendered (fast, indexable, and Identity needs the HTTP response) with plain CSS (`wwwroot/static.css`); they are marked
-  `[ExcludeFromInteractiveRouting]`.
+  `Components/Layout/AppLayout.razor`. Marketing pages, legal pages, the Identity account pages and a theater's public pages
+  (its page, its own pages and posts, its news) stay statically rendered (fast, indexable, no live connection held per
+  visitor, and Identity needs the HTTP response) with plain CSS (`wwwroot/static.css`, `public.css`); they are marked
+  `[ExcludeFromInteractiveRouting]`. The showing (spot map), checkout and ticket pages are interactive.
 - **Light and dark** follow the visitor's browser or OS setting, with no toggle. `wwwroot/theme.js` runs before first paint and
   remembers the choice in a `di-scheme` cookie, so the server prerenders the right palette next time (the first-ever visit
   from a dark device may flash light for a moment). The palettes live in `Layout/DriveInTheme.cs` (MudBlazor) and at the

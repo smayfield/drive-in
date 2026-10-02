@@ -1,14 +1,15 @@
-@* The forecast for one showing on the public pages. Renders nothing when there's no forecast to show. *@
+@* The forecast for one showing on the public pages. Renders nothing when there's no forecast to show. Plain markup (no
+   MudBlazor components), so it renders the same on the static theater page as on the interactive showing and ticket
+   pages. *@
 
 @if (Weather is not null)
 {
-    @* A div, not a p: MudChip renders block elements. *@
     <div class="weather-line @(Weather.IsRough ? "weather-rough" : "")">
-        <MudIcon Icon="@Icon(Weather.WeatherCode)" Size="Size.Small" aria-hidden="true" />
+        <svg class="weather-icon" viewBox="0 0 24 24" focusable="false" aria-hidden="true">@((MarkupString)Icon(Weather.WeatherCode))</svg>
         <span><span class="visually-hidden">Forecast: </span>@Weather.Summary</span>
         @if (Warn && Weather.IsRough)
         {
-            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined" Class="my-0">Check the forecast before you go</MudChip>
+            <span class="weather-warn">Check the forecast before you go</span>
         }
     </div>
 }
@@ -26,7 +27,7 @@ else if (BeyondForecast)
     // Adds a warning chip when rain, storms or strong wind are likely.
     [Parameter] public bool Warn { get; set; }
 
-    // Showings are at night, so clear skies get a moon.
+    // Showings are at night, so clear skies get a moon. Material icons' SVG content, drawn in the svg above.
     private static string Icon(int code) => code switch
     {
         0 or 1 => Icons.Material.Filled.Nightlight,

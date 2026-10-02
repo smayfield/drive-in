@@ -1,0 +1,18 @@
+@* A showing's WeatherLine on a statically rendered page, streamed in once the forecast arrives (Forecasts is started by
+   the page and shared by all its showings), so a slow weather service never holds up the rest of the page. Without
+   JavaScript the line just doesn't appear. *@
+@attribute [StreamRendering]
+
+@if (forecasts is not null)
+{
+    <WeatherLine Weather="@forecasts.For(ShowingId)" BeyondForecast="@forecasts.IsLater(ShowingId)" />
+}
+
+@code {
+    [Parameter, EditorRequired] public Task<ShowingForecasts> Forecasts { get; set; } = default!;
+    [Parameter, EditorRequired] public int ShowingId { get; set; }
+
+    private ShowingForecasts? forecasts;
+
+    protected override async Task OnParametersSetAsync() => forecasts = await Forecasts;
+}
