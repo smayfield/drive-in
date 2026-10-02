@@ -100,7 +100,12 @@ public sealed class PaymentOptions
     // including unset, turns online sales off.
     public string Provider { get; set; } = "";
 
-    public string Currency { get; set; } = PaymentClient.Usd;
+    // An ISO currency code, kept lowercase as Stripe wants it ("USD " in config works too).
+    public string Currency
+    {
+        get;
+        set => field = string.IsNullOrWhiteSpace(value) ? PaymentClient.Usd : value.Trim().ToLowerInvariant();
+    } = PaymentClient.Usd;
 
     // The platform's cut of each card charge to a theater's payout account, in percent. A placeholder: 0 (no fee)
     // until the business decides one; the plan's per-screen subscription is billed separately (BillingService).
