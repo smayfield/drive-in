@@ -239,6 +239,20 @@ before the new app version starts; if a migration fails, the old version keeps r
 ## Workflow
 
 All changes go through a feature branch and a pull request; nothing is committed to `main` directly.
+Every pull request to `main` is built and tested by `.github/workflows/ci.yml` (job `build-and-test`: Release build,
+`dotnet test`, and a build of the web image). Make that job a required status check so a failing PR can't be merged:
+
+```sh
+gh api -X PUT repos/smayfield/drive-in/branches/main/protection --input - <<'EOF'
+{
+  "required_status_checks": { "strict": false, "contexts": ["build-and-test"] },
+  "enforce_admins": false,
+  "required_pull_request_reviews": null,
+  "restrictions": null
+}
+EOF
+```
+
 Merging to `main` runs `.github/workflows/deploy.yml`, which assumes the IAM role
 `drive-in-app-deploy` via OIDC (no stored AWS keys) and reads these repo **variables**:
 `AWS_ROLE_ARN`, `ECR_REGISTRY`, `OPS_BUCKET`, `INSTANCE_ID` (from the `drive-in-app` stack outputs).
