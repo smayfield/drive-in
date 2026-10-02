@@ -8,8 +8,9 @@ public sealed class StripeOptions
 {
     public const string Section = "Payments:Stripe";
 
-    public string PublishableKey { get; set; } = "";
-    public string SecretKey { get; set; } = "";
+    // Trimmed, and never null, so a stray space or an empty config value fails Validate clearly.
+    public string PublishableKey { get; set => field = value?.Trim() ?? ""; } = "";
+    public string SecretKey { get; set => field = value?.Trim() ?? ""; } = "";
 
     // StripePaymentProcessor hasn't been run against Stripe yet (there's no Stripe account to try it with), so only
     // test-mode keys are accepted: nothing can take real money until someone has tried the whole flow in test mode and
