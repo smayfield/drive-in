@@ -178,7 +178,7 @@ public sealed partial class TicketSalesService
 
     private async Task<GiftCardBalance> CheckGiftCardAsync(ApplicationDbContext db, Theater theater, string code, string limitKey)
     {
-        var card = await FindGiftCardAsync(db, theater.Id, code, forUpdate: false, limitKey);
+        var card = await FindGiftCardAsync(db, theater.Id, code, forUpdate: false, limitKey: limitKey);
         return new GiftCardBalance(card.Last4, card.Balance);
     }
 

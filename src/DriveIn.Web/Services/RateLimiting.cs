@@ -80,7 +80,8 @@ public sealed class ActionRateLimiter(IOptions<RateLimitOptions> options, TimePr
     private static readonly TimeSpan SweepEvery = TimeSpan.FromMinutes(5);
 
     private readonly ConcurrentDictionary<(string Policy, string Key), Window> windows = new();
-    private DateTimeOffset lastSweep = time.GetUtcNow();
+    // UTC ticks of the last sweep; read and claimed atomically, since calls come from many circuits at once.
+    private long lastSweepTicks = time.GetUtcNow().UtcTicks;
 
     private sealed class Window(DateTimeOffset start, TimeSpan length)
     {
@@ -166,9 +167,12 @@ public sealed class ActionRateLimiter(IOptions<RateLimitOptions> options, TimePr
     // Drops windows that have ended, so keys seen once don't stay in memory.
     private void SweepIfDue(DateTimeOffset now)
     {
-        if (now - lastSweep < SweepEvery)
+        var last = Interlocked.Read(ref lastSweepTicks);
+        if (now.UtcTicks - last < SweepEvery.Ticks)
             return;
-        lastSweep = now;
+        // Only the caller that moves the mark sweeps; the others carry on.
+        if (Interlocked.CompareExchange(ref lastSweepTicks, now.UtcTicks, last) != last)
+            return;
         foreach (var (k, window) in windows)
         {
             if (now >= window.End)

@@ -281,7 +281,7 @@ public sealed partial class TicketSalesService(
         if (addOns.Count != ids.Count)
             throw new AppValidationException("One of the add-ons chosen is no longer offered. Check the choices and try again.");
         var quote = TicketQuote.For(option, addOns);
-        var gift = quote.Total > 0 && !string.IsNullOrWhiteSpace(giftCardCode) ? await FindGiftCardAsync(db, theater.Id, giftCardCode, forUpdate: true, ActionRateLimiter.KeyForUser(userId)) : null;
+        var gift = quote.Total > 0 && !string.IsNullOrWhiteSpace(giftCardCode) ? await FindGiftCardAsync(db, theater.Id, giftCardCode, forUpdate: true, limitKey: ActionRateLimiter.KeyForUser(userId)) : null;
         var giftAmount = gift is null ? 0m : Math.Min(gift.Balance, quote.Total);
         var cardAmount = quote.Total - giftAmount;
         CardInput? card = null;
