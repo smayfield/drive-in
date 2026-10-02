@@ -113,7 +113,10 @@ public static partial class PaymentTokens
         var token = id?.Trim();
         if (string.IsNullOrEmpty(token))
             throw new AppValidationException("Enter your card details.");
-        if (token.Length > MaxLength || !TokenPattern().IsMatch(token))
+        // A run of 13+ digits looks like a card number (e.g. pm_4242424242424242): refuse it rather than pass it on, log
+        // it or send it to the processor. Real tokens don't have one (Stripe's ids are random letters and digits; the
+        // test card form's random part is letters only).
+        if (token.Length > MaxLength || !TokenPattern().IsMatch(token) || CardNumberLike().IsMatch(token))
             throw new AppValidationException("Your card details didn't come through. Enter them again.");
         return token;
     }
@@ -121,6 +124,9 @@ public static partial class PaymentTokens
     // Stripe's ids are pm_ plus letters and digits; test tokens add underscores (pm_test_visa_4242_...).
     [GeneratedRegex("^pm_[A-Za-z0-9_]+$")]
     private static partial Regex TokenPattern();
+
+    [GeneratedRegex("[0-9]{13}")]
+    private static partial Regex CardNumberLike();
 }
 
 // Card brands as shown on receipts, from a processor's brand code (Stripe's codes; the test tokens use the same ones).

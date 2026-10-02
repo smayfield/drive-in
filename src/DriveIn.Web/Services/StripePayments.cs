@@ -21,8 +21,9 @@ public sealed class StripeOptions
     // removed this check.
     public static void Validate(StripeOptions options)
     {
-        if (!options.PublishableKey.StartsWith("pk_test_", StringComparison.Ordinal)
-            || !options.SecretKey.StartsWith("sk_test_", StringComparison.Ordinal))
+        // The prefix alone (a placeholder) would start fine and fail at the first sale.
+        static bool IsTestKey(string key, string prefix) => key.StartsWith(prefix, StringComparison.Ordinal) && key.Length > prefix.Length;
+        if (!IsTestKey(options.PublishableKey, "pk_test_") || !IsTestKey(options.SecretKey, "sk_test_"))
             throw new InvalidOperationException(
                 $"{Section}: set PublishableKey (pk_test_...) and SecretKey (sk_test_...). Only Stripe test-mode keys are accepted " +
                 "until the Stripe integration has been tried end to end (see README → Payments).");
