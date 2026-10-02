@@ -566,18 +566,28 @@ public class TicketSalesTests
     }
 
     [Theory]
+    [InlineData(" pk_test_a ", " sk_test_b\n", true)] // pasted with whitespace
+    [InlineData(null, null, false)]
     [InlineData("pk_test_a", "sk_test_b", true)]
     [InlineData("pk_live_a", "sk_live_b", false)] // no real money until the integration has been tried
     [InlineData("pk_test_a", "", false)]
     [InlineData("", "", false)]
-    public void Stripe_accepts_only_test_mode_keys(string publishable, string secret, bool ok)
+    public void Stripe_accepts_only_test_mode_keys(string? publishable, string? secret, bool ok)
     {
-        var options = new StripeOptions { PublishableKey = publishable, SecretKey = secret };
+        // Configuration binding can set null (e.g. "PublishableKey": null in a JSON file).
+        var options = new StripeOptions { PublishableKey = publishable!, SecretKey = secret! };
         if (ok)
             StripeOptions.Validate(options);
         else
             Assert.Throws<InvalidOperationException>(() => StripeOptions.Validate(options));
     }
+
+    [Theory]
+    [InlineData("USD ", "usd")]
+    [InlineData("cad", "cad")]
+    [InlineData("", "usd")]
+    public void The_currency_is_kept_as_stripe_wants_it(string configured, string used) =>
+        Assert.Equal(used, new PaymentOptions { Currency = configured }.Currency);
 
     [Fact]
     public void Stripes_card_element_uses_the_configured_currency()

@@ -94,7 +94,12 @@ public sealed class PaymentOptions
     // including unset, turns online sales off.
     public string Provider { get; set; } = "";
 
-    public string Currency { get; set; } = PaymentClient.Usd;
+    // An ISO currency code, kept lowercase as Stripe wants it ("USD " in config works too).
+    public string Currency
+    {
+        get;
+        set => field = string.IsNullOrWhiteSpace(value) ? PaymentClient.Usd : value.Trim().ToLowerInvariant();
+    } = PaymentClient.Usd;
 }
 
 // The payment method tokens the server accepts from a browser. A token is opaque: the server never sees, parses or

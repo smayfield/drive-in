@@ -8,8 +8,9 @@ public sealed class StripeOptions
 {
     public const string Section = "Payments:Stripe";
 
-    public string PublishableKey { get; set; } = "";
-    public string SecretKey { get; set; } = "";
+    // Trimmed, and never null, so a stray space or an empty config value fails Validate clearly.
+    public string PublishableKey { get; set => field = value?.Trim() ?? ""; } = "";
+    public string SecretKey { get; set => field = value?.Trim() ?? ""; } = "";
 
     // The signing secret (whsec_...) of the webhook endpoint at /payments/stripe/webhook. Optional: without it the
     // endpoint answers 404 and PaymentReconcileService alone finishes charges whose outcome wasn't heard.
