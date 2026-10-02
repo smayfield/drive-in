@@ -68,7 +68,7 @@ public class NearMeTests
     }
 
     [Fact]
-    public async Task FindPlace_uses_the_geocoder_and_requires_sign_in()
+    public async Task FindPlace_uses_the_geocoder_for_anyone()
     {
         await using var app = new TestApp();
         var user = await app.CreateUserAsync("guest@example.com");
@@ -77,7 +77,8 @@ public class NearMeTests
 
         Assert.Equal(Austin, await theaters.FindPlaceAsync(Principals.For(user), "78701"));
         Assert.Null(await theaters.FindPlaceAsync(Principals.For(user), "Atlantis"));
-        await Assert.ThrowsAsync<AccessDeniedException>(() => theaters.FindPlaceAsync(Principals.Anonymous, "78701"));
+        // The theater list is public, so its search is too.
+        Assert.Equal(Austin, await theaters.FindPlaceAsync(Principals.Anonymous, "78701"));
     }
 
     [Fact]
@@ -238,6 +239,40 @@ public class NearMeTests
         var query = Assert.Single(handler.Requests).Query;
         Assert.Contains("postalcode=78701", query);
         Assert.Contains("countrycodes=us", query);
+    }
+
+    [Fact]
+    public async Task Nominatim_gives_up_rather_than_queue_behind_a_slow_lookup()
+    {
+        var release = new TaskCompletionSource();
+        var handler = new BlockingHandler(release.Task, """[{"lat":"30.27","lon":"-97.74"}]""");
+        var geocoder = new NominatimGeocoder(new StubFactory(handler), TimeProvider.System, NullLogger<NominatimGeocoder>.Instance)
+        {
+            QueueTimeout = TimeSpan.FromMilliseconds(50),
+        };
+
+        var first = geocoder.GeocodeAsync("Austin");
+        await handler.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Null(await geocoder.GeocodeAsync("Dallas"));
+
+        release.SetResult();
+        Assert.Equal(new GeoPoint(30.27, -97.74), await first);
+        Assert.Equal(1, handler.Calls);
+    }
+
+    // Answers once release completes, so the first lookup holds the geocoder's turn.
+    private sealed class BlockingHandler(Task release, string body) : HttpMessageHandler
+    {
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public int Calls { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            Calls++;
+            Started.TrySetResult();
+            await release;
+            return Json(body);
+        }
     }
 
     [Fact]

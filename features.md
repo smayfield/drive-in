@@ -135,15 +135,22 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 
 - **Public theater pages**: `/theaters/{slug}` (showings, news, the theater's menu) and its pages and posts (section 16) need no
   sign-in and are statically rendered (section 12); `CanBrowse` still hides demo and inactive theaters from everyone but their
-  members, and an unknown or hidden theater is a 404. Signed-out visitors see "Sign in to buy" on showings. The theater list and near-me search, the showing (spot map) and gift-card pages, and buying all need sign-in.
-- **Near me** (`/theaters`): a ZIP code or city (geocoded by `TheaterService.FindPlaceAsync`), or **Use my location**
-  (`wwwroot/geo.js`, browser geolocation rounded to 2 decimals), within 25/50/100 (default)/250 miles or any distance.
-  `TheaterService.ListNearAsync` applies the same visibility as the list (`CanBrowse`: demo theaters only for members),
-  leaves out theaters without coordinates, and sorts nearest first (haversine, `Geo.DistanceMiles`). The search is in the
-  query string (`near` or `lat`+`lon`, `radius`). Without a search the list is alphabetical.
+  members, and an unknown or hidden theater is a 404. Signed-out visitors see "Sign in to buy" on showings. The theater list
+  and near-me search are public too (below). The showing (spot map) and gift-card pages, and buying, need sign-in.
+- **Theater list and near me** (`/theaters`, public, static SSR in `PublicLayout`; "Theaters" is in every top bar and "Find a
+  theater" in the marketing nav for signed-out visitors): signed-out visitors see live theaters, members also see their demo
+  ones (`ListActiveAsync`, the `CanBrowse` rule as a query). The search is a plain GET form, so it works without JavaScript:
+  a ZIP code or city (`near`, geocoded by `TheaterService.FindPlaceAsync`, open to anyone) within 25/50/100 (default)/250
+  miles or any distance (`radius`). **Use my location** (`wwwroot/geo.js`) ships hidden and is shown by the script when the
+  browser has geolocation; it asks for the position and opens `?lat=&lon=&radius=` (rounded to 2 decimals, about a
+  kilometer, so the exact spot stays out of the URL), or explains a refusal inline. `TheaterService.ListNearAsync` applies the
+  same visibility, leaves out theaters without coordinates, and sorts nearest first (haversine, `Geo.DistanceMiles`). Without
+  a search the list is alphabetical.
 - **Geocoding** (`Geocoding:Provider`, case-insensitive; an unknown value fails at startup): `Nominatim` (OpenStreetMap, default; `NominatimGeocoder`) or `None`. Nominatim allows one
   request a second, so lookups are serialized and spaced, and results (misses too) are cached in memory for a day (up to 10,000 places); a bare
-  5-digit query is looked up as a US postcode. Failures return "not found" and are logged.
+  5-digit query is looked up as a US postcode. Since anyone can search, a lookup that can't get its turn within 10 s
+  (`QueueTimeout`) gives up as "not found" (not cached) rather than queue. Failures return "not found" and are logged.
+  Per-client request limits are separate (rate limiting).
 - **Weather** (`WeatherService`, `WeatherLine`): the forecast over each showing, from the hour it starts through the hour it
   ends: the worst WMO condition, the temperature at start and end, the highest chance of rain, and wind when it's 25 km/h or
   more. It appears on the theater page's showing stubs, the showing page (with a "check the forecast" chip when rain is 50%+
@@ -291,7 +298,7 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 
 - `[ExcludeFromInteractiveRouting]` static SSR with plain CSS (`static.css`, `marketing.css`, `public.css`): `/`, `/features`,
   `/pricing`, `/faq`, `/legal`, `/legal/terms`, `/legal/privacy`, `/legal/license`, `/invite/{token}`, `/Error`, `/not-found`,
-  account pages, and the public theater pages: `/theaters/{slug}`, `/theaters/{slug}/pages/{page}`, `/theaters/{slug}/news` and
+  account pages, and the public theater pages: `/theaters` (the list and near-me search, section 5), `/theaters/{slug}`, `/theaters/{slug}/pages/{page}`, `/theaters/{slug}/news` and
   `/theaters/{slug}/news/{post}` (section 16). Signed-out visitors and crawlers read those without opening a Blazor circuit.
   They use `PublicLayout` (the static top bar over a 1280px page, like the app's); `public.css` is written against the
   `app.css` tokens rather than MudBlazor's palette variables, so the marquee and stubs look the same there as on the

@@ -1,102 +1,104 @@
 @page "/theaters"
-@attribute [Authorize]
+@attribute [ExcludeFromInteractiveRouting]
+@layout PublicLayout
+@* Public: anyone can list the live theaters and search near a place or their location, signed in or not (members also see
+   their demo theaters). Statically rendered: the search is a GET form, so results can be linked to, Back works, and it
+   works without JavaScript; "Use my location" (wwwroot/geo.js) needs it and stays hidden without it. *@
 @inherits AppComponentBase
 @inject TheaterService Theaters
-@inject IJSRuntime JS
 
 <PageTitle>Theaters · Drive-In Online</PageTitle>
+<HeadContent><meta name="description" content="Find a drive-in theater near you: showings, spots and tickets." /></HeadContent>
 
-<MudText Typo="Typo.h3" HtmlTag="h1" Class="mb-4">Drive-in theaters</MudText>
+<h1 class="mb-4">Drive-in theaters</h1>
 
-<form class="near-search mb-4" role="search" @onsubmit="Search">
-    @* Wrapped, since MudSelect puts Class on an inner element rather than the flex item. *@
+<form class="near-search mb-3" role="search" method="get" action="theaters">
     <div class="near-search-place">
-        <MudTextField T="string" @bind-Value="placeInput" Label="ZIP code or city" Placeholder="e.g. 78701 or Austin, TX"
-                      Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="200" Clearable Immediate
-                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
+        <label class="form-label" for="near">ZIP code or city</label>
+        <input class="form-control" id="near" name="near" type="search" value="@(UsingPosition ? null : Near)" maxlength="200"
+               placeholder="e.g. 78701 or Austin, TX" autocomplete="postal-code" />
     </div>
     <div class="near-search-radius">
-        <MudSelect T="int" @bind-Value="radiusInput" Label="Within" Variant="Variant.Outlined" Margin="Margin.Dense">
+        <label class="form-label" for="radius">Within</label>
+        <select class="form-control" id="radius" name="radius">
             @foreach (var r in RadiusChoices)
             {
-                <MudSelectItem Value="@r">@(r == AnyDistance ? "Any distance" : $"{r} miles")</MudSelectItem>
+                <option value="@r" selected="@(r == Radius)">@(r == AnyDistance ? "Any distance" : $"{r} miles")</option>
             }
-        </MudSelect>
+        </select>
     </div>
-    <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" Disabled="busy">Search</MudButton>
-    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.MyLocation" OnClick="UseMyLocationAsync" Disabled="busy">Use my location</MudButton>
+    <div class="near-search-actions">
+        <button type="submit" class="btn btn-primary">Search</button>
+        @* Shown by geo.js, which asks the browser for its location and opens ?lat=&lon= with the chosen distance. *@
+        <button type="button" class="btn btn-outline-primary" data-geo-locate hidden>Use my location</button>
+    </div>
 </form>
+<p class="alert alert-danger" data-geo-error role="alert" hidden></p>
 
-<Alerts Error="@Error" />
-
-@if (theaters is null)
+@if (!string.IsNullOrEmpty(Error))
 {
-    <MudProgressCircular Indeterminate Size="Size.Small" aria-label="Loading theaters" />
+    <p class="alert alert-danger" role="alert">@Error</p>
 }
-else
-{
-    @if (Searching)
-    {
-        <div class="d-flex flex-wrap align-items-baseline gap-2 mb-3" role="status">
-            <MudText>
-                @if (placeNotFound)
-                {
-                    @* The alert above says why. *@
-                }
-                else if (theaters.Count == 0)
-                {
-                    @($"No theaters {RadiusText} {PlaceText}.")
-                    @if (Radius != AnyDistance) { <span> Try a larger distance.</span> }
-                }
-                else
-                {
-                    @($"{theaters.Count} theater{(theaters.Count == 1 ? "" : "s")} {RadiusText} {PlaceText}, nearest first.")
-                }
-            </MudText>
-            <MudLink Href="theaters">Show all theaters</MudLink>
-        </div>
-    }
-    else if (theaters.Count == 0)
-    {
-        <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined">No theaters are open yet.</MudAlert>
-    }
 
-    <MudGrid Spacing="3">
-        @foreach (var (t, miles) in theaters)
-        {
-            <MudItem xs="12" sm="6" md="4" @key="t.Id">
-                <MudPaper Outlined Class="theater-card">
-                    <div class="theater-card-sign">
-                        @if (t.LogoUrl is not null)
-                        {
-                            <img src="@t.LogoUrl" alt="@t.Name logo" loading="lazy" />
-                        }
-                        <h2 class="theater-card-name"><a href="theaters/@t.Slug">@t.Name</a></h2>
-                    </div>
-                    <div class="theater-card-body">
-                        <MudText>
-                            @Location(t)
-                            @if (miles is double m)
-                            {
-                                <span class="theater-card-distance">@DistanceText(m)</span>
-                            }
-                        </MudText>
-                        <MudText Typo="Typo.body2" Class="muted">
-                            @t.Screens.Count screen@(t.Screens.Count == 1 ? "" : "s") · @t.Screens.Sum(s => s.SpotCount) spots
-                        </MudText>
-                        @if (t.SeasonOpensOn is not null || t.SeasonClosesOn is not null)
-                        {
-                            <MudText Typo="Typo.body2" Class="muted">Season: @Seasons.Describe(t)</MudText>
-                        }
-                    </div>
-                    <div class="pa-3 pt-0">
-                        <MudButton Href="@($"theaters/{t.Slug}")" Variant="Variant.Outlined" Color="Color.Primary" FullWidth>Showings &amp; tickets</MudButton>
-                    </div>
-                </MudPaper>
-            </MudItem>
-        }
-    </MudGrid>
+@if (Searching)
+{
+    <div class="d-flex flex-wrap align-items-baseline gap-2 mb-3" role="status">
+        <p class="mb-0">
+            @if (placeNotFound)
+            {
+                @* The alert above says why. *@
+            }
+            else if (theaters.Count == 0)
+            {
+                @($"No theaters {RadiusText} {PlaceText}.")
+                @if (Radius != AnyDistance) { <span> Try a larger distance.</span> }
+            }
+            else
+            {
+                @($"{theaters.Count} theater{(theaters.Count == 1 ? "" : "s")} {RadiusText} {PlaceText}, nearest first.")
+            }
+        </p>
+        <a href="theaters">Show all theaters</a>
+    </div>
 }
+else if (theaters.Count == 0)
+{
+    <p class="public-note">No theaters are open yet.</p>
+}
+
+<ul class="theater-cards list-unstyled">
+    @foreach (var (t, miles) in theaters)
+    {
+        <li class="card theater-card" @key="t.Id">
+            <div class="theater-card-sign">
+                @if (t.LogoUrl is not null)
+                {
+                    <img src="@t.LogoUrl" alt="@t.Name logo" loading="lazy" />
+                }
+                <h2 class="theater-card-name"><a href="theaters/@t.Slug">@t.Name</a></h2>
+            </div>
+            <div class="theater-card-body">
+                <p class="mb-0">
+                    @Location(t)
+                    @if (miles is double m)
+                    {
+                        <span class="theater-card-distance">@DistanceText(m)</span>
+                    }
+                </p>
+                <p class="small muted mb-0">
+                    @t.Screens.Count screen@(t.Screens.Count == 1 ? "" : "s") · @t.Screens.Sum(s => s.SpotCount) spots
+                </p>
+                @if (t.SeasonOpensOn is not null || t.SeasonClosesOn is not null)
+                {
+                    <p class="small muted mb-0">Season: @Seasons.Describe(t)</p>
+                }
+            </div>
+            <div class="theater-card-action">
+                <a href="@($"theaters/{t.Slug}")" class="btn btn-outline-primary w-100">Showings &amp; tickets<span class="visually-hidden"> at @t.Name</span></a>
+            </div>
+        </li>
+    }
+</ul>
 
 @code {
     private const int AnyDistance = 0;
@@ -109,10 +111,7 @@ else
     [SupplyParameterFromQuery(Name = "lon")] public double? Lon { get; set; }
     [SupplyParameterFromQuery(Name = "radius")] public int? RadiusParam { get; set; }
 
-    private List<(Theater Theater, double? Miles)>? theaters;
-    private string? placeInput;
-    private int radiusInput = DefaultRadius;
-    private bool busy;
+    private List<(Theater Theater, double? Miles)> theaters = [];
     private bool placeNotFound;
 
     private bool UsingPosition => Lat is not null && Lon is not null;
@@ -125,9 +124,7 @@ else
 
     protected override async Task LoadAsync()
     {
-        placeInput = UsingPosition ? null : Near;
-        radiusInput = Radius;
-        theaters = null;
+        theaters = [];
         placeNotFound = false;
         double? radius = Radius == AnyDistance ? null : Radius;
         try
@@ -151,62 +148,17 @@ else
                 theaters = (await Theaters.ListActiveAsync(User)).Select(t => (t, (double?)null)).ToList();
             }
         }
-        finally
+        catch (AppValidationException)
         {
-            // A search that failed (a place that can't be found, a bad location in the link) shows its error, not a
-            // spinner; placeNotFound keeps the "no theaters" line from repeating it.
-            if (theaters is null)
-                (theaters, placeNotFound) = ([], true);
+            // A search that failed (a place that can't be found, a bad location in the link) shows its error (the base
+            // class sets it); placeNotFound keeps the "no theaters" line from repeating it.
+            placeNotFound = true;
+            throw;
         }
     }
 
     private static List<(Theater, double?)> Nearest(List<(Theater Theater, double Miles)> found) =>
         found.Select(x => (x.Theater, (double?)x.Miles)).ToList();
-
-    private void Search()
-    {
-        Error = null;
-        if (string.IsNullOrWhiteSpace(placeInput))
-        {
-            Nav.NavigateTo("theaters");
-            return;
-        }
-        Nav.NavigateTo(Nav.GetUriWithQueryParameters(Nav.ToAbsoluteUri("theaters").ToString(), new Dictionary<string, object?>
-        {
-            ["near"] = placeInput.Trim(), ["radius"] = radiusInput,
-        }));
-    }
-
-    private async Task UseMyLocationAsync()
-    {
-        Error = null;
-        busy = true;
-        try
-        {
-            var position = await JS.InvokeAsync<BrowserPosition>("driveIn.getPosition");
-            if (position.Error is not null || position.Lat is not double lat || position.Lon is not double lon)
-            {
-                Error = position.Error switch
-                {
-                    "denied" => "Your browser didn't share your location. Allow it for this site, or type a ZIP code or city.",
-                    "unsupported" => "Your browser can't share your location. Type a ZIP code or city instead.",
-                    _ => "We couldn't get your location. Try again, or type a ZIP code or city.",
-                };
-                return;
-            }
-            // Two decimals is about a kilometer: close enough to sort theaters, and it keeps the exact spot out of the URL.
-            Nav.NavigateTo(Nav.GetUriWithQueryParameters(Nav.ToAbsoluteUri("theaters").ToString(), new Dictionary<string, object?>
-            {
-                ["lat"] = Math.Round(lat, 2), ["lon"] = Math.Round(lon, 2), ["radius"] = radiusInput,
-            }));
-        }
-        finally
-        {
-            busy = false;
-        }
-    }
-
-    private sealed record BrowserPosition(double? Lat, double? Lon, string? Error);
 
     internal static string Location(Theater t) =>
         string.Join(", ", new[] { t.City, t.State }.Where(s => !string.IsNullOrWhiteSpace(s)));

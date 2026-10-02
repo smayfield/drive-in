@@ -16,13 +16,14 @@ address (e.g. `starlight`). For rules, permissions and limits see [features.md](
 | [/Account/ForgotPassword](https://drive-in.online/Account/ForgotPassword) | Email a password reset link |
 | [/Account/ResendEmailConfirmation](https://drive-in.online/Account/ResendEmailConfirmation) | Resend the confirm-your-email link |
 | `/invite/{token}` | Accept an owner or employee invitation (the link is emailed; valid 7 days) |
+| [/theaters](https://drive-in.online/theaters) | All live theaters, and theaters near you (ZIP, city or your location) |
+| `/theaters/{slug}` | A theater's showings, with weather, posters and film details |
+| `/theaters/{slug}/pages/{page}`, `/theaters/{slug}/news` | A theater's own pages, and its news and events |
 
 ## Customers (any signed-in account)
 
 | URL | What |
 |---|---|
-| [/theaters](https://drive-in.online/theaters) | All theaters, and theaters near you (ZIP, city or your location) |
-| `/theaters/{slug}` | A theater's showings, with weather, posters and film details |
 | `/theaters/{slug}/showings/{id}` | Choose a spot on the lot map and buy a ticket |
 | `/theaters/{slug}/giftcards` | Buy a gift card for that theater (when it sells them) |
 | [/tickets](https://drive-in.online/tickets) | My tickets (and gift cards bought or received); resend a receipt |

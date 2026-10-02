@@ -48,12 +48,10 @@ public sealed class TheaterService(
             .ToList();
     }
 
-    // A place a customer typed ("Austin, TX", a ZIP code); null when it can't be found. Any signed-in user.
-    public async Task<GeoPoint?> FindPlaceAsync(ClaimsPrincipal user, string place, CancellationToken ct = default)
-    {
-        Guard.RequireUserId(user);
-        return string.IsNullOrWhiteSpace(place) ? null : await geocoder.GeocodeAsync(place, ct);
-    }
+    // A place a visitor typed ("Austin, TX", a ZIP code); null when it can't be found. Anyone, signed in or not, like the
+    // theater list: the geocoder itself throttles and caches lookups, and gives up rather than queue for long.
+    public async Task<GeoPoint?> FindPlaceAsync(ClaimsPrincipal user, string place, CancellationToken ct = default) =>
+        string.IsNullOrWhiteSpace(place) ? null : await geocoder.GeocodeAsync(place, ct);
 
     public async Task<Theater?> GetBySlugAsync(ClaimsPrincipal user, string slug)
     {

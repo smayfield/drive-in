@@ -72,8 +72,9 @@ public sealed class NullGeocoder : IGeocoder
 }
 
 // OpenStreetMap's Nominatim. The public server allows at most one request a second, so calls are serialized and spaced
-// out, and results (misses too) are cached for a day. The cache is its own and capped, since customers choose the
-// queries.
+// out, and results (misses too) are cached for a day. The cache is its own and capped, since visitors (signed in or not)
+// choose the queries. A lookup that can't get its turn within QueueTimeout gives up (not found, not cached), so a burst
+// of new places can't pile up requests waiting on the one-a-second pace.
 public sealed partial class NominatimGeocoder(
     IHttpClientFactory httpFactory, TimeProvider time, ILogger<NominatimGeocoder> logger) : IGeocoder, IDisposable
 {
@@ -87,6 +88,9 @@ public sealed partial class NominatimGeocoder(
     private readonly SemaphoreSlim gate = new(1, 1);
     private DateTimeOffset lastCall = DateTimeOffset.MinValue;
 
+    // How long a lookup waits for the ones ahead of it.
+    public TimeSpan QueueTimeout { get; init; } = TimeSpan.FromSeconds(10);
+
     public async Task<GeoPoint?> GeocodeAsync(string query, CancellationToken ct = default)
     {
         var normalized = Whitespace().Replace(query.Trim(), " ");
@@ -96,7 +100,11 @@ public sealed partial class NominatimGeocoder(
         if (cache.TryGetValue(key, out GeoPoint? cached))
             return cached;
 
-        await gate.WaitAsync(ct);
+        if (!await gate.WaitAsync(QueueTimeout, ct))
+        {
+            logger.LogWarning("Geocoding \"{Query}\" gave up waiting for earlier lookups", normalized);
+            return null;
+        }
         try
         {
             if (cache.TryGetValue(key, out cached))
