@@ -51,7 +51,8 @@ public sealed class MessagingService(
     TimeProvider time,
     NotificationService notifications,
     MessageEvents events,
-    DriveInMetrics metrics)
+    DriveInMetrics metrics,
+    ActionRateLimiter limiter)
 {
     public const int MaxNewConversationsPerDay = 10;
     public const string SupportName = "Drive-In Online support";
@@ -110,6 +111,8 @@ public sealed class MessagingService(
         if (await db.Conversations.CountAsync(c => c.CustomerId == userId && c.CreatedAt > since) >= MaxNewConversationsPerDay)
             throw new AppValidationException(
                 $"You can start up to {MaxNewConversationsPerDay} conversations a day. Please reply in one you've already started, or try again tomorrow.");
+        // After the daily cap, whose message says more; this one stops bursts (and replies, in PostAsync).
+        limiter.Hit(RateLimitPolicies.Messages, ActionRateLimiter.KeyForUser(userId));
 
         var conversation = new Conversation
         {
@@ -245,6 +248,7 @@ public sealed class MessagingService(
             throw new AccessDeniedException();
         if (conversation.IsClosed)
             throw new AppValidationException("This conversation is closed.");
+        limiter.Hit(RateLimitPolicies.Messages, ActionRateLimiter.KeyForUser(userId));
 
         var now = time.GetUtcNow();
         db.Messages.Add(new Message { ConversationId = conversationId, SenderId = userId, Side = side, Body = clean, SentAt = now });
