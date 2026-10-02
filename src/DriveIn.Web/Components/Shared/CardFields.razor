@@ -1,40 +1,102 @@
-@* The credit card fields of an online checkout: ticket purchases and gift card purchases. *@
+@* The card entry of an online checkout (ticket and gift card purchases). The card never reaches the server: the browser
+   turns it into a payment method token (payments.js) and TokenizeAsync hands the page only that. With Stripe, the fields
+   are Stripe's Payment Element; in test mode (demo theaters, development) they're a plain form whose inputs Blazor never
+   binds, so even test card numbers stay in the browser. *@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
 @inject TimeProvider Time
 
 <fieldset class="mb-3 border-0 p-0">
     <legend class="mud-typography mud-typography-h6 mb-2">Credit card</legend>
-    <MudTextField T="string" @bind-Value="Form.Name" Label="Name on card" Variant="Variant.Outlined" Margin="Margin.Dense"
-                  MaxLength="100" autocomplete="cc-name" Class="mb-2" />
-    <MudTextField T="string" @bind-Value="Form.Number" Label="Card number" Variant="Variant.Outlined" Margin="Margin.Dense"
-                  MaxLength="23" InputMode="InputMode.numeric" autocomplete="cc-number" Class="mb-2" />
-    <MudGrid Spacing="2">
-        <MudItem xs="4">
-            <MudSelect T="int" @bind-Value="Form.ExpiryMonth" ToStringFunc="@(v => v == 0 ? "" : v.ToString("00"))" Label="Month" Variant="Variant.Outlined" Margin="Margin.Dense">
-                @for (var m = 1; m <= 12; m++)
-                {
-                    var month = m; // a copy: the item's content is rendered later, after the loop variable has moved on
-                    <MudSelectItem T="int" Value="@month">@month.ToString("00")</MudSelectItem>
-                }
-            </MudSelect>
-        </MudItem>
-        <MudItem xs="4">
-            <MudSelect T="int" @bind-Value="Form.ExpiryYear" ToStringFunc="@(v => v == 0 ? "" : v.ToString())" Label="Year" Variant="Variant.Outlined" Margin="Margin.Dense">
-                @for (var y = ThisYear; y <= ThisYear + 15; y++)
-                {
-                    var year = y;
-                    <MudSelectItem T="int" Value="@year">@year</MudSelectItem>
-                }
-            </MudSelect>
-        </MudItem>
-        <MudItem xs="4">
-            <MudTextField T="string" @bind-Value="Form.Cvc" Label="Security code" Variant="Variant.Outlined" Margin="Margin.Dense"
-                          MaxLength="4" InputMode="InputMode.numeric" autocomplete="cc-csc" />
-        </MudItem>
-    </MudGrid>
+    @if (Client.Kind == PaymentClientKind.Stripe)
+    {
+        <div @ref="host" class="stripe-card mb-2"></div>
+    }
+    else if (Client.Kind == PaymentClientKind.Test)
+    {
+        <div @ref="host" class="test-card mb-2">
+            <p class="muted small mb-2">
+                Test payment: no money is charged. Use a test number such as 4242 4242 4242 4242 (any future expiry, any
+                3-digit code), or 4000 0000 0000 0002 to see a decline.
+            </p>
+            <label for="@($"{id}-number")">Card number</label>
+            <input id="@($"{id}-number")" data-card-field="number" inputmode="numeric" autocomplete="cc-number" maxlength="23" />
+            <div class="test-card-row">
+                <div>
+                    <label for="@($"{id}-expiry")">Expiry (MM/YY)</label>
+                    <input id="@($"{id}-expiry")" data-card-field="expiry" inputmode="numeric" autocomplete="cc-exp" maxlength="7" placeholder="MM/YY" />
+                </div>
+                <div>
+                    <label for="@($"{id}-cvc")">Security code</label>
+                    <input id="@($"{id}-cvc")" data-card-field="cvc" inputmode="numeric" autocomplete="cc-csc" maxlength="4" />
+                </div>
+            </div>
+        </div>
+    }
 </fieldset>
 
 @code {
-    [Parameter, EditorRequired] public CardForm Form { get; set; } = default!;
+    [Parameter, EditorRequired] public PaymentClient Client { get; set; } = PaymentClient.None;
 
-    private int ThisYear => Time.GetUtcNow().Year;
+    // What will be charged to the card. Stripe's Element is sized to it (it doesn't show it).
+    [Parameter] public decimal Amount { get; set; }
+
+    private readonly string id = "card-" + Guid.NewGuid().ToString("N")[..8];
+    private ElementReference host;
+    private IJSObjectReference? module;
+    private bool stripeMounted;
+    private long mountedCents;
+
+    private long Cents => PaymentRequest.ToCents(Amount);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Client.Kind != PaymentClientKind.Stripe)
+            return;
+        if (!stripeMounted)
+        {
+            module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./payments.js");
+            stripeMounted = await module.InvokeAsync<bool>("mountStripe", host, Client.PublishableKey, Cents, Client.Currency);
+            mountedCents = Cents;
+        }
+        else if (mountedCents != Cents && module is not null)
+        {
+            mountedCents = Cents;
+            await module.InvokeVoidAsync("updateStripe", host, Cents);
+        }
+    }
+
+    // The payment method token for the card entered. Throws AppValidationException (shown to the buyer) if the card
+    // can't be used, e.g. a mistyped number.
+    public async Task<string> TokenizeAsync()
+    {
+        if (Client.Kind == PaymentClientKind.None)
+            throw new AppValidationException("Online payment isn't available yet.");
+        module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./payments.js");
+        var token = Client.Kind == PaymentClientKind.Stripe
+            ? await module.InvokeAsync<CardToken?>("tokenizeStripe", host)
+            : await module.InvokeAsync<CardToken?>("tokenizeTest", host, Time.GetUtcNow().ToString("O"));
+        if (token?.Id is not string pm)
+            throw new AppValidationException(token?.Error ?? "Your card details didn't come through. Enter them again.");
+        return pm;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (module is null)
+            return;
+        try
+        {
+            if (stripeMounted)
+                await module.InvokeVoidAsync("unmountStripe", host);
+            await module.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+            // The page is gone with its circuit; nothing to clean up.
+        }
+    }
+
+    // What payments.js returns: a token, or why there isn't one.
+    public sealed record CardToken(string? Id, string? Error);
 }

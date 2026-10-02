@@ -207,11 +207,22 @@ builder.Services.AddScoped<BillingService>();
 builder.Services.AddScoped<BillingReportService>();
 
 // Online ticket sales. Card payments are off unless a processor is configured; "Dummy" (development only) approves
-// everything without taking money.
+// everything without taking money; "Stripe" is untested so far and accepts only test-mode keys (see StripeOptions).
+// Either way the card is tokenized in the browser and never reaches this server (see PaymentClient).
 builder.Services.Configure<PaymentOptions>(builder.Configuration.GetSection(PaymentOptions.Section));
 builder.Services.AddSingleton<DummyPaymentProcessor>(); // also used for demo theaters' test sales
-if (builder.Configuration[$"{PaymentOptions.Section}:Provider"] == "Dummy")
+var paymentProvider = builder.Configuration[$"{PaymentOptions.Section}:Provider"];
+if (paymentProvider == "Dummy")
     builder.Services.AddSingleton<IPaymentProcessor>(sp => sp.GetRequiredService<DummyPaymentProcessor>());
+else if (paymentProvider == "Stripe")
+{
+    var stripe = builder.Configuration.GetSection(StripeOptions.Section).Get<StripeOptions>() ?? new StripeOptions();
+    StripeOptions.Validate(stripe); // fail at startup rather than at the first sale
+    builder.Services.Configure<StripeOptions>(builder.Configuration.GetSection(StripeOptions.Section));
+    builder.Services.AddSingleton<Stripe.IStripeClient>(new Stripe.StripeClient(stripe.SecretKey));
+    builder.Services.AddSingleton<ICardReader, StripeTerminalReader>();
+    builder.Services.AddSingleton<IPaymentProcessor, StripePaymentProcessor>();
+}
 else
     builder.Services.AddSingleton<IPaymentProcessor, UnavailablePaymentProcessor>();
 builder.Services.AddSingleton<SpotEvents>();

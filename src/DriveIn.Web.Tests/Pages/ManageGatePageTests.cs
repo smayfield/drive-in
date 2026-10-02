@@ -10,7 +10,7 @@ public class ManageGatePageTests
 {
     // 5 PM in Chicago on the day of the 8 PM showing (see TicketSalesTests.SetUpAsync).
     private static readonly DateTimeOffset ShowDayAfternoon = new(2026, 9, 5, 22, 0, 0, TimeSpan.Zero);
-    private static readonly CardInput Visa = new("Pat Buyer", "4242 4242 4242 4242", 12, 2030, "123");
+    private const string Visa = "pm_test_visa_4242_0001"; // a test card token (see TestCardTokens)
 
     private static async Task<(PageHost Host, TicketSalesTests.Setup S)> OwnerAsync()
     {

@@ -5,12 +5,15 @@ using DriveIn.Web.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace DriveIn.Web.Services;
 
 // A showing as offered for sale. Local times are in the theater's time zone.
+// Payment is how the checkout page takes a card for this theater (Stripe's fields, the test card form, or none).
 public sealed record ShowingForSale(
-    Theater Theater, Screen Screen, ShowtimeView Showing, PriceSchedule Prices, List<AddOn> AddOns, string? NotOnSaleReason)
+    Theater Theater, Screen Screen, ShowtimeView Showing, PriceSchedule Prices, List<AddOn> AddOns, string? NotOnSaleReason,
+    PaymentClient Payment)
 {
     public bool OnSale => NotOnSaleReason is null;
 }
@@ -31,8 +34,9 @@ public sealed record SpotAvailability(IReadOnlyDictionary<(int Row, int Spot), S
     public SpotState this[int row, int spot] => Spots.GetValueOrDefault((row, spot), SpotState.Available);
 }
 
-// GiftCardCode: a gift card to spend toward the total first; the card is charged only for what's left.
-public sealed record PurchaseInput(int PriceOptionId, IReadOnlyList<int> AddOnIds, CardInput? Card, string? GiftCardCode = null);
+// PaymentMethodId: the token the buyer's browser made for their card (see PaymentClient); the card itself never
+// reaches the server. GiftCardCode: a gift card to spend toward the total first; the card is charged only for what's left.
+public sealed record PurchaseInput(int PriceOptionId, IReadOnlyList<int> AddOnIds, string? PaymentMethodId, string? GiftCardCode = null);
 
 public sealed record PurchaseResult(string Code, bool ReceiptSent);
 
@@ -61,6 +65,7 @@ public sealed partial class TicketSalesService(
     SpotEvents events,
     TimeProvider time,
     DriveInMetrics metrics,
+    IOptions<PaymentOptions> paymentOptions,
     ILogger<TicketSalesService> logger)
 {
     // Gates open this long before the first film; a ticket admits until the showing ends.
@@ -108,7 +113,7 @@ public sealed partial class TicketSalesService(
         var addOns = await db.AddOns.AsNoTracking().Where(a => a.TheaterId == theater.Id && a.IsActive)
             .OrderBy(a => a.SortOrder).ThenBy(a => a.Id).ToListAsync();
         return new ShowingForSale(theater, showtime.Screen, ScheduleService.ToView(theater, showtime), prices, addOns,
-            NotOnSaleReason(showtime, prices, atGate));
+            NotOnSaleReason(showtime, prices, atGate), ProcessorFor(theater).Client);
     }
 
     public async Task<SpotAvailability> GetAvailabilityAsync(ClaimsPrincipal user, int showtimeId)
@@ -248,17 +253,17 @@ public sealed partial class TicketSalesService(
     {
         var userId = Guard.RequireUserId(user);
         await using var db = await dbFactory.CreateDbContextAsync();
-        var ticket = await SellHeldAsync(db, userId, ticketId, input.PriceOptionId, input.AddOnIds, input.Card, input.GiftCardCode, atGate: false);
+        var ticket = await SellHeldAsync(db, userId, ticketId, input.PriceOptionId, input.AddOnIds, input.PaymentMethodId, input.GiftCardCode, atGate: false);
         var sent = await TrySendReceiptAsync(await LoadViewAsync(db, ticket.Id), baseUri);
         return new PurchaseResult(ticket.Code!, sent);
     }
 
     // Charges for a spot the seller holds (the buyer online; the employee at the gate) and sells it. Online, the
-    // buyer's typed card is charged and the ticket is theirs. At the gate the charge is card-present (the processor's
+    // buyer's card (its payment method token) is charged and the ticket is theirs. At the gate the charge is card-present (the processor's
     // terminal), the ticket has no buyer account, and the car is admitted as it's sold. A gift card (of the theater's)
     // pays first, and only the rest is charged to the card; if that charge fails the gift card is made whole again.
     private async Task<Ticket> SellHeldAsync(ApplicationDbContext db, string userId, int ticketId, int priceOptionId,
-        IReadOnlyList<int> addOnIds, CardInput? typedCard, string? giftCardCode, bool atGate)
+        IReadOnlyList<int> addOnIds, string? paymentMethodId, string? giftCardCode, bool atGate)
     {
         var ticket = await db.Tickets.Include(t => t.Showtime!.Screen!.Theater)
             .FirstOrDefaultAsync(t => t.Id == ticketId && t.UserId == userId);
@@ -283,11 +288,11 @@ public sealed partial class TicketSalesService(
         var gift = quote.Total > 0 && !string.IsNullOrWhiteSpace(giftCardCode) ? await FindGiftCardAsync(db, theater.Id, giftCardCode, forUpdate: true) : null;
         var giftAmount = gift is null ? 0m : Math.Min(gift.Balance, quote.Total);
         var cardAmount = quote.Total - giftAmount;
-        CardInput? card = null;
+        string? paymentMethod = null;
         string? buyerEmail = null;
         if (!atGate)
         {
-            card = cardAmount > 0 ? Cards.Validate(typedCard, now) : null;
+            paymentMethod = cardAmount > 0 ? PaymentTokens.Require(paymentMethodId) : null;
             buyerEmail = (await db.Users.Where(u => u.Id == userId).Select(u => u.Email).FirstOrDefaultAsync())?.Trim();
             if (string.IsNullOrEmpty(buyerEmail))
                 throw new AppValidationException("Your account needs an email address to receive tickets.");
@@ -323,7 +328,7 @@ public sealed partial class TicketSalesService(
                 var description = $"{theater.Name}: {ScheduleService.ToView(theater, await WithFeaturesAsync(db, showtime)).Title}, spot {ticket.SpotLabel}";
                 try
                 {
-                    result = await ProcessorFor(theater).ChargeAsync(new PaymentRequest(cardAmount, description, card));
+                    result = await ProcessorFor(theater).ChargeAsync(TicketCharge(ticket, theater, cardAmount, description, paymentMethod));
                 }
                 catch
                 {
@@ -372,8 +377,8 @@ public sealed partial class TicketSalesService(
         else
         {
             ticket.Email = buyerEmail;
-            ticket.CardBrand = card is null ? null : Cards.Brand(card.Number);
-            ticket.CardLast4 = card?.Number[^4..];
+            ticket.CardBrand = result.CardBrand;
+            ticket.CardLast4 = result.CardLast4;
         }
         ticket.Stamp = Guid.NewGuid();
         await db.SaveChangesAsync();
@@ -474,6 +479,17 @@ public sealed partial class TicketSalesService(
     }
 
     // --- Helpers ---
+
+    // The charge for a ticket in Paying. The key is the ticket and its Paying stamp, so retrying this same charge can't
+    // charge twice, while a later checkout of the same ticket (after a decline put it back to Held) is a new charge.
+    private PaymentRequest TicketCharge(Ticket ticket, Theater theater, decimal amount, string description, string? paymentMethod) =>
+        new(PaymentRequest.ToCents(amount), paymentOptions.Value.Currency, description, paymentMethod,
+            $"ticket-{ticket.Id}-{ticket.Stamp:N}",
+            new Dictionary<string, string>
+            {
+                ["kind"] = "ticket", ["ticket_id"] = ticket.Id.ToString(), ["theater_id"] = theater.Id.ToString(),
+                ["showtime_id"] = ticket.ShowtimeId.ToString(),
+            });
 
     // Demo theaters always sell through the dummy processor (test tickets, no money), even where real payments
     // aren't set up, so prospective owners can try the whole flow.

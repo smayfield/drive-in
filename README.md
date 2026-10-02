@@ -108,10 +108,23 @@ invitee sets a password or continues with Google using the invited address.
   A buyer holds one spot at a time. Expired holds are released every 10 seconds (`HoldExpiryService`).
 - Seat maps update live: every hold, release and sale is published in-process (`SpotEvents`) to open maps. That
   works because the app is a single server; running several would need a shared bus such as Postgres LISTEN/NOTIFY.
-- **Payment** is by credit card only, through `IPaymentProcessor`. There's no real processor yet: set
-  `Payments:Provider` to `Dummy` (on in `appsettings.Development.json`) for one that approves everything without
-  taking money. With it unset, as in production, nothing is sold, online or at the gate. Only the card brand and last four digits
-  are stored. A ticket whose total is $0 after discounts needs no card.
+- **Payment** is by credit card only, through `IPaymentProcessor`. **Card numbers never reach the server**: the checkout
+  page turns the card into a payment method token in the browser (`wwwroot/payments.js`, `CardFields`) and sends only that.
+  With Stripe the card fields are Stripe's Payment Element, in Stripe's own iframe, which keeps the site in PCI DSS's
+  **SAQ A** (the lightest level: no card data is stored, processed or sent by our servers). Only the brand and last four
+  digits the processor reports are stored. A ticket whose total is $0 after discounts needs no card. Providers (`Payments:Provider`):
+  - `Dummy` (on in `appsettings.Development.json`, and always used by demo theaters): approves everything without taking money.
+    Its checkout shows a test card form (plain inputs only `payments.js` reads) that makes fake `pm_test_...` tokens; use
+    4242 4242 4242 4242, or 4000 0000 0000 0002 to see a decline.
+  - `Stripe`: `StripePaymentProcessor`. **Not tried against Stripe yet** (there's no Stripe account), so it accepts only
+    test-mode keys (`pk_test_`/`sk_test_`) and production doesn't enable it. Keys: `Payments:Stripe:PublishableKey` and
+    `Payments:Stripe:SecretKey` (user-secrets locally; in production, SSM `/drive-in/stripe-publishable-key` and
+    `/drive-in/stripe-secret-key`, which `deploy.sh` doesn't read yet). Before turning it on: try a test-mode sale, a
+    decline and a gift card end to end; add the keys to `deploy.sh` and the compose file; allow `https://js.stripe.com` in the
+    site's Content-Security-Policy (`script-src` and `frame-src`); then lift the test-key check in `StripeOptions.Validate`.
+    Known gaps: cards that ask for 3-D Secure are declined for now, and gate sales need Stripe Terminal readers
+    (`StripeTerminalReader` is a stub that declines).
+  - Unset (as in production): nothing is sold, online or at the gate.
 - On approval the spot is sold to the buyer and a **receipt** is emailed with a QR code (an inline image) linking to
   `tickets/{code}` (a random 128-bit code) and a 4-character **gate code** (e.g. `K7QM`; no look-alike characters)
   the guest can read out instead. Buyers see their tickets under My tickets and can resend the receipt.

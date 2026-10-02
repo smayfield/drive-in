@@ -65,7 +65,7 @@ else
                           MaxLength="256" InputType="InputType.Email" Class="mb-2" />
             <MudTextField T="string" @bind-Value="message" Label="Message" Variant="Variant.Outlined" Margin="Margin.Dense" MaxLength="500" Lines="2" Class="mb-3" />
 
-            <CardFields Form="card" />
+            <CardFields @ref="cardFields" Client="offer.Payment" Amount="amount" />
 
             <MudText Typo="Typo.body2" Class="muted mb-3">
                 The code is emailed to you (and the recipient, if you gave an address). It's good only at @offer.Theater.Name,
@@ -88,7 +88,7 @@ else
     private bool busy;
     private decimal amount = 50m;
     private string recipientName = "", recipientEmail = "", message = "";
-    private readonly CardForm card = new();
+    private CardFields? cardFields;
 
     protected override async Task LoadAsync() => offer = await Sales.GetGiftCardOfferAsync(User, Slug);
 
@@ -99,9 +99,10 @@ else
         busy = true;
         try
         {
-            var input = new GiftCardPurchaseInput(amount, recipientName, recipientEmail, message, card.ToInput());
+            // Only a token for the card goes to the server (see CardFields).
+            var paymentMethod = cardFields is null ? null : await cardFields.TokenizeAsync();
+            var input = new GiftCardPurchaseInput(amount, recipientName, recipientEmail, message, paymentMethod);
             bought = await Sales.PurchaseGiftCardAsync(User, offer.Theater.Id, input, BaseUri);
-            card.Clear();
         }
         finally
         {

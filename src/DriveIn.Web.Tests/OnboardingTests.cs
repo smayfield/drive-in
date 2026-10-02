@@ -173,7 +173,7 @@ public class OnboardingTests
         Assert.True((await sales.GetShowingAsync(me, showing.Id)).OnSale);
         var hold = await sales.HoldAsync(me, showing.Id, 1, 1);
         await sales.PurchaseAsync(me, hold.TicketId, new PurchaseInput(option.Id, [],
-            new CardInput("Owner", "4242 4242 4242 4242", 12, 2030, "123")), TestApp.BaseUri);
+            "pm_test_visa_4242_0001"), TestApp.BaseUri);
 
         Assert.Empty(app.Payments.Charges); // the real processor was never used
         await using var db = app.Db();
@@ -244,7 +244,7 @@ public class OnboardingTests
         var sales = app.Get<TicketSalesService>();
         var option = (await sales.GetShowingAsync(me, showing.Id)).Prices.Options[0];
         var hold = await sales.HoldAsync(me, showing.Id, 1, 1);
-        var test = await sales.PurchaseAsync(me, hold.TicketId, new PurchaseInput(option.Id, [], new CardInput("O", "4242424242424242", 12, 2030, "123")), TestApp.BaseUri);
+        var test = await sales.PurchaseAsync(me, hold.TicketId, new PurchaseInput(option.Id, [], "pm_test_visa_4242_0001"), TestApp.BaseUri);
         await sales.MoveAsync(me, test.Code, 1, 2, VehicleSize.Standard); // its move goes with it
         var onboarding = app.Get<OnboardingService>();
         await onboarding.RequestGoLiveAsync(me, theater.Id, acceptBilling: true, TestApp.BaseUri);
@@ -267,7 +267,7 @@ public class OnboardingTests
         var guest = Principals.For(await app.CreateUserAsync("guest@example.com"));
         Assert.Single(await app.Get<TheaterService>().ListActiveAsync(guest));
         var guestHold = await sales.HoldAsync(guest, showing.Id, 1, 1);
-        await sales.PurchaseAsync(guest, guestHold.TicketId, new PurchaseInput(option.Id, [], new CardInput("G", "4242424242424242", 12, 2030, "123")), TestApp.BaseUri);
+        await sales.PurchaseAsync(guest, guestHold.TicketId, new PurchaseInput(option.Id, [], "pm_test_visa_4242_0001"), TestApp.BaseUri);
         Assert.Single(app.Payments.Charges);
         await using (var db = app.Db())
             Assert.False((await db.Tickets.SingleAsync()).IsTest);

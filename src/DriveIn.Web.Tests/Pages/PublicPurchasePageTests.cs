@@ -1,4 +1,5 @@
 using DriveIn.Web.Components.Pages.Theaters;
+using DriveIn.Web.Components.Shared;
 using DriveIn.Web.Data;
 using DriveIn.Web.Services;
 using Microsoft.AspNetCore.Components;
@@ -9,7 +10,7 @@ namespace DriveIn.Web.Tests.Pages;
 // Buying a ticket on a showing's page, and buying a gift card.
 public class PublicPurchasePageTests
 {
-    private static readonly CardInput Visa = new("Pat Buyer", "4242 4242 4242 4242", 12, 2030, "123");
+    private const string Visa = "pm_test_visa_4242_0001"; // a test card token (see TestCardTokens)
 
     private static async Task<(TicketSalesTests.Setup S, PageHost Host)> BuyerAsync()
     {
@@ -24,13 +25,14 @@ public class PublicPurchasePageTests
         return page;
     }
 
-    private static void EnterCard<T>(PageHost host, IRenderedComponent<T> page) where T : IComponent
+    // The test card form is plain inputs that only payments.js reads, so "typing a card" here is the browser handing back
+    // the token payments.js would make for it.
+    private static void EnterCard<T>(PageHost host, IRenderedComponent<T> page, string token = "pm_test_visa_4242_0001")
+        where T : IComponent
     {
-        page.SetField("Name on card", "Pat Buyer");
-        page.SetField("Card number", "4242 4242 4242 4242");
-        host.Select(page, "Month", "12");
-        host.Select(page, "Year", "2030");
-        page.SetField("Security code", "123");
+        Assert.Contains("Card number", page.Text());
+        host.Context.JSInterop.SetupModule("./payments.js")
+            .Setup<CardFields.CardToken>("tokenizeTest", _ => true).SetResult(new CardFields.CardToken(token, null));
     }
 
     [Fact]
@@ -76,6 +78,68 @@ public class PublicPurchasePageTests
     }
 
     [Fact]
+    public async Task Only_the_cards_token_reaches_the_server()
+    {
+        var (s, host) = await BuyerAsync();
+        await using var _ = host;
+        await using var __ = s;
+        var page = OpenShowing(host, s);
+        page.Find("g[aria-label='Spot A1: available']").Click();
+        page.WaitForText("Spot A1 is yours for");
+        // The card inputs aren't bound to anything: Blazor never sees what's typed into them.
+        Assert.All(page.FindAll(".test-card input"), input => Assert.Null(input.GetAttribute("value")));
+        EnterCard(host, page, "pm_test_visa_4242_feed");
+
+        page.ClickButton("Pay $10.00");
+
+        page.WaitForAssertion(() => Assert.Contains("tickets/", host.Nav.Uri));
+        Assert.Equal("pm_test_visa_4242_feed", Assert.Single(s.App.Payments.Charges).PaymentMethodId);
+    }
+
+    [Fact]
+    public async Task A_card_the_browser_rejects_is_never_charged()
+    {
+        var (s, host) = await BuyerAsync();
+        await using var _ = host;
+        await using var __ = s;
+        var page = OpenShowing(host, s);
+        page.Find("g[aria-label='Spot A1: available']").Click();
+        page.WaitForText("Spot A1 is yours for");
+        host.Context.JSInterop.SetupModule("./payments.js")
+            .Setup<CardFields.CardToken>("tokenizeTest", _ => true).SetResult(new CardFields.CardToken(null, "That card has expired."));
+
+        page.ClickButton("Pay $10.00");
+
+        page.WaitForText("That card has expired.");
+        Assert.Empty(s.App.Payments.Charges);
+        Assert.Contains("Spot A1 is yours for", page.Text());
+    }
+
+    [Fact]
+    public async Task With_Stripe_the_card_fields_are_Stripes_element()
+    {
+        var (s, host) = await BuyerAsync();
+        await using var _ = host;
+        await using var __ = s;
+        s.App.Payments.Client = new PaymentClient(PaymentClientKind.Stripe, "pk_test_123");
+        var stripe = host.Context.JSInterop.SetupModule("./payments.js");
+        var mount = stripe.Setup<bool>("mountStripe", _ => true);
+        mount.SetResult(true);
+        stripe.Setup<CardFields.CardToken>("tokenizeStripe", _ => true).SetResult(new CardFields.CardToken("pm_1Qstripe", null));
+        var page = OpenShowing(host, s);
+        page.Find("g[aria-label='Spot A1: available']").Click();
+        page.WaitForText("Spot A1 is yours for");
+
+        Assert.Empty(page.FindAll(".test-card"));
+        page.WaitForAssertion(() => Assert.Equal("pk_test_123", Assert.Single(mount.Invocations).Arguments[1]));
+        Assert.Equal(1000L, mount.Invocations.Single().Arguments[2]);
+        page.ClickButton("Pay $10.00");
+
+        page.WaitForAssertion(() => Assert.Contains("tickets/", host.Nav.Uri));
+        Assert.Equal("pm_1Qstripe", Assert.Single(s.App.Payments.Charges).PaymentMethodId);
+    }
+
+    [Fact]
     public async Task Choosing_a_different_spot_releases_the_hold()
     {
         var (s, host) = await BuyerAsync();
@@ -109,9 +173,9 @@ public class PublicPurchasePageTests
         page.SetField("Gift card code (optional)", card.Code);
         page.ClickButton("Apply");
         page.WaitForText("Covers the whole $10.00. $40.00 will be left on the card.");
-        Assert.DoesNotContain("Name on card", page.Text());
+        Assert.DoesNotContain("Card number", page.Text());
         page.ClickButton("Remove");
-        page.WaitForText("Name on card");
+        page.WaitForText("Card number");
         page.SetField("Gift card code (optional)", card.Code);
         page.ClickButton("Apply");
         page.WaitForText("Covers the whole");
@@ -174,6 +238,6 @@ public class PublicPurchasePageTests
 
         page.WaitForText("Gift cards");
         page.WaitForAssertion(() => Assert.Contains("mud-alert-text-info", page.Markup));
-        Assert.DoesNotContain("Name on card", page.Text());
+        Assert.DoesNotContain("Card number", page.Text());
     }
 }

@@ -7,12 +7,14 @@ using Microsoft.EntityFrameworkCore;
 namespace DriveIn.Web.Services;
 
 // Whether a theater is selling gift cards right now, for the purchase page.
-public sealed record GiftCardOffer(Theater Theater, string? NotAvailableReason)
+// Payment is how the page takes a card for this theater.
+public sealed record GiftCardOffer(Theater Theater, string? NotAvailableReason, PaymentClient Payment)
 {
     public bool Available => NotAvailableReason is null;
 }
 
-public sealed record GiftCardPurchaseInput(decimal Amount, string? RecipientName, string? RecipientEmail, string? Message, CardInput? Card);
+// PaymentMethodId: the token the buyer's browser made for their card; the card itself never reaches the server.
+public sealed record GiftCardPurchaseInput(decimal Amount, string? RecipientName, string? RecipientEmail, string? Message, string? PaymentMethodId);
 
 // Card carries the full code: it's shown once to the buyer, who is also emailed it.
 public sealed record GiftCardPurchaseResult(GiftCard Card, bool BuyerEmailed, bool? RecipientEmailed);
@@ -47,7 +49,7 @@ public sealed partial class TicketSalesService
             ?? throw new NotFoundException("Theater not found.");
         if (!TheaterService.CanBrowse(user, theater))
             throw new NotFoundException("Theater not found.");
-        return new GiftCardOffer(theater, GiftCardsNotAvailableReason(theater));
+        return new GiftCardOffer(theater, GiftCardsNotAvailableReason(theater), ProcessorFor(theater).Client);
     }
 
     // Charges the buyer's card and issues a gift card, emailing its code to the buyer and, if given, the recipient.
@@ -79,13 +81,18 @@ public sealed partial class TicketSalesService
         if (string.IsNullOrEmpty(buyerEmail))
             throw new AppValidationException("Your account needs an email address to receive the gift card.");
         var now = time.GetUtcNow();
-        var card = Cards.Validate(input.Card, now);
+        var paymentMethod = PaymentTokens.Require(input.PaymentMethodId);
         var code = await NewGiftCardCodeAsync(db);
 
         PaymentResult result;
         try
         {
-            result = await ProcessorFor(theater).ChargeAsync(new PaymentRequest(amount, $"{theater.Name}: gift card", card));
+            // One key per purchase attempt: a retry inside the processor's client can't charge twice, and buying another
+            // card is a new charge.
+            var charge = new PaymentRequest(PaymentRequest.ToCents(amount), paymentOptions.Value.Currency, $"{theater.Name}: gift card",
+                paymentMethod, $"giftcard-{Guid.NewGuid():N}",
+                new Dictionary<string, string> { ["kind"] = "gift_card", ["theater_id"] = theater.Id.ToString() });
+            result = await ProcessorFor(theater).ChargeAsync(charge);
         }
         catch
         {
@@ -100,7 +107,7 @@ public sealed partial class TicketSalesService
         {
             TheaterId = theater.Id, Code = code, InitialAmount = amount, Balance = amount, PurchasedAt = now,
             PurchaserId = userId, PurchaserEmail = buyerEmail, RecipientName = recipientName, RecipientEmail = recipientEmail,
-            Message = message, CardBrand = Cards.Brand(card.Number), CardLast4 = card.Number[^4..],
+            Message = message, CardBrand = result.CardBrand, CardLast4 = result.CardLast4,
             PaymentReference = result.Reference, IsTest = theater.IsDemo,
         };
         giftCard.Transactions.Add(new GiftCardTransaction

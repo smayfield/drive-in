@@ -42,7 +42,7 @@ public class GateTests
 
         var charge = Assert.Single(s.App.Payments.Charges);
         Assert.Equal(30m, charge.Amount);
-        Assert.Null(charge.Card); // card-present, on the terminal
+        Assert.True(charge.CardPresent); // on the terminal
         var ticket = sold.Ticket;
         Assert.Equal((TicketStatus.Sold, "B2", 30m), (ticket.Status, ticket.SpotLabel, ticket.Total));
         Assert.Null(ticket.UserId);

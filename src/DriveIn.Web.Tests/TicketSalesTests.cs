@@ -9,7 +9,7 @@ namespace DriveIn.Web.Tests;
 public class TicketSalesTests
 {
     private static readonly DateOnly Day = new(2026, 9, 5);
-    private static readonly CardInput Visa = new("Pat Buyer", "4242 4242 4242 4242", 12, 2030, "123");
+    private const string Visa = "pm_test_visa_4242_0001"; // a test card token (see TestCardTokens)
 
     internal sealed record Setup(
         TestApp App, ApplicationUser Owner, Theater Theater, Screen Screen, Showtime Showing,
@@ -73,7 +73,11 @@ public class TicketSalesTests
         // $25 + $5 − $2 − 10% of $25.
         var charge = Assert.Single(s.App.Payments.Charges);
         Assert.Equal(25.50m, charge.Amount);
-        Assert.Equal("4242424242424242", charge.Card!.Number);
+        // Only the browser's token reaches the server, with an idempotency key per Paying attempt and the ticket's ids.
+        Assert.Equal((2550L, "usd", Visa), (charge.AmountCents, charge.Currency, charge.PaymentMethodId));
+        Assert.StartsWith($"ticket-{hold.TicketId}-", charge.IdempotencyKey);
+        Assert.Equal(hold.TicketId.ToString(), charge.Metadata["ticket_id"]);
+        Assert.Equal(s.Theater.Id.ToString(), charge.Metadata["theater_id"]);
         await using var db = s.App.Db();
         var ticket = await db.Tickets.Include(t => t.AddOns).SingleAsync();
         Assert.Equal(TicketStatus.Sold, ticket.Status);
@@ -238,19 +242,21 @@ public class TicketSalesTests
             Assert.Equal(TicketStatus.Sold, (await db.Tickets.SingleAsync()).Status);
     }
 
+    // The server takes only a payment method token; anything else (missing, or not shaped like a token, such as a card
+    // number) is refused before charging.
     [Theory]
-    [InlineData("4242 4242 4242 4241", 12, 2030, "123", "isn't valid")]
-    [InlineData("4242 4242 4242 4242", 8, 2026, "123", "expired")]
-    [InlineData("4242 4242 4242 4242", 12, 2030, "12", "security code")]
-    [InlineData("3782 822463 10005", 12, 2030, "123", "security code")] // Amex needs 4 digits
-    public async Task Bad_card_details_are_rejected_before_charging(string number, int month, int year, string cvc, string message)
+    [InlineData(null, "Enter your card details")]
+    [InlineData("  ", "Enter your card details")]
+    [InlineData("4242424242424242", "didn't come through")]
+    [InlineData("pm_<script>", "didn't come through")]
+    public async Task Missing_or_malformed_card_tokens_are_rejected_before_charging(string? token, string message)
     {
         await using var s = await SetUpAsync();
         var buyer = await BuyerAsync(s.App);
         var hold = await s.Sales.HoldAsync(buyer, s.Showing.Id, 1, 1);
 
         var ex = await Assert.ThrowsAsync<AppValidationException>(() => s.Sales.PurchaseAsync(buyer, hold.TicketId,
-            new PurchaseInput(s.Single.Id, [], new CardInput("Pat", number, month, year, cvc)), TestApp.BaseUri));
+            new PurchaseInput(s.Single.Id, [], token), TestApp.BaseUri));
 
         Assert.Contains(message, ex.Message);
         Assert.Empty(s.App.Payments.Charges);
@@ -530,14 +536,52 @@ public class TicketSalesTests
     }
 
     [Theory]
-    [InlineData("4242424242424242", "Visa")]
-    [InlineData("5555555555554444", "Mastercard")]
-    [InlineData("2223003122003222", "Mastercard")]
-    [InlineData("378282246310005", "Amex")]
-    [InlineData("6011111111111117", "Discover")]
-    public void Card_brands_are_recognized(string number, string brand)
+    [InlineData("pm_test_visa_4242_ab12", "Visa", "4242", false)]
+    [InlineData("pm_test_mastercard_4444_ab12", "Mastercard", "4444", false)]
+    [InlineData("pm_test_amex_0005_ab12", "Amex", "0005", false)]
+    [InlineData("pm_test_decline_0002_ab12", "Card", "0002", true)]
+    public void Test_card_tokens_carry_the_brand_and_last_four(string token, string brand, string last4, bool declines)
     {
-        Assert.True(Cards.PassesLuhn(number));
-        Assert.Equal(brand, Cards.Brand(number));
+        Assert.Equal(new TestCardTokens.TestCard(brand, last4, declines), TestCardTokens.Parse(token));
     }
+
+    [Theory]
+    [InlineData("pm_1QabcXYZ")] // a real Stripe token isn't a test card
+    [InlineData("pm_test_visa_42_ab")]
+    [InlineData(null)]
+    public void Other_tokens_are_not_test_cards(string? token) => Assert.Null(TestCardTokens.Parse(token));
+
+    [Fact]
+    public async Task The_dummy_processor_approves_test_cards_and_card_present_charges_and_declines_the_rest()
+    {
+        var dummy = new DummyPaymentProcessor(Microsoft.Extensions.Logging.Abstractions.NullLogger<DummyPaymentProcessor>.Instance);
+        PaymentRequest Charge(string? pm) => new(1000, "usd", "test", pm, "key", new Dictionary<string, string>());
+
+        var approved = await dummy.ChargeAsync(Charge("pm_test_visa_4242_ab12"));
+        Assert.Equal((true, "Visa", "4242"), (approved.Approved, approved.CardBrand, approved.CardLast4));
+        Assert.True((await dummy.ChargeAsync(Charge(null))).Approved); // at the gate
+        Assert.False((await dummy.ChargeAsync(Charge("pm_test_decline_0002_ab12"))).Approved);
+        Assert.False((await dummy.ChargeAsync(Charge("pm_1QabcXYZ"))).Approved);
+        Assert.Equal(PaymentClientKind.Test, dummy.Client.Kind);
+    }
+
+    [Theory]
+    [InlineData("pk_test_a", "sk_test_b", true)]
+    [InlineData("pk_live_a", "sk_live_b", false)] // no real money until the integration has been tried
+    [InlineData("pk_test_a", "", false)]
+    [InlineData("", "", false)]
+    public void Stripe_accepts_only_test_mode_keys(string publishable, string secret, bool ok)
+    {
+        var options = new StripeOptions { PublishableKey = publishable, SecretKey = secret };
+        if (ok)
+            StripeOptions.Validate(options);
+        else
+            Assert.Throws<InvalidOperationException>(() => StripeOptions.Validate(options));
+    }
+
+    [Theory]
+    [InlineData(25.50, 2550)]
+    [InlineData(0.005, 1)]
+    [InlineData(500, 50000)]
+    public void Amounts_are_charged_in_cents(decimal amount, long cents) => Assert.Equal(cents, PaymentRequest.ToCents(amount));
 }

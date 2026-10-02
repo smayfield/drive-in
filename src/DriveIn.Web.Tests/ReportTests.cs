@@ -13,7 +13,7 @@ public class ReportTests
     // The setup's showing: Jaws, 8 PM Sep 5 in Chicago (01:00 UTC Sep 6), on a 7-spot screen.
     private static readonly DateOnly ShowDay = new(2026, 9, 5);
     private static readonly DateTimeOffset AfterTheShow = new(2026, 9, 6, 12, 0, 0, TimeSpan.Zero);
-    private static readonly CardInput Visa = new("Pat Buyer", "4242 4242 4242 4242", 12, 2030, "123");
+    private const string Visa = "pm_test_visa_4242_0001"; // a test card token (see TestCardTokens)
 
     private static ReportService Reports(Setup s) => s.App.Get<ReportService>();
 
