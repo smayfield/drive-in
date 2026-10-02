@@ -95,9 +95,10 @@ function brandOf(number) {
     return "card";
 }
 
+// Letters only, so a token never has a long run of digits (the server refuses card-number-like runs).
 function randomId() {
-    const bytes = crypto.getRandomValues(new Uint8Array(8));
-    return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+    const letters = "abcdefghijklmnopqrstuvwxyz";
+    return Array.from(crypto.getRandomValues(new Uint8Array(16)), b => letters[b % letters.length]).join("");
 }
 
 // Reads the test card form inside host. Returns { id } or { error }.
