@@ -43,7 +43,11 @@ confirm() {
 }
 
 # The web app's services (one, or blue and green) that are running now, so they can be started again afterwards.
-running_web() { compose ps --status running --services | grep '^web' || true; }
+# From Docker's labels rather than `compose ps`, which leaves out services whose profile isn't enabled (web-blue/green).
+running_web() {
+  docker ps --filter "label=com.docker.compose.project=$PROJECT" --format '{{.Label "com.docker.compose.service"}}' \
+    | grep '^web' | sort -u || true
+}
 stop_web() {
   WEB_SERVICES=$(running_web)
   if [ -n "$WEB_SERVICES" ]; then

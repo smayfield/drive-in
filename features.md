@@ -165,7 +165,8 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   can't be picked (map and service both check). The choice is locked while holding (choose a different spot to change it) and is
   stored on the ticket (`Ticket.VehicleSize`), shown on the receipt, ticket page, My tickets and at the gate.
 - **Live maps:** holds/releases/sales are published through in-process `SpotEvents` to open maps. Single-server only; multiple
-  servers would need a shared bus (e.g. Postgres LISTEN/NOTIFY).
+  servers would need a shared bus (e.g. Postgres LISTEN/NOTIFY). During a deploy's minute of overlap, a map open on the old
+  copy misses changes made through the new one until it's refreshed; the database still allows one hold per spot.
 - **Payment** (`IPaymentProcessor`, `Payments.cs`): credit card only. `Payments:Provider=Dummy` approves everything without
   charging (set in `appsettings.Development.json`); unset (production) means nothing can be sold online or at the gate. Only card
   brand and last four are stored. Total $0 after discounts needs no card.
@@ -303,6 +304,18 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 - Data: PostgreSQL via EF Core, snake_case, migrations in `Data/Migrations`. Interactive components don't hold a DbContext;
   data services use `IDbContextFactory`, services that use `UserManager` open a DI scope per call.
 - Deploy: merge to `main` runs tests, builds ARM64 images, runs an EF migration bundle, then deploys via SSM; Caddy fronts the app.
+  Zero downtime, blue/green on the one server (`deploy/rollout.sh`): compose services `web-blue` / `web-green` (one
+  definition, profiles `blue` / `green`, 768 MB each). The idle color starts with the new image, `/readyz` must pass
+  (asked from a throwaway container on the edge network, `Host: localhost`), then Caddy's `upstream` file and the staged
+  `Caddyfile.next` are switched together and Caddy reloads; the old color drains 60 s, then gets a graceful stop. If
+  the new copy isn't ready in 180 s, or Caddy rejects the switch, the old one keeps serving and the deploy fails.
+  Caddy health-checks the upstream (`/healthz` every 5 s, 3 failures) and keeps WebSockets open across reloads
+  (`stream_close_delay` 5m). Migrations must work with the previous release (CLAUDE.md).
+- Health: `/healthz` (process up, no checks) and `/readyz` (database reachable, `DatabaseHealthCheck`), anonymous.
+- Background jobs (`HoldExpiryService`, `NotificationEmailService`, `BillingJobService`, `BusinessGauges`) run only in the
+  copy holding the Postgres session advisory lock `PostgresJobLeadership.LockKey` (unpooled connection, checked before each
+  run; a stopped or disconnected copy releases it). `TheaterGeocodingBackfill` runs once per start in every copy; it's
+  idempotent.
   Metrics and alerts: see section 14.
 - Backups (README "Backups and restores"): point-in-time recovery with pgBackRest (`deploy/postgres/Dockerfile`, image
   `drive-in-postgres:pg-<Dockerfile hash>`, rebuilt only when that file changes): WAL archived to `s3://<OpsBucket>/pitr/`

@@ -6,7 +6,8 @@ namespace DriveIn.Web.Services;
 
 // Current totals (users, theaters, upcoming showings, money owed) as gauges on the "DriveIn" meter. A snapshot is read
 // from the database every Interval and the gauges report the latest one, so a metrics collection never queries.
-// Registered as a singleton (for the meter) and as the hosted service that refreshes it.
+// Registered as a singleton (for the meter) and as the hosted service that refreshes it. Only the copy of the app that
+// runs the background jobs (IJobLeadership) reports them, so two copies during a deploy don't report everything twice.
 public sealed class BusinessGauges : BackgroundService
 {
     public static readonly TimeSpan Interval = TimeSpan.FromMinutes(1);
@@ -18,15 +19,17 @@ public sealed class BusinessGauges : BackgroundService
     private readonly IServiceScopeFactory scopes;
     private readonly TimeProvider time;
     private readonly DriveInMetrics metrics;
+    private readonly IJobLeadership leadership;
     private readonly ILogger<BusinessGauges> logger;
     private volatile Snapshot? latest;
 
     public BusinessGauges(IServiceScopeFactory scopes, TimeProvider time, IMeterFactory meterFactory, DriveInMetrics metrics,
-        ILogger<BusinessGauges> logger)
+        IJobLeadership leadership, ILogger<BusinessGauges> logger)
     {
         this.scopes = scopes;
         this.time = time;
         this.metrics = metrics;
+        this.leadership = leadership;
         this.logger = logger;
 
         var meter = meterFactory.Create(DriveInMetrics.MeterName);
@@ -65,7 +68,10 @@ public sealed class BusinessGauges : BackgroundService
         {
             try
             {
-                await RefreshAsync(stoppingToken);
+                if (await leadership.IsLeaderAsync(stoppingToken))
+                    await RefreshAsync(stoppingToken);
+                else
+                    latest = null;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

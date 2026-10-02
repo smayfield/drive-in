@@ -168,7 +168,7 @@ public class NotificationTests
         w.App.Time.Advance(Delay);
         using var job = new NotificationEmailService(
             w.App.Get<Microsoft.Extensions.DependencyInjection.IServiceScopeFactory>(), w.App.Time, w.App.Get<DriveInMetrics>(),
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<NotificationEmailService>.Instance);
+            AlwaysLeader.Instance, Microsoft.Extensions.Logging.Abstractions.NullLogger<NotificationEmailService>.Instance);
 
         await job.StartAsync(CancellationToken.None);
         for (var i = 0; i < 50 && w.App.Email.Sent.Count < 3; i++)

@@ -108,6 +108,7 @@ invitee sets a password or continues with Google using the invited address.
   A buyer holds one spot at a time. Expired holds are released every 10 seconds (`HoldExpiryService`).
 - Seat maps update live: every hold, release and sale is published in-process (`SpotEvents`) to open maps. That
   works because the app is a single server; running several would need a shared bus such as Postgres LISTEN/NOTIFY.
+  (Deploys briefly run two copies; see Deploys below.)
 - **Payment** is by credit card only, through `IPaymentProcessor`. There's no real processor yet: set
   `Payments:Provider` to `Dummy` (on in `appsettings.Development.json`) for one that approves everything without
   taking money. With it unset, as in production, nothing is sold, online or at the gate. Only the card brand and last four digits
@@ -234,7 +235,21 @@ dotnet ef database update --project src/DriveIn.Web
 ```
 
 Production applies migrations during deploy with an EF migration bundle (`Dockerfile.migrate`),
-before the new app version starts; if a migration fails, the old version keeps running.
+before the new app version starts; if a migration fails, the old version keeps running. Because deploys are
+blue/green, the old version also runs on the migrated schema for about a minute, so **a migration must work with the
+previous release**. Additions are fine. Renames, drops and new required columns take two releases (CLAUDE.md).
+
+**Deploys** don't take the site down (`deploy/rollout.sh`, run by `deploy.sh`). The app runs as one of two compose
+services, `web-blue` and `web-green`. A deploy:
+1. starts the idle one with the new image;
+2. waits for its `/readyz` (the database is reachable);
+3. points Caddy at it (`caddy/upstream` on the server) and reloads Caddy;
+4. after a 60-second drain, stops the old one gracefully.
+
+If the new copy never gets ready, the deploy fails and the old copy keeps serving. Open Blazor circuits on the old copy
+show the reconnect banner once it stops, then reload onto the new one. Holds and sales are in the database, so nothing
+is lost. Background jobs only run in the copy holding a Postgres advisory lock, so the overlap never runs them twice.
+To see which color is live: `cat /opt/drive-in/caddy/upstream`.
 
 ## Workflow
 

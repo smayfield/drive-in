@@ -185,7 +185,7 @@ public class MetricsTests
         using var users = Collect<double>(app, "drivein.users");
         using var owed = Collect<double>(app, "drivein.invoices.outstanding");
         var gauges = new BusinessGauges(app.Services.GetRequiredService<IServiceScopeFactory>(), app.Time,
-            app.Get<IMeterFactory>(), app.Get<DriveInMetrics>(), NullLogger<BusinessGauges>.Instance);
+            app.Get<IMeterFactory>(), app.Get<DriveInMetrics>(), AlwaysLeader.Instance, NullLogger<BusinessGauges>.Instance);
 
         users.RecordObservableInstruments();
         Assert.Empty(users.GetMeasurementSnapshot());

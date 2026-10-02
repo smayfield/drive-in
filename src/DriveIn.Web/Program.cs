@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -94,6 +95,13 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
     options.UseNpgsql(connectionString).UseSnakeCaseNamingConvention(), ServiceLifetime.Scoped);
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
+// Only one running copy of the app does the background jobs (a deploy briefly runs two): the one holding a Postgres lock.
+builder.Services.AddSingleton<IJobLeadership>(sp =>
+    new PostgresJobLeadership(connectionString, sp.GetRequiredService<ILogger<PostgresJobLeadership>>()));
+// /healthz: the process is up (Caddy's health check). /readyz: it can also reach the database (deploy.sh waits for it
+// before sending traffic to a newly started copy).
+builder.Services.AddHealthChecks()
+    .AddCheck<DatabaseHealthCheck>("database", tags: [DatabaseHealthCheck.Tag]);
 
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
     {
@@ -276,6 +284,9 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
+
+app.MapHealthChecks("/healthz", new HealthCheckOptions { Predicate = _ => false });
+app.MapHealthChecks("/readyz", new HealthCheckOptions { Predicate = c => c.Tags.Contains(DatabaseHealthCheck.Tag) });
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()

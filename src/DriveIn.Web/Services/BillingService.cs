@@ -570,9 +570,10 @@ public sealed class BillingService(
     }
 }
 
-// Drafts invoices as months come due: once at startup, then hourly.
+// Drafts invoices as months come due: once at startup, then hourly (by the copy of the app that runs the jobs, so a
+// newly deployed copy may wait up to an hour to take over; drafting is idempotent and not urgent).
 public sealed class BillingJobService(IServiceScopeFactory scopes, TimeProvider time, DriveInMetrics metrics,
-    ILogger<BillingJobService> logger)
+    IJobLeadership leadership, ILogger<BillingJobService> logger)
     : BackgroundService
 {
     public static readonly TimeSpan Interval = TimeSpan.FromHours(1);
@@ -584,6 +585,8 @@ public sealed class BillingJobService(IServiceScopeFactory scopes, TimeProvider 
         {
             try
             {
+                if (!await leadership.IsLeaderAsync(stoppingToken))
+                    continue;
                 await using var scope = scopes.CreateAsyncScope();
                 await scope.ServiceProvider.GetRequiredService<BillingService>().RunScheduledAsync();
             }
