@@ -57,6 +57,9 @@ public class SeatMapAccessibilityTests
             Assert.Equal("button", spot.GetAttribute("role"));
             Assert.Equal("-1", spot.GetAttribute("tabindex")); // lot-map.js gives one of them the tab stop
             Assert.False(spot.HasAttribute("aria-disabled"));
+            // The aria-label is the whole announcement: no <title> to be read again as a description, drawn text hidden.
+            Assert.Null(spot.QuerySelector("title"));
+            Assert.Equal("true", spot.QuerySelector("text.lot-spot-label")!.GetAttribute("aria-hidden"));
         });
         Assert.Equal("1", page.Find("g[aria-label='Spot A3: available']").GetAttribute("data-row"));
         Assert.NotEmpty(page.FindAll("[data-lot-live][aria-live=polite]"));
@@ -166,6 +169,7 @@ public class SeatMapAccessibilityTests
         Assert.Equal("img", map.GetAttribute("role"));
         Assert.False(map.HasAttribute("data-roving"));
         Assert.Empty(page.FindAll("[role=button][data-spot]"));
+        Assert.NotEmpty(page.FindAll("g.lot-spot-group > title"));
         Assert.Empty(page.FindAll("[data-lot-live]"));
     }
 

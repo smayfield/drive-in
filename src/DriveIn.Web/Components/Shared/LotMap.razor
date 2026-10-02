@@ -55,16 +55,22 @@
                            data-row="@(Interactive ? spot.Row.ToString() : null)" data-spot="@(Interactive ? spot.Number.ToString() : null)"
                            data-x="@(Interactive ? N(shape.CenterX) : null)"
                            @onclick="() => ClickAsync(picked)" @key="(spot.Row, spot.Number)">
-                            <title>@shape.Title</title>
+                            @* A spot button's aria-label says it all: a <title> beside it would become its description and be
+                               read a second time, and the drawn text is hidden. Other maps name each spot with the <title>. *@
+                            @if (!Interactive)
+                            {
+                                <title>@shape.Title</title>
+                            }
                             <rect class="lot-spot" x="@N(spot.X)" y="@N(spot.Y)" width="@N(SpotWidth)" height="@N(SpotDepth)" rx="4" />
                             @if (shape.MarkPath is string path)
                             {
-                                <path class="@shape.MarkClass" d="@path" />
+                                <path class="@shape.MarkClass" d="@path" aria-hidden="true" />
                             }
-                            <text class="lot-spot-label" x="@N(shape.CenterX)" y="@N(labelY)" transform="@placed.Upright(shape.CenterX, labelY)">@spot.Label</text>
+                            <text class="lot-spot-label" x="@N(shape.CenterX)" y="@N(labelY)" transform="@placed.Upright(shape.CenterX, labelY)"
+                                  aria-hidden="@AriaHidden">@spot.Label</text>
                             @if (shape.Large)
                             {
-                                <g><text class="lot-large-mark" x="@N(shape.CenterX)" y="@N(shape.MarkY)" transform="@placed.Upright(shape.CenterX, shape.MarkY)">L</text></g>
+                                <g aria-hidden="@AriaHidden"><text class="lot-large-mark" x="@N(shape.CenterX)" y="@N(shape.MarkY)" transform="@placed.Upright(shape.CenterX, shape.MarkY)">L</text></g>
                             }
                         </g>
                     }

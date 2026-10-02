@@ -83,14 +83,24 @@
             live.textContent = `Just changed: ${spot.getAttribute("aria-label")}`;
     }
 
+    // Only changes in or to an interactive map matter; the rest of the page (MudBlazor re-renders, popovers) is ignored.
+    const mapSelector = "svg.lot-map[data-roving]";
+    const touchesMap = m => m.target instanceof Element && m.target.closest(mapSelector) !== null
+        || [...m.addedNodes].some(n => n instanceof Element && (n.matches(mapSelector) || n.querySelector(mapSelector) !== null));
+
     let pending = false;
     const observer = new MutationObserver(mutations => {
+        let relevant = false;
         for (const m of mutations) {
-            if (m.type === "attributes" && m.target === document.activeElement && m.target.matches(spotSelector)
-                && m.oldValue !== m.target.getAttribute("aria-label"))
-                announce(m.target);
+            if (m.type === "attributes") {
+                if (m.target === document.activeElement && m.target.matches(spotSelector)
+                    && m.oldValue !== m.target.getAttribute("aria-label"))
+                    announce(m.target);
+            } else if (!relevant && touchesMap(m)) {
+                relevant = true;
+            }
         }
-        if (!pending) {
+        if (relevant && !pending) {
             pending = true;
             requestAnimationFrame(() => {
                 pending = false;
