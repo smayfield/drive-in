@@ -208,6 +208,9 @@ invitee sets a password or continues with Google using the invited address.
   top of `wwwroot/app.css`; `marketing.css` has its own copy.
 - **Public pages** (theaters, showings, tickets) are the showy ones: a bulb-lit marquee header per theater and
   ticket-stub showings and tickets (`wwwroot/public.css`, `Components/Shared/Stub.razor`). **Manage and admin pages** are meant to stay plain and dense.
+- **Security headers** (CSP and friends) are set by the app for every response, in `Services/SecurityHeaders.cs`. Loading
+  anything from another site (a script, stylesheet, font, frame or API, such as a payment provider's) means adding its
+  host to the policy there, or the browser blocks it.
 - Fonts: Bungee for display headings, Barlow for everything else (both from Google Fonts).
 
 ## Local development

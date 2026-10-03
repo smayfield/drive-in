@@ -302,6 +302,14 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   ticket `Stub` (`public.css`); manage/admin pages are plain dense MudBlazor with `ManageHeader` / `AdminHeader`.
 - Data: PostgreSQL via EF Core, snake_case, migrations in `Data/Migrations`. Interactive components don't hold a DbContext;
   data services use `IDbContextFactory`, services that use `UserManager` open a DI scope per call.
+- Security headers (`Services/SecurityHeaders.cs`, after the exception handler so error pages get them too) on every app
+  response: a CSP (`script-src 'self'` plus a per-request nonce on Blazor's import map, the only inline script; inline
+  styles allowed for MudBlazor and Quill; images `self`, `data:`, `blob:`; `connect-src 'self'` for the circuit;
+  `form-action` adds accounts.google.com for Google sign-in's redirect; `frame-ancestors 'none'`, `object-src 'none'`,
+  `base-uri 'self'`), `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`,
+  `Cross-Origin-Opener-Policy: same-origin` and a `Permissions-Policy` (camera, geolocation and payment for this site only;
+  microphone and USB off). A new third-party script, style, font, frame or API host must be added to the CSP there.
+  Grafana (`/grafana/`) is proxied by Caddy and keeps its own headers. HSTS comes from `UseHsts` in production.
 - Deploy: merge to `main` runs tests, builds ARM64 images, runs an EF migration bundle, then deploys via SSM; Caddy fronts the app.
   Nightly `pg_dump` (30 days) plus daily EBS snapshots (7). Metrics and alerts: see section 14.
 - Logs: every container's console output goes to CloudWatch Logs (`/drive-in/containers`, 30 days; Docker's `awslogs`
