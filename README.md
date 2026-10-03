@@ -19,7 +19,7 @@ For the full list of features and behaviors (rules, limits, routes, permission k
 | `infra/dns.yml` | CloudFormation: Route 53 hosted zone. |
 | `infra/email.yml` | CloudFormation: SES domain identity (DKIM, MAIL FROM). |
 | `infra/mail.yml` | CloudFormation: inbound mail. Any address at the domain is forwarded to one mailbox (SES receiving, S3, a small Lambda). |
-| `infra/app.yml` | CloudFormation: VPC, EC2, EIP, ECR, ops bucket, snapshots, container log group, DNS records, alerts topic and alarms, GitHub deploy role. |
+| `infra/app.yml` | CloudFormation: VPC, EC2, EIP, ECR, ops bucket, snapshots, container log group, image CDN (`img.` S3 + CloudFront), DNS records, alerts topic and alarms, GitHub deploy role. |
 | `.github/workflows/deploy.yml` | On merge to `main`: test, build ARM64 images, deploy via SSM. |
 
 ## Accounts and permissions
@@ -79,6 +79,12 @@ invitee sets a password or continues with Google using the invited address.
   from the file's bytes (no SVG). It's stored in the database (`theater_logos`, so backups include it) and served from
   `/theaters/{slug}/logo` to signed-in users who can browse that theater (demo theaters: members only). It shows on the
   theaters list and the theater's page.
+- **Image CDN**: live theaters' logos, posters and page images are also copied to `https://img.drive-in.online/` (an S3
+  bucket behind CloudFront, `infra/app.yml`). Their usual app URLs redirect there, so the bytes come from the CDN rather
+  than the server. The database stays the source of truth (and what backups cover). A copy is made within about two
+  minutes of an upload or of a theater going live; until then the app serves the image itself. When a theater stops
+  being public, its URLs stop redirecting at once and the copies are deleted on the next sync. Details in
+  [features.md](features.md).
 
 ## Pricing
 

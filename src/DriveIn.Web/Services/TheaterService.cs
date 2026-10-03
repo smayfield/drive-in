@@ -166,6 +166,7 @@ public sealed class TheaterService(
             db.TheaterLogos.Add(logo = new TheaterLogo { TheaterId = theaterId });
         logo.ContentType = contentType;
         logo.Data = data;
+        logo.CdnKey = null; // the old public copy is the old logo (PublicImagePublisher makes a new one)
         theater.LogoUpdatedAt = time.GetUtcNow();
         theater.UpdatedAt = theater.LogoUpdatedAt.Value;
         await db.SaveChangesAsync();
