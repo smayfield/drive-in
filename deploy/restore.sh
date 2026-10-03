@@ -20,7 +20,8 @@ cd "$DIR"
 
 log() { echo "==> $*"; }
 die() { echo "restore: $*" >&2; exit 1; }
-compose() { docker compose -f "$COMPOSE_FILE" --env-file .env "$@"; }
+# Always the same project as the labels, network and container names below use (and the compose file's own name:).
+compose() { docker compose -p "$PROJECT" -f "$COMPOSE_FILE" --env-file .env "$@"; }
 psql_live() { compose exec -T postgres psql -qtAX -U drivein -d "${2:-drivein}" -c "$1"; }
 
 YES=0
