@@ -73,6 +73,14 @@ wait_promoted() {
   die "PostgreSQL didn't finish recovery in 10 minutes. Check: docker logs <container>."
 }
 
+# A backup named as `list` prints it (drive-in-....dump) or as its full key (backups/drive-in-....dump); "latest" as is.
+backup_key() {
+  case "$1" in
+    latest | backups/*) echo "$1" ;;
+    *) echo "backups/$1" ;;
+  esac
+}
+
 latest_key() {
   # $1: object name prefix under backups/ (drive-in- or dpkeys-)
   aws s3 ls "s3://$BUCKET/backups/$1" --region "$REGION" | awk '{print $4}' | sort | tail -1 | sed 's#^#backups/#'
@@ -153,7 +161,7 @@ The web app is down until it's done."
     ;;
 
   dump)
-    KEY=$TARGET
+    KEY=$(backup_key "$TARGET")
     [ "$KEY" = latest ] && KEY=$(latest_key drive-in-)
     [ -n "$KEY" ] || die "No pg_dump found in s3://$BUCKET/backups/."
     confirm "This replaces the live database with s3://$BUCKET/$KEY. Everything since that dump is lost
@@ -179,7 +187,7 @@ The web app is down until it's done."
     ;;
 
   dpkeys)
-    KEY=$TARGET
+    KEY=$(backup_key "$TARGET")
     [ "$KEY" = latest ] && KEY=$(latest_key dpkeys-)
     [ -n "$KEY" ] || die "No Data Protection keys backup found in s3://$BUCKET/backups/."
     confirm "This replaces the Data Protection keys with s3://$BUCKET/$KEY. The web app restarts."
