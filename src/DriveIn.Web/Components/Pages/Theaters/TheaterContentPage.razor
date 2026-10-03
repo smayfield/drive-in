@@ -1,15 +1,18 @@
 @page "/theaters/{Slug}/pages/{PageSlug}"
 @page "/theaters/{Slug}/news/{PostSlug}"
-@* A theater's own page or post, public like the theater's page. Staff who manage its content also see drafts and
-   scheduled items here, marked as a preview. *@
+@attribute [ExcludeFromInteractiveRouting]
+@layout PublicLayout
+@* A theater's own page or post, public like the theater's page and statically rendered like it. Staff who manage its
+   content also see drafts and scheduled items here, marked as a preview (they're signed in by cookie, so the preview
+   needs no live connection either). *@
 @inject ContentService Content
 
 @if (loaded && content is null)
 {
     <PageTitle>Page not found · Drive-In Online</PageTitle>
-    <MudText Typo="Typo.h3" HtmlTag="h1" Class="mb-2">Page not found</MudText>
-    <MudText Class="mb-2">This page doesn't exist, or isn't published.</MudText>
-    <MudLink Href="@($"theaters/{Slug}")">Back to the theater</MudLink>
+    <h1 class="mb-2">Page not found</h1>
+    <p class="mb-2">This page doesn't exist, or isn't published.</p>
+    <a href="@($"theaters/{Slug}")">Back to the theater</a>
 }
 else if (content is not null)
 {
@@ -33,14 +36,14 @@ else if (content is not null)
 
     @if (content.IsPreview)
     {
-        <MudAlert Severity="Severity.Info" Class="mb-3">
+        <div class="alert alert-info mb-3" role="status">
             Preview: only staff can see this. It's @(content.Status switch
             {
                 PageStatus.Scheduled => $"scheduled for {TheaterTime.ToLocal(content.Theater, content.PublishAt!.Value):MMMM d, h:mm tt}",
                 PageStatus.Ended => "no longer published",
                 _ => "a draft",
             }).
-        </MudAlert>
+        </div>
     }
 
     <article class="theater-article">
@@ -67,7 +70,7 @@ else if (content is not null)
 
     @if (content.Kind == PageKind.Post)
     {
-        <MudLink Href="@($"theaters/{Slug}/news")" Class="d-inline-block mt-4">&larr; All news &amp; events</MudLink>
+        <a href="@($"theaters/{Slug}/news")" class="d-inline-block mt-4">&larr; All news &amp; events</a>
     }
 }
 
@@ -93,7 +96,7 @@ else if (content is not null)
             ? await Content.GetPageAsync(user, Slug, PageKind.Page, PageSlug)
             : await Content.GetPageAsync(user, Slug, PageKind.Post, PostSlug ?? "");
         loaded = true;
-        // While prerendering, say so to crawlers too.
+        // Say so to crawlers too.
         if (content is null && HttpContext is { Response.HasStarted: false })
             HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
     }

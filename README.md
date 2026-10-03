@@ -199,15 +199,19 @@ invitee sets a password or continues with Google using the invited address.
 ## Look and feel
 
 - **MudBlazor** (MIT, free for commercial use) provides the components for every signed-in page; the app shell is
-  `Components/Layout/AppLayout.razor`. Marketing pages, legal pages and the Identity account pages stay statically
-  rendered (fast, indexable, and Identity needs the HTTP response) with plain CSS (`wwwroot/static.css`); they are marked
-  `[ExcludeFromInteractiveRouting]`.
+  `Components/Layout/AppLayout.razor`. Marketing pages, legal pages, the Identity account pages and a theater's public pages
+  (its page, its own pages and posts, its news) stay statically rendered (fast, indexable, no live connection held per
+  visitor, and Identity needs the HTTP response) with plain CSS (`wwwroot/static.css`, `public.css`); they are marked
+  `[ExcludeFromInteractiveRouting]`. The showing (spot map), checkout and ticket pages are interactive.
 - **Light and dark** follow the visitor's browser or OS setting, with no toggle. `wwwroot/theme.js` runs before first paint and
   remembers the choice in a `di-scheme` cookie, so the server prerenders the right palette next time (the first-ever visit
   from a dark device may flash light for a moment). The palettes live in `Layout/DriveInTheme.cs` (MudBlazor) and at the
   top of `wwwroot/app.css`; `marketing.css` has its own copy.
 - **Public pages** (theaters, showings, tickets) are the showy ones: a bulb-lit marquee header per theater and
   ticket-stub showings and tickets (`wwwroot/public.css`, `Components/Shared/Stub.razor`). **Manage and admin pages** are meant to stay plain and dense.
+- **Security headers** (CSP and friends) are set by the app for every response, in `Services/SecurityHeaders.cs`. Loading
+  anything from another site (a script, stylesheet, font, frame or API, such as a payment provider's) means adding its
+  host to the policy there, or the browser blocks it.
 - Fonts: Bungee for display headings, Barlow for everything else (both from Google Fonts).
 
 ## Local development
@@ -239,6 +243,20 @@ before the new app version starts; if a migration fails, the old version keeps r
 ## Workflow
 
 All changes go through a feature branch and a pull request; nothing is committed to `main` directly.
+Every pull request to `main` is built and tested by `.github/workflows/ci.yml` (job `build-and-test`: Release build,
+`dotnet test`, and a build of the web image). Make that job a required status check so a failing PR can't be merged:
+
+```sh
+gh api -X PUT repos/smayfield/drive-in/branches/main/protection --input - <<'EOF'
+{
+  "required_status_checks": { "strict": false, "contexts": ["build-and-test"] },
+  "enforce_admins": false,
+  "required_pull_request_reviews": null,
+  "restrictions": null
+}
+EOF
+```
+
 Merging to `main` runs `.github/workflows/deploy.yml`, which assumes the IAM role
 `drive-in-app-deploy` via OIDC (no stored AWS keys) and reads these repo **variables**:
 `AWS_ROLE_ARN`, `ECR_REGISTRY`, `OPS_BUCKET`, `INSTANCE_ID` (from the `drive-in-app` stack outputs).

@@ -200,10 +200,89 @@ public class PublicTheaterPageTests
     public async Task An_unknown_theater_is_not_found()
     {
         await using var app = new TestApp();
-        await using var host = new PageHost(app).SignIn(await TicketSalesTests.BuyerAsync(app));
+        await using var host = new PageHost(app).SignIn(await TicketSalesTests.BuyerAsync(app)).UseRequest();
 
         var page = host.Render<Details>(p => p.Add(x => x.Slug, "nowhere"));
 
         page.WaitForText("Theater not found");
+        Assert.Equal(404, host.Request.Response.StatusCode);
+    }
+
+    // Visitors and crawlers read these without a live connection to the server (no Blazor circuit).
+    [Theory]
+    [InlineData(typeof(Details))]
+    [InlineData(typeof(TheaterContentPage))]
+    [InlineData(typeof(TheaterNews))]
+    public void The_public_theater_pages_are_statically_rendered(Type page)
+    {
+        Assert.NotNull(page.GetCustomAttributes(typeof(Microsoft.AspNetCore.Components.ExcludeFromInteractiveRoutingAttribute), false).SingleOrDefault());
+        var layout = (Microsoft.AspNetCore.Components.LayoutAttribute)page.GetCustomAttributes(typeof(Microsoft.AspNetCore.Components.LayoutAttribute), false).Single();
+        Assert.Equal(typeof(DriveIn.Web.Components.Layout.PublicLayout), layout.LayoutType);
+    }
+
+    [Fact]
+    public async Task A_visitor_who_isnt_signed_in_sees_the_page_and_is_asked_to_sign_in_to_buy()
+    {
+        var s = await PlacedAsync();
+        await using var host = new PageHost(s.App).UseRequest();
+
+        var page = host.Render<Details>(p => p.Add(x => x.Slug, "starlight"));
+
+        page.WaitForText("Jaws");
+        Assert.Contains("Sign in to buy", page.Text());
+        Assert.Contains($"theaters/starlight/showings/{s.Showing.Id}", page.Markup);
+        Assert.Contains("Message the theater", page.Text());
+    }
+
+    [Fact]
+    public async Task The_showings_dont_wait_for_a_slow_forecast()
+    {
+        var s = await PlacedAsync();
+        var pending = new TaskCompletionSource<HourlyForecast?>();
+        s.App.Weather.Pending = pending;
+        await using var host = await BuyerHostAsync(s);
+
+        var page = host.Render<Details>(p => p.Add(x => x.Slug, "starlight"));
+
+        page.WaitForText("Jaws");
+        Assert.DoesNotContain("Forecast:", page.Text());
+
+        var start = new DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero);
+        pending.SetResult(new HourlyForecast(Enumerable.Range(0, 16 * 24)
+            .Select(i => new ForecastHour(start.AddHours(i), 22, 0, 0, 5)).ToList()));
+        page.WaitForText("Forecast:");
+    }
+
+    [Fact]
+    public async Task A_visitor_who_leaves_stops_the_forecast_request()
+    {
+        var s = await PlacedAsync();
+        s.App.Weather.Pending = new TaskCompletionSource<HourlyForecast?>();
+        await using var host = await BuyerHostAsync(s);
+        using var leaving = new CancellationTokenSource();
+        host.Request.RequestAborted = leaving.Token;
+
+        var page = host.Render<Details>(p => p.Add(x => x.Slug, "starlight"));
+        page.WaitForText("Jaws");
+        Assert.Empty(page.FindComponents<DriveIn.Web.Components.Shared.WeatherLine>());
+
+        leaving.Cancel();
+        // The streamed line settles (its WeatherLine renders, empty) instead of waiting forever or failing the render.
+        page.WaitForAssertion(() => Assert.Single(page.FindComponents<DriveIn.Web.Components.Shared.WeatherLine>()));
+        Assert.DoesNotContain("Forecast:", page.Text());
+    }
+
+    [Fact]
+    public async Task A_failing_forecast_leaves_the_showings_without_one()
+    {
+        var s = await PlacedAsync();
+        s.App.Weather.Failure = new InvalidOperationException("weather is down");
+        await using var host = await BuyerHostAsync(s);
+
+        var page = host.Render<Details>(p => p.Add(x => x.Slug, "starlight"));
+
+        page.WaitForText("Jaws");
+        Assert.Contains("Choose a spot", page.Text());
+        Assert.DoesNotContain("Forecast:", page.Text());
     }
 }
