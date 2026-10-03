@@ -1,5 +1,7 @@
 /* The public, guest-facing pages: theaters, showings and tickets. One bold idea, the marquee and the ticket stub;
-   everything around it stays plain. Colors come from the MudBlazor palette variables, so both themes work. */
+   everything around it stays plain. Colors come from the theme tokens at the top of app.css (not MudBlazor's palette
+   variables), so these rules work on both the statically rendered pages (a theater's page, its pages and posts, the
+   theater list) and the interactive ones (a showing, a ticket), in both themes. */
 
 /* --- Marquee: the theater's sign. Always night, in both themes. --- */
 .marquee-header {
@@ -52,9 +54,9 @@
     display: grid;
     grid-template-columns: auto 1fr auto;
     margin-bottom: 0.9rem;
-    border: 1px solid var(--mud-palette-lines-default);
+    border: 1px solid var(--di-line);
     border-radius: 10px;
-    background: var(--mud-palette-surface);
+    background: var(--di-surface);
 }
 .stub:not(:has(.stub-poster)) { grid-template-columns: 1fr auto; }
 .stub:not(:has(.stub-cut)) { grid-template-columns: auto 1fr; }
@@ -65,11 +67,11 @@
 
 .stub-main { min-width: 0; padding: 0.9rem 1.1rem; }
 .stub-title { margin: 0 0 0.2rem; font-size: 1.25rem; font-weight: 700; line-height: 1.2; }
-.stub-meta { margin: 0; color: var(--mud-palette-text-secondary); }
-.stub-detail { margin-top: 0.4rem; color: var(--mud-palette-text-secondary); font-size: 0.9375rem; }
+.stub-meta { margin: 0; color: var(--di-muted); }
+.stub-detail { margin-top: 0.4rem; color: var(--di-muted); font-size: 0.9375rem; }
 .stub-detail details { margin-top: 0.25rem; }
-.stub-detail summary { cursor: pointer; color: var(--mud-palette-secondary); }
-.stub-detail p { margin: 0.35rem 0 0; color: var(--mud-palette-text-primary); white-space: pre-line; }
+.stub-detail summary { cursor: pointer; color: var(--di-accent); }
+.stub-detail p { margin: 0.35rem 0 0; color: var(--di-ink); white-space: pre-line; }
 
 /* The tear-off end: a dashed perforation with a notch at each end. */
 .stub-cut {
@@ -81,7 +83,7 @@
     gap: 0.5rem;
     min-width: 10rem;
     padding: 0.9rem 1.25rem;
-    border-left: 2px dashed color-mix(in srgb, var(--mud-palette-text-secondary) 45%, transparent);
+    border-left: 2px dashed color-mix(in srgb, var(--di-muted) 45%, transparent);
     text-align: center;
 }
 .stub-cut::before,
@@ -91,9 +93,9 @@
     left: -0.7rem;
     width: 1.4rem;
     height: 1.4rem;
-    border: 1px solid var(--mud-palette-lines-default);
+    border: 1px solid var(--di-line);
     border-radius: 50%;
-    background: var(--mud-palette-background);
+    background: var(--di-bg);
 }
 .stub-cut::before { top: -0.7rem; clip-path: inset(50% 0 0 0); }
 .stub-cut::after { bottom: -0.7rem; clip-path: inset(0 0 50% 0); }
@@ -102,14 +104,14 @@
     font-family: "Bungee", system-ui, sans-serif;
     font-size: 1.5rem;
     line-height: 1;
-    color: var(--mud-palette-primary);
+    color: var(--di-primary);
 }
-.stub-note { font-size: 0.875rem; color: var(--mud-palette-text-secondary); }
+.stub-note { font-size: 0.875rem; color: var(--di-muted); }
 
 @media (max-width: 599.98px) {
     .stub, .stub:not(:has(.stub-poster)), .stub:not(:has(.stub-cut)) { grid-template-columns: auto 1fr; }
     .stub:not(:has(.stub-poster)) { grid-template-columns: 1fr; }
-    .stub-cut { grid-column: 1 / -1; flex-direction: row; justify-content: space-between; min-width: 0; border-left: 0; border-top: 2px dashed color-mix(in srgb, var(--mud-palette-text-secondary) 45%, transparent); }
+    .stub-cut { grid-column: 1 / -1; flex-direction: row; justify-content: space-between; min-width: 0; border-left: 0; border-top: 2px dashed color-mix(in srgb, var(--di-muted) 45%, transparent); }
     .stub-cut::before, .stub-cut::after { top: -0.7rem; bottom: auto; }
     .stub-cut::before { left: -0.7rem; clip-path: inset(0 0 0 50%); }
     .stub-cut::after { left: auto; right: -0.7rem; clip-path: inset(0 50% 0 0); }
@@ -127,7 +129,7 @@
 .theater-card-name a { color: inherit; text-decoration: none; }
 .theater-card-name a:hover { text-decoration: underline; }
 .theater-card-body { flex: 1; padding: 0.9rem 1rem; }
-.theater-card-distance { display: inline-block; margin-left: 0.4rem; font-weight: 600; color: var(--mud-palette-secondary); }
+.theater-card-distance { display: inline-block; margin-left: 0.4rem; font-weight: 600; color: var(--di-accent); }
 
 /* --- Near-me search (theater list) --- */
 .near-search { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; }
@@ -136,27 +138,40 @@
 
 /* --- Weather (showing stubs, showing and ticket pages) --- */
 .weather-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.5rem; margin: 0.4rem 0 0; font-size: 0.9rem; }
-.weather-line .mud-icon-root { color: var(--di-accent); }
-.weather-rough .mud-icon-root { color: var(--mud-palette-warning); }
+.weather-icon { flex: none; width: 1.25rem; height: 1.25rem; fill: var(--di-accent); }
+.weather-rough .weather-icon { fill: var(--di-warning); }
+.weather-warn {
+    padding: 0.05rem 0.6rem; border: 1px solid var(--di-warning); border-radius: 999px;
+    color: var(--di-warning); font-size: 0.8125rem; font-weight: 600;
+}
 
 /* --- Ticket (a guest's ticket page) --- */
 .ticket-hero { text-align: center; }
-.ticket-spot { font-family: "Bungee", system-ui, sans-serif; font-size: 2.4rem; line-height: 1; color: var(--mud-palette-primary); }
+.ticket-spot { font-family: "Bungee", system-ui, sans-serif; font-size: 2.4rem; line-height: 1; color: var(--di-primary); }
 
 @media (prefers-reduced-motion: reduce) {
     * { scroll-behavior: auto !important; }
     .marquee-header::before, .marquee-header::after { animation: none; }
 }
 
-.stub-feature + .stub-feature { margin-top: 1rem; padding-top: 0.9rem; border-top: 1px solid var(--mud-palette-lines-default); }
-.stub-year { font-weight: 500; color: var(--mud-palette-text-secondary); }
+.stub-feature + .stub-feature { margin-top: 1rem; padding-top: 0.9rem; border-top: 1px solid var(--di-line); }
+.stub-year { font-weight: 500; color: var(--di-muted); }
+.stub-rating {
+    display: inline-block; margin-left: 0.35rem; padding: 0 0.5rem; border: 1px solid var(--di-line-strong); border-radius: 999px;
+    font-size: 0.8125rem; font-weight: 600; line-height: 1.5; vertical-align: 0.15em;
+}
 
 /* Ticket options and add-ons: the label fills the row so the price sits at the right edge. */
 .tc-line { margin: 0 !important; }
 .tc-line .mud-typography { width: 100%; }
 .tc-label { width: 100%; }
 
-.muted { color: var(--mud-palette-text-secondary); }
+.muted { color: var(--di-muted); }
+
+/* --- The statically rendered public pages (PublicLayout) --- */
+.public-main { padding-block: 1.5rem; }
+.public-columns { row-gap: 1rem; }
+.public-note { padding: 0.75rem 1rem; border: 1px solid var(--di-line-strong); border-radius: 6px; }
 
 /* --- The theater's own menu, under its marquee (TheaterMasthead) --- */
 .marquee-header:has(+ .theater-nav) { margin-bottom: 0.75rem; }
@@ -168,17 +183,17 @@ a.marquee-title-link:hover { text-decoration: underline; text-decoration-thickne
     gap: 0.25rem 0.5rem;
     margin-bottom: 1.5rem;
     padding-bottom: 0.5rem;
-    border-bottom: 1px solid var(--mud-palette-lines-default);
+    border-bottom: 1px solid var(--di-line);
 }
 .theater-nav-link {
     padding: 0.35rem 0.8rem;
     border-radius: 999px;
-    color: var(--mud-palette-text-primary);
+    color: var(--di-ink);
     font-weight: 600;
     text-decoration: none;
 }
-.theater-nav-link:hover { background: var(--mud-palette-action-default-hover); }
-.theater-nav-link.active { background: var(--mud-palette-primary); color: var(--mud-palette-primary-text); }
+.theater-nav-link:hover { background: color-mix(in srgb, var(--di-ink) 8%, transparent); }
+.theater-nav-link.active { background: var(--di-primary); color: var(--di-on-primary); }
 
 /* --- A theater's pages and posts --- */
 .theater-article { max-width: 46rem; }
@@ -196,11 +211,11 @@ a.marquee-title-link:hover { text-decoration: underline; text-decoration-thickne
 .theater-content h3 { font-size: 1.25rem; }
 .theater-content h4 { font-size: 1.0625rem; }
 .theater-content ul, .theater-content ol { padding-left: 1.5rem; }
-.theater-content a { color: var(--mud-palette-primary); }
+.theater-content a { color: var(--di-primary); }
 .theater-content blockquote {
-    padding: 0.25rem 0 0.25rem 1rem; border-left: 4px solid var(--mud-palette-primary); color: var(--mud-palette-text-secondary);
+    padding: 0.25rem 0 0.25rem 1rem; border-left: 4px solid var(--di-primary); color: var(--di-muted);
 }
-.theater-content hr { border: 0; border-top: 1px solid var(--mud-palette-lines-default); margin: 1.5rem 0; }
+.theater-content hr { border: 0; border-top: 1px solid var(--di-line); margin: 1.5rem 0; }
 .theater-content .ql-align-center { text-align: center; }
 .theater-content .ql-align-right { text-align: right; }
 .theater-content .ql-align-justify { text-align: justify; }
@@ -228,9 +243,9 @@ a.marquee-title-link:hover { text-decoration: underline; text-decoration-thickne
 .news-card {
     display: grid;
     grid-template-columns: 1fr;
-    border: 1px solid var(--mud-palette-lines-default);
+    border: 1px solid var(--di-line);
     border-radius: 10px;
-    background: var(--mud-palette-surface);
+    background: var(--di-surface);
     overflow: hidden;
 }
 .news-card.has-cover { grid-template-columns: 11rem 1fr; }
@@ -239,10 +254,10 @@ a.marquee-title-link:hover { text-decoration: underline; text-decoration-thickne
 .news-card-title { margin: 0 0 0.2rem; font-size: 1.2rem; font-weight: 700; line-height: 1.25; }
 .news-card-title a { color: inherit; text-decoration: none; }
 .news-card-title a:hover { text-decoration: underline; }
-.news-card-meta { margin: 0 0 0.4rem; color: var(--mud-palette-text-secondary); font-size: 0.9375rem; }
-.news-pin { color: var(--mud-palette-primary); font-weight: 600; }
+.news-card-meta { margin: 0 0 0.4rem; color: var(--di-muted); font-size: 0.9375rem; }
+.news-pin { color: var(--di-primary); font-weight: 600; }
 .news-card-summary { margin: 0 0 0.4rem; }
-.news-card-more { color: var(--mud-palette-primary); font-weight: 600; }
+.news-card-more { color: var(--di-primary); font-weight: 600; }
 @media (max-width: 600px) {
     .news-card.has-cover { grid-template-columns: 1fr; }
     .news-card-cover img { max-height: 12rem; }

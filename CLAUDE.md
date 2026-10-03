@@ -7,13 +7,15 @@ See README.md for the full picture. Conventions worth knowing before changing co
   removes one updates it (and the README only when setup or infrastructure changes).
 - **One app**: `src/DriveIn.Web` (Blazor Web App). `Routes` is interactive by default; pages marked
   `[ExcludeFromInteractiveRouting]` stay static SSR: the Identity account pages under `Components/Account` (they need
-  the HTTP response for cookies), marketing and legal pages, Invite, Error and NotFound. So don't put `@rendermode` on pages.
+  the HTTP response for cookies), marketing and legal pages, Invite, Error and NotFound, and the public theater pages
+  (`Theaters/Details`, `TheaterContentPage`, `TheaterNews`, in `PublicLayout`, so anonymous visitors and crawlers don't open a
+  circuit). So don't put `@rendermode` on pages.
 - **UI:** MudBlazor (MIT) for every interactive page, in `AppLayout`. Static pages use `AccountLayout` /
   `MarketingLayout` and plain CSS instead, since MudBlazor needs an interactive circuit. Light and dark follow the
   OS: `wwwroot/theme.js` sets `data-theme` and a `di-scheme` cookie (so the server prerenders the right palette),
   and `MudThemeProvider` follows the system. Keep `Layout/DriveInTheme.cs`, the tokens at the top of `wwwroot/app.css`
   and `marketing.css` in step. Public pages (theaters, showings, tickets) are the flashy ones (`wwwroot/public.css`: the
-  marquee header and the ticket `Stub`); manage and admin pages stay plain, dense MudBlazor. Gotchas: use
+  marquee header and the ticket `Stub`; it uses the `app.css` tokens, not `--mud-palette-*`, since it styles static and interactive pages); manage and admin pages stay plain, dense MudBlazor. Gotchas: use
   `Class="muted"` for muted text (`Color.Secondary` is the teal accent); copy a `@for` variable into a local before using
   it inside a component's child content (it's rendered after the loop moves on); MudBlazor's `lg` breakpoint is 1280px,
   not the 992px of the old Bootstrap grid; on a Mud input, `Style` lands on the inner input root, so use `Class` (see `.field-grow` in `manage.css`) for
