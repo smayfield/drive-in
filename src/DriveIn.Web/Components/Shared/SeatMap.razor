@@ -1,30 +1,51 @@
 @* A showing's spots on its screen: available, on hold, sold, or held by the viewer. Available spots raise OnPick when CanPick.
-   With Vehicle = Large, spots not marked for large vehicles can't be picked. Current marks a sold ticket's spot (e.g. while moving it). *@
+   With Vehicle = Large, spots not marked for large vehicles can't be picked. Current marks a sold ticket's spot (e.g. while moving it).
+   Besides the map (arrow keys move between its spots), a picker can take the best available spot (SpotChoice.Best) or choose one
+   from a list, which is easier with a screen reader or on a small screen. A polite live region says when the viewer's hold
+   starts or ends. *@
 
-<div class="spot-legend mb-2" aria-hidden="true">
-    <span class="spot-available">Available</span>
-    <span class="spot-held">On hold</span>
-    <span class="spot-sold">Sold</span>
-    <span class="spot-mine">@MineLabel</span>
+<ul class="spot-legend list-unstyled mb-2" aria-label="Map key">
+    <li class="spot-available">Available</li>
+    <li class="spot-held">On hold</li>
+    <li class="spot-sold">Sold</li>
+    <li class="spot-mine">@MineLabel</li>
     @if (Screen.HasSizeLimits)
     {
         @if (Screen.LargeSpots.Count > 0)
         {
-            <span class="spot-large">Large vehicles OK</span>
+            <li class="spot-large">Large vehicles OK</li>
         }
         @if (Vehicle == VehicleSize.Large)
         {
-            <span class="spot-unfit">Cars only</span>
+            <li class="spot-unfit">Cars only</li>
         }
     }
-</div>
+</ul>
 @if (Vehicle == VehicleSize.Large && Screen.LargeSpots.Count == 0)
 {
     <MudAlert Severity="Severity.Warning" Dense Class="mb-2">
         This screen has no spots for large vehicles, so a large SUV, pickup or van can't park here.
     </MudAlert>
 }
-<LotMap Screens="[Screen]" SpotStatus="StatusOf" OnSpotClick="OnPick" />
+@if (Picking)
+{
+    var free = SpotChoice.Available(Screen, Availability, Vehicle).ToList();
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" Disabled="@(free.Count == 0)" OnClick="PickBestAsync">
+            Best available
+        </MudButton>
+        <MudSelect T="string" Value="listChoice" ValueChanged="PickFromListAsync" Label="Or choose a spot" Variant="Variant.Outlined"
+                   Margin="Margin.Dense" Dense Disabled="@(free.Count == 0)" Class="spot-list" MaxHeight="320">
+            @foreach (var (row, spot) in free)
+            {
+                var key = $"{row}-{spot}";
+                <MudSelectItem T="string" Value="@key">@ListLabel(row, spot)</MudSelectItem>
+            }
+        </MudSelect>
+    </div>
+}
+<LotMap Screens="[Screen]" SpotStatus="StatusOf" OnSpotClick="OnPick" Label="@Summary" />
+<div class="visually-hidden" role="status" aria-live="polite">@announcement</div>
 
 @code {
     [Parameter, EditorRequired] public Screen Screen { get; set; } = default!;
@@ -35,6 +56,40 @@
     [Parameter] public VehicleSize Vehicle { get; set; }
     [Parameter] public (int Row, int Spot)? Current { get; set; }
 
+    private string? listChoice;
+    private string? announcement;
+    private HoldView? lastHold;
+    private bool seenAvailability;
+
+    private bool Picking => CanPick && OnPick.HasDelegate;
+
+    // The map's accessible name: the screen and how many spots are free (for this vehicle, when that narrows it).
+    private string Summary
+    {
+        get
+        {
+            var free = Screen.SpotCount - Availability.Spots.Count;
+            var text = $"Spots at {Screen.Name}: {free} of {Screen.SpotCount} available";
+            if (Vehicle == VehicleSize.Large && Screen.HasSizeLimits)
+                text += $", {SpotChoice.Available(Screen, Availability, Vehicle).Count()} of them for large vehicles";
+            return text;
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        // Announce the viewer's own hold starting or ending (it runs out, they release it, or it becomes a ticket). The first
+        // load isn't news: the page already says so.
+        var hold = Availability.MyHold;
+        if (seenAvailability && hold?.TicketId != lastHold?.TicketId)
+        {
+            announcement = hold is not null
+                ? $"Spot {hold.SpotLabel} is on hold for you."
+                : $"Spot {lastHold!.SpotLabel} is no longer on hold for you.";
+        }
+        (lastHold, seenAvailability) = (hold, true);
+    }
+
     private LotSpotStatus? StatusOf(int row, int spot)
     {
         if (Current == (row, spot))
@@ -42,12 +97,35 @@
         return Availability[row, spot] switch
         {
             // While moving a ticket, the viewer's own holds (e.g. a gate sale in progress) aren't this car.
-            SpotState.Mine when Current is not null => new("spot-held", "on hold", false),
+            SpotState.Mine when Current is not null => new("spot-held", "on hold", false, LotSpotMark.Hatch),
             SpotState.Mine => new("spot-mine", MineLabel.ToLowerInvariant(), false),
-            SpotState.Held => new("spot-held", "on hold for another buyer", false),
-            SpotState.Sold => new("spot-sold", "sold", false),
+            SpotState.Held => new("spot-held", "on hold for another buyer", false, LotSpotMark.Hatch),
+            SpotState.Sold => new("spot-sold", "sold", false, LotSpotMark.Cross),
             _ when !Screen.Fits(row, spot, Vehicle) => new("spot-unfit", "available, but not for large vehicles", false),
             _ => new("spot-available", "available", CanPick),
         };
     }
+
+    private string ListLabel(int row, int spot)
+    {
+        var label = SpotLabels.Spot(Screen.LabelScheme, row, spot);
+        var large = Screen.HasSizeLimits && Screen.AllowsLarge(row, spot) ? ", large vehicles OK" : "";
+        return $"{label} (row {SpotLabels.Row(Screen.LabelScheme, row)}{large})";
+    }
+
+    private Task PickBestAsync() =>
+        SpotChoice.Best(Screen, Availability, Vehicle) is var (row, spot) ? PickAsync(row, spot) : Task.CompletedTask;
+
+    private async Task PickFromListAsync(string? key)
+    {
+        listChoice = null; // the list is for choosing, not a lasting setting: the map and the page show what was picked
+        var parts = key?.Split('-');
+        if (parts is [var row, var spot] && int.TryParse(row, out var r) && int.TryParse(spot, out var s))
+            await PickAsync(r, s);
+    }
+
+    private Task PickAsync(int row, int spot) =>
+        Screen.Contains(row, spot)
+            ? OnPick.InvokeAsync(new LotSpot(0, 0, row, spot, SpotLabels.Spot(Screen.LabelScheme, row, spot)))
+            : Task.CompletedTask;
 }

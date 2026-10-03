@@ -24,8 +24,9 @@ For the full list of features and behaviors (rules, limits, routes, permission k
 
 ## Accounts and permissions
 
-- **Users** register with email + password (confirmed by email) or sign in with Google. Every signed-in
-  user can browse all theaters. Google sign-in links automatically to an existing confirmed account
+- **Users** register with email + password (confirmed by email) or sign in with Google. Anyone, signed in
+  or not, can browse the live theaters (the list, near-me search and each theater's pages); buying needs an
+  account. Google sign-in links automatically to an existing confirmed account
   with the same verified email; links can also be managed under Account → External logins.
 - **Admin** is the only role. The account whose email matches `Seed:AdminEmail` (SSM
   `/drive-in/admin-email`) becomes admin when it signs in, so the first admin just registers.
@@ -95,11 +96,13 @@ invitee sets a password or continues with Google using the invited address.
 
 - Any signed-in user can buy tickets online: Theaters → a theater → a showing → **choose a spot** on the screen's
   map. A ticket is one spot (one car) at one showing.
-- Customers can find **theaters near them** by ZIP code, city or their browser's location. Theater coordinates are
+- Customers can find **theaters near them** by ZIP code, city or their browser's location, without signing in (the list
+  is a static page; the ZIP/city search works without JavaScript). Theater coordinates are
   looked up from the address with OpenStreetMap's Nominatim (`Geocoding:Provider`, no key needed; set `None` to turn
   lookups off). Its usage policy asks for a contact address in the User-Agent: `Geocoding:ContactEmail` (in production, SSM `/drive-in/geocoding-contact-email`), falling back
-  to `Company:ContactEmail`. The public server allows about one lookup a second, which is fine at this scale; a busier
-  site would switch `IGeocoder` to a paid provider.
+  to `Company:ContactEmail`. The public server allows about one lookup a second, which is fine at this scale (lookups are
+  cached for a day, and one that would wait more than 10 s behind others gives up); a busier site would switch `IGeocoder`
+  to a paid provider.
 - Showings show the **weather forecast** for the theater's location over the showing's hours, from Open-Meteo
   (`Weather:Provider`, free and keyless, up to 16 days ahead; `None` turns it off), on the theater, showing and
   ticket pages.
@@ -150,6 +153,10 @@ invitee sets a password or continues with Google using the invited address.
   - **Move** ("Move tickets"): send a car to another spot at the same showing, e.g. a front-row ticket when the guest arrives
     in a large SUV, at check-in or after the car is in. Only spots available right now that fit the vehicle; each move is logged
     in `ticket_moves`.
+  - **Offline gate** (`/manage/{id}/gate/offline`, "Admit guests"): a plain page, not a live Blazor connection, that keeps
+    tonight's ticket list on the phone or tablet (ticket codes only as hashes, no names) and keeps checking cars in when the signal
+    drops. Check-ins wait on the device and sync when it's back; anything the server refuses (e.g. the same ticket used at another
+    gate) is listed for staff to look at. It can be added to the home screen. Details in [features.md](features.md).
 - **All sales are final**: there are no refunds or cancellations, including for weather. Sold tickets are records,
   so a showing with sales can't be removed or moved to another screen, a film or screen with sales can't be
   deleted, and a screen can't drop or relabel spots sold for upcoming showings.
@@ -233,7 +240,9 @@ invitee sets a password or continues with Google using the invited address.
 - **Security headers** (CSP and friends) are set by the app for every response, in `Services/SecurityHeaders.cs`. Loading
   anything from another site (a script, stylesheet, font, frame or API, such as a payment provider's) means adding its
   host to the policy there, or the browser blocks it.
-- Fonts: Bungee for display headings, Barlow for everything else (both from Google Fonts).
+- Fonts: Bungee for display headings (and Bungee Shade for the marketing site's marquee), Barlow for everything else.
+  All are self-hosted (`wwwroot/fonts`, SIL Open Font License; Latin and Latin Extended subsets from Fontsource),
+  so pages load nothing from Google.
 
 ## Local development
 
@@ -264,7 +273,7 @@ before the new app version starts; if a migration fails, the old version keeps r
 ## Workflow
 
 All changes go through a feature branch and a pull request; nothing is committed to `main` directly.
-Every pull request to `main` is built and tested by `.github/workflows/ci.yml` (job `build-and-test`: Release build,
+Every pull request (to `main`, or to another PR's branch when stacked) is built and tested by `.github/workflows/ci.yml` (job `build-and-test`: Release build,
 `dotnet test`, and a build of the web image). Make that job a required status check so a failing PR can't be merged:
 
 ```sh
