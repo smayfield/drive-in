@@ -1,0 +1,43 @@
+name: CI
+
+# Builds and tests every pull request to main, so a change is checked before it's merged (merging deploys; see
+# deploy.yml, which tests again as a safety net). Make "build-and-test" a required status check in branch protection.
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore src/DriveIn.sln
+
+      # Warnings stay visible in the log (and as annotations) without failing the build.
+      - name: Build
+        run: dotnet build src/DriveIn.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test src/DriveIn.sln -c Release --no-build
+
+      # The production image, built (not pushed) for the runner's architecture: catches Dockerfile breakage, such as
+      # a restore that drops _framework/blazor.web.js, before it reaches the deploy.
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build web image
+        run: docker buildx build --platform linux/amd64 -f src/DriveIn.Web/Dockerfile .
