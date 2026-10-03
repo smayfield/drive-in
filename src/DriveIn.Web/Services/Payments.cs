@@ -113,6 +113,22 @@ public sealed class PaymentOptions
 
     public long ApplicationFeeCents(long amountCents) =>
         (long)decimal.Round(amountCents * ApplicationFeePercent / 100m, 0, MidpointRounding.AwayFromZero);
+
+    // Prices, totals and charges are all amounts with two decimal places (PaymentRequest.AmountCents is amount × 100),
+    // so a currency whose minor unit isn't a hundredth (Stripe's zero- and three-decimal currencies) would be charged
+    // the wrong amount. Refused at startup rather than supported.
+    private static readonly HashSet<string> NotTwoDecimal =
+    [
+        "bif", "clp", "djf", "gnf", "jpy", "kmf", "krw", "mga", "pyg", "rwf", "ugx", "vnd", "vuv", "xaf", "xof", "xpf",
+        "bhd", "jod", "kwd", "omr", "tnd",
+    ];
+
+    public static void Validate(PaymentOptions options)
+    {
+        if (NotTwoDecimal.Contains(options.Currency))
+            throw new InvalidOperationException(
+                $"{Section}:Currency '{options.Currency}' doesn't have two decimal places; only currencies like usd, cad or eur are supported.");
+    }
 }
 
 // The payment method tokens the server accepts from a browser. A token is opaque: the server never sees, parses or

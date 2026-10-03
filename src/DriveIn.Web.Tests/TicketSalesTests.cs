@@ -599,6 +599,20 @@ public class TicketSalesTests
     }
 
     [Theory]
+    [InlineData("usd", true)]
+    [InlineData("EUR", true)]
+    [InlineData("jpy", false)] // no minor unit
+    [InlineData("kwd", false)] // three decimals
+    public void Only_two_decimal_currencies_are_accepted(string currency, bool ok)
+    {
+        var options = new PaymentOptions { Currency = currency };
+        if (ok)
+            PaymentOptions.Validate(options);
+        else
+            Assert.Throws<InvalidOperationException>(() => PaymentOptions.Validate(options));
+    }
+
+    [Theory]
     [InlineData("USD ", "usd")]
     [InlineData("cad", "cad")]
     [InlineData("", "usd")]
