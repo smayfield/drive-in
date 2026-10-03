@@ -158,6 +158,52 @@ public class PaymentReconcileTests
         Assert.True(Assert.Single(s.App.Payments.Charges).CardPresent);
     }
 
+    private sealed class SwitchableLeadership : IJobLeadership
+    {
+        public bool Leader { get; set; }
+        public int Asked { get; private set; }
+
+        public Task<bool> IsLeaderAsync(CancellationToken ct = default)
+        {
+            Asked++;
+            return Task.FromResult(Leader);
+        }
+    }
+
+    [Fact]
+    public async Task Only_the_copy_that_holds_the_jobs_lock_reconciles()
+    {
+        await using var s = await SetUpAsync();
+        var (_, hold) = await UnheardChargeAsync(s, new TimeoutException());
+        s.App.Time.Advance(TicketSalesService.ReconcileAfter);
+        var leadership = new SwitchableLeadership();
+        using var job = new PaymentReconcileService(s.App.Get<Microsoft.Extensions.DependencyInjection.IServiceScopeFactory>(), s.App.Time,
+            s.App.Get<DriveInMetrics>(), Microsoft.Extensions.Options.Options.Create(new NotificationOptions { SiteUrl = TestApp.BaseUri }),
+            leadership, NullLogger<PaymentReconcileService>.Instance);
+        await job.StartAsync(CancellationToken.None);
+        // Ticks the clock until the job has asked for the lock again and done() holds (it starts on a background thread).
+        async Task TickAsync(Func<Task<bool>> done)
+        {
+            var asked = leadership.Asked;
+            for (var i = 0; i < 100 && (leadership.Asked == asked || !await done()); i++)
+            {
+                s.App.Time.Advance(PaymentReconcileService.Interval);
+                await Task.Delay(20);
+            }
+        }
+        async Task<bool> Sold() => (await TicketAsync(s, hold.TicketId)).Status == TicketStatus.Sold;
+
+        await TickAsync(() => Task.FromResult(true));
+        Assert.True(leadership.Asked > 0);
+        Assert.False(await Sold());
+        Assert.Empty(s.App.Payments.Lookups);
+
+        leadership.Leader = true;
+        await TickAsync(Sold);
+        Assert.True(await Sold());
+        await job.StopAsync(CancellationToken.None);
+    }
+
     [Fact]
     public async Task Finishing_a_sale_twice_sells_it_once()
     {

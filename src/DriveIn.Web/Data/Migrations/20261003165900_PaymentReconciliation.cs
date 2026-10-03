@@ -25,6 +25,26 @@ namespace DriveIn.Web.Data.Migrations
                 type: "timestamp with time zone",
                 nullable: true);
 
+            // Tickets left Paying by the old flow have no payment key, so the reconciler can't ask about them. Nothing was
+            // ever charged under it (production has never had a real processor), so send them back to Held, where the
+            // sweeper releases them, and put back any gift card money they had taken (as the old decline path did).
+            migrationBuilder.Sql("""
+                INSERT INTO gift_card_transactions (gift_card_id, kind, amount, balance_after, ticket_id, at)
+                SELECT t.gift_card_id, 'Restore', t.gift_card_amount, g.balance + t.gift_card_amount, t.id, now()
+                FROM tickets t JOIN gift_cards g ON g.id = t.gift_card_id
+                WHERE t.status = 'Paying' AND t.payment_key IS NULL AND t.gift_card_amount > 0;
+
+                UPDATE gift_cards g SET balance = g.balance + s.amount, stamp = gen_random_uuid()
+                FROM (SELECT gift_card_id, sum(gift_card_amount) AS amount FROM tickets
+                      WHERE status = 'Paying' AND payment_key IS NULL AND gift_card_amount > 0
+                      GROUP BY gift_card_id) s
+                WHERE g.id = s.gift_card_id;
+
+                UPDATE tickets SET status = 'Held', gift_card_id = NULL, gift_card_last4 = NULL, gift_card_amount = 0,
+                    stamp = gen_random_uuid()
+                WHERE status = 'Paying' AND payment_key IS NULL;
+                """);
+
             migrationBuilder.CreateTable(
                 name: "gift_card_purchases",
                 columns: table => new

@@ -243,13 +243,15 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   definite decline undoes it at checkout (back to Held, details cleared, gift card money restored); a processor error leaves it
   Paying and tells the buyer (or attendant) they won't be charged twice. Finishing (`CompletePaidTicketAsync`) and undoing
   (`AbortTicketPaymentAsync`) are the same code for checkout, webhooks and reconciliation, idempotent and keyed on the payment
-  key, so they can race safely. `PaymentReconcileService` runs every minute: Paying tickets and gift card purchases at least
+  key, so they can race safely. `PaymentReconcileService` runs every minute on the jobs leader (`IJobLeadership`, like the other
+  jobs; idempotent anyway): Paying tickets and gift card purchases at least
   5 minutes old are looked up with the processor by key (`IPaymentProcessor.GetStatusAsync`). Succeeded: sold (receipt or gift
   card emailed; gate sales checked in). Failed, or unknown to the processor 30 minutes after starting: undone (the spot is swept
   once its hold has run out). Pending: waits. A ticket paid entirely by gift card is simply finished. Stripe also calls
   `POST /payments/stripe/webhook` (signed with `Payments:Stripe:WebhookSecret`; 404 without it) on payment_intent.succeeded /
   payment_failed, which settles that key at once by asking Stripe for the intent. A success for a sale that's no longer waiting
-  is logged as an error for support (refund or sell by hand).
+  is logged as an error for support (refund or sell by hand). The `PaymentReconciliation` migration sent tickets the old flow
+  left Paying (no key, never charged) back to Held, putting back any gift card money they had taken.
 - **Gate codes** are unique among a theater's upcoming tickets, enforced when issued (not by a DB constraint).
 - **No refunds or cancellations**, including weather.
 - **Test data:** demo-theater tickets have `IsTest`.

@@ -298,6 +298,8 @@ public sealed partial class TicketSalesService
         if (ticket is null)
         {
             // Undone tickets drop their key, so a success here was paid for after the sale was given up on.
+            // The theater isn't known without the ticket, so this asks the real processor on purpose: demo theaters'
+            // dummy charges never take money, so only a real charge can need refunding.
             var late = await payments.GetStatusAsync(new PaymentLookup(paymentKey, reference), ct);
             if (late.State == PaymentState.Succeeded)
                 logger.LogError("Payment {Reference} ({PaymentKey}) succeeded, but no ticket is waiting for it; refund it or sell the spot by hand",
@@ -359,9 +361,12 @@ public sealed partial class TicketSalesService
     }
 }
 
-// Every minute, settles charges whose outcome the server never heard (TicketSalesService.ReconcilePaymentsAsync).
+// Every minute, settles charges whose outcome the server never heard (TicketSalesService.ReconcilePaymentsAsync). Runs
+// only in the copy of the app that holds the jobs lock (IJobLeadership); settling is idempotent anyway, so a webhook or
+// a second copy settling the same charge does no harm.
 public sealed class PaymentReconcileService(IServiceScopeFactory scopes, TimeProvider time, DriveInMetrics metrics,
-    Microsoft.Extensions.Options.IOptions<NotificationOptions> notifications, ILogger<PaymentReconcileService> logger)
+    Microsoft.Extensions.Options.IOptions<NotificationOptions> notifications, IJobLeadership leadership,
+    ILogger<PaymentReconcileService> logger)
     : BackgroundService
 {
     public static readonly TimeSpan Interval = TimeSpan.FromMinutes(1);
@@ -373,6 +378,8 @@ public sealed class PaymentReconcileService(IServiceScopeFactory scopes, TimePro
         {
             try
             {
+                if (!await leadership.IsLeaderAsync(stoppingToken))
+                    continue;
                 await using var scope = scopes.CreateAsyncScope();
                 var summary = await scope.ServiceProvider.GetRequiredService<TicketSalesService>()
                     .ReconcilePaymentsAsync(notifications.Value.SiteUrl, stoppingToken);
