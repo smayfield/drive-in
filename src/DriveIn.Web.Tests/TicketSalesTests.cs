@@ -585,6 +585,14 @@ public class TicketSalesTests
             Assert.Throws<InvalidOperationException>(() => StripeOptions.Validate(options));
     }
 
+    [Theory]
+    [InlineData("invalid_request_error", "resource_missing", "payment_method", true)] // a pm_ Stripe doesn't know
+    [InlineData("invalid_request_error", "payment_method_unexpected_state", null, true)] // already used
+    [InlineData("invalid_request_error", "parameter_unknown", "amount", false)] // our bug: stays an error
+    [InlineData("api_error", null, null, false)]
+    public void Only_a_bad_payment_method_is_a_decline(string type, string? code, string? param, bool decline) =>
+        Assert.Equal(decline, StripePaymentProcessor.IsBadPaymentMethod(new Stripe.StripeError { Type = type, Code = code, Param = param }));
+
     [Fact]
     public async Task Stripe_declines_charges_under_its_minimum_without_calling_it()
     {

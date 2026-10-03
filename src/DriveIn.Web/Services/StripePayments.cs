@@ -114,6 +114,13 @@ public sealed class StripePaymentProcessor(IStripeClient client, ICardReader rea
             // A decline (insufficient funds, wrong security code...): Stripe's message is meant for the buyer.
             return PaymentResult.Declined(ex.StripeError.Message ?? "declined");
         }
+        catch (StripeException ex) when (IsBadPaymentMethod(ex.StripeError))
+        {
+            // The token is unknown, expired or already used: nothing was charged, so the buyer just enters the card
+            // again. Any other invalid request is our bug and stays an error (it pages someone).
+            logger.LogWarning("Stripe refused payment method {PaymentMethod}: {Reason}", request.PaymentMethodId, ex.StripeError!.Message);
+            return PaymentResult.Declined("your card details didn't come through; enter them again");
+        }
 
         switch (intent.Status)
         {
@@ -155,6 +162,10 @@ public sealed class StripePaymentProcessor(IStripeClient client, ICardReader rea
             _ => new PaymentStatus(PaymentState.Failed, PaymentResult.Declined(intent.LastPaymentError?.Message ?? intent.Status)),
         };
     }
+
+    // An invalid request about the payment method itself (e.g. resource_missing for a pm_ that doesn't exist).
+    public static bool IsBadPaymentMethod(StripeError? error) =>
+        error is { Type: "invalid_request_error" } && (error.Param == "payment_method" || error.Code == "payment_method_unexpected_state");
 
     public const string PaymentKeyMetadata = "payment_key";
 
