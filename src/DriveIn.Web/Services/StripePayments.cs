@@ -1,4 +1,4 @@
-using DriveIn.Web.Data;
+using System.Globalization;
 using Microsoft.Extensions.Options;
 using Stripe;
 
@@ -55,7 +55,8 @@ public sealed class StripePaymentProcessor(IStripeClient client, ICardReader rea
         // E.g. a few cents left after a gift card: a clean decline (the sale is undone and the gift card made whole)
         // rather than an error from Stripe.
         if (request.AmountCents < MinimumChargeCents)
-            return PaymentResult.Declined($"card payments must be at least {Money.Format(MinimumChargeCents / 100m)}; pay the whole amount by card instead");
+            return PaymentResult.Declined(string.Create(CultureInfo.InvariantCulture,
+                $"card payments must be at least {MinimumChargeCents / 100m:0.00} {request.Currency.ToUpperInvariant()}; pay the whole amount by card instead"));
         if (request.CardPresent)
             return await reader.CollectAsync(request, ct);
 
