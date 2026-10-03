@@ -3,7 +3,7 @@ Description: >
   drive-in.online app: one small ARM EC2 server running the stack in Docker
   (Caddy, Blazor web app, PostgreSQL, EF Core migration bundle), with ECR image
   repos, an ops bucket for deploy files and DB backups, daily EBS snapshots,
-  Route 53 records, an SNS alerts topic with CloudWatch alarms, and a GitHub
+  container logs in CloudWatch Logs, Route 53 records, an SNS alerts topic with CloudWatch alarms, and a GitHub
   Actions OIDC deploy role. Deploy in us-east-1.
 
 Parameters:
@@ -126,6 +126,14 @@ Resources:
           "selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":10},
           "action":{"type":"expire"}}]}
 
+  # Every container's console output (docker's awslogs driver; deploy/docker-compose.prod.yml), one stream per
+  # container. Kept a month: long enough to look into an incident, cheap at this volume ($0.50/GB ingested).
+  ContainerLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /drive-in/containers
+      RetentionInDays: 30
+
   # Read by deploy.sh to choose Caddyfile.live or Caddyfile.staging.
   ServeApexParam:
     Type: AWS::SSM::Parameter
@@ -166,6 +174,10 @@ Resources:
               - Effect: Allow
                 Action: s3:PutObject
                 Resource: !Sub ${OpsBucket.Arn}/backups/*
+              # Docker (the daemon, with the instance role) ships container logs to the log group.
+              - Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${ContainerLogs}:log-stream:*
               # Grafana sends alerts to the alerts topic with the instance role (no stored keys).
               - Effect: Allow
                 Action: sns:Publish
@@ -436,3 +448,5 @@ Outputs:
     Value: !GetAtt DeployRole.Arn
   AlertsTopicArn:
     Value: !Ref AlertsTopic
+  ContainerLogGroup:
+    Value: !Ref ContainerLogs

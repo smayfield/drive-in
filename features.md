@@ -304,6 +304,8 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   data services use `IDbContextFactory`, services that use `UserManager` open a DI scope per call.
 - Deploy: merge to `main` runs tests, builds ARM64 images, runs an EF migration bundle, then deploys via SSM; Caddy fronts the app.
   Nightly `pg_dump` (30 days) plus daily EBS snapshots (7). Metrics and alerts: see section 14.
+- Logs: every container's console output goes to CloudWatch Logs (`/drive-in/containers`, 30 days; Docker's `awslogs`
+  driver, non-blocking, one stream per container). In production the web app logs JSON with scopes (trace id, request path).
 
 ## 14. Metrics and alerts (`deploy/grafana`, `deploy/victoriametrics`)
 
