@@ -19,7 +19,8 @@ READY_TIMEOUT=${READY_TIMEOUT:-180}
 cd "$DIR"
 
 log() { echo "==> $*"; }
-compose() { docker compose -f "$COMPOSE_FILE" --env-file .env "$@"; }
+# Always the same project as the labels, network and container names below use (and the compose file's own name:).
+compose() { docker compose -p "$PROJECT" -f "$COMPOSE_FILE" --env-file .env "$@"; }
 
 # The color Caddy sends traffic to now, if any. (None on a new server, or before the first blue/green deploy, when
 # the app ran as the single service "web".)
