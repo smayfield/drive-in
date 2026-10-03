@@ -7,11 +7,11 @@ namespace DriveIn.Web.Tests;
 
 public class SecurityHeadersTests
 {
-    private static async Task<(HttpContext Context, string? NonceSeenByPage)> SendAsync(bool development = false)
+    private static async Task<(HttpContext Context, string? NonceSeenByPage)> SendAsync(bool development = false, bool stripe = false)
     {
         string? seen = null;
         var app = new ApplicationBuilder(new ServiceCollection().BuildServiceProvider());
-        app.UseSecurityHeaders(development);
+        app.UseSecurityHeaders(development, stripe);
         app.Run(context =>
         {
             seen = SecurityHeaders.Nonce(context);
@@ -43,7 +43,7 @@ public class SecurityHeadersTests
         var csp = http.Response.Headers.ContentSecurityPolicy.ToString();
 
         Assert.False(string.IsNullOrEmpty(nonce));
-        Assert.Contains($"script-src 'self' 'nonce-{nonce}' https://js.stripe.com;", csp);
+        Assert.Contains($"script-src 'self' 'nonce-{nonce}';", csp);
         Assert.DoesNotContain("unsafe-eval", csp);
         Assert.DoesNotContain("script-src 'self' 'unsafe-inline'", csp);
         Assert.Contains("frame-ancestors 'none'", csp);
@@ -51,15 +51,19 @@ public class SecurityHeadersTests
         Assert.Contains("base-uri 'self'", csp);
         // Google sign-in is a form post that redirects to Google; form-action covers the redirect.
         Assert.Contains("form-action 'self' https://accounts.google.com", csp);
-        Assert.Contains("connect-src 'self' https://api.stripe.com;", csp);
+        Assert.Contains("connect-src 'self';", csp);
+        Assert.Contains("frame-src 'none';", csp);
+        Assert.DoesNotContain("stripe.com", csp); // not unless Stripe is the processor
     }
 
     [Fact]
-    public async Task Csp_lets_stripes_card_fields_load_and_nothing_else_frame()
+    public async Task With_Stripe_the_csp_lets_its_card_fields_load_and_nothing_else_frame()
     {
-        var (http, _) = await SendAsync();
+        var (http, nonce) = await SendAsync(stripe: true);
         var csp = http.Response.Headers.ContentSecurityPolicy.ToString();
 
+        Assert.Contains($"script-src 'self' 'nonce-{nonce}' https://js.stripe.com;", csp);
+        Assert.Contains("connect-src 'self' https://api.stripe.com;", csp);
         // Stripe's Payment Element runs in its own iframes; no other site can be framed.
         Assert.Contains("frame-src https://js.stripe.com https://hooks.stripe.com;", csp);
     }
@@ -78,7 +82,7 @@ public class SecurityHeadersTests
     {
         var (http, _) = await SendAsync(development: true);
 
-        Assert.Contains("connect-src 'self' https://api.stripe.com ws://localhost:* wss://localhost:*", http.Response.Headers.ContentSecurityPolicy.ToString());
+        Assert.Contains("connect-src 'self' ws://localhost:* wss://localhost:*", http.Response.Headers.ContentSecurityPolicy.ToString());
     }
 
     [Fact]
