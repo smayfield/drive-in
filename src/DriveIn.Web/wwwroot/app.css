@@ -211,6 +211,17 @@ h1:focus {
 .spot-unfit .lot-spot-label { fill: #9aa3c7; }
 .spot-marked .lot-spot { fill: #2f4a7a; stroke: #ffd66b; stroke-width: 1.5; }
 
+/* Checkout card entry (CardFields): the test card form is plain inputs Blazor never reads; Stripe's Element mounts in .stripe-card. */
+.test-card label { display: block; font-size: 0.875rem; color: var(--di-muted); margin: 0.5rem 0 0.25rem; }
+.test-card input {
+    width: 100%; box-sizing: border-box; padding: 0.55rem 0.75rem; font: inherit; color: var(--di-ink);
+    background: var(--di-surface); border: 1px solid var(--di-line-strong); border-radius: 4px;
+}
+.test-card input:focus { outline: 2px solid var(--di-accent); outline-offset: 0; border-color: var(--di-accent); }
+.test-card-row { display: flex; gap: 0.75rem; }
+.test-card-row > div { flex: 1 1 0; min-width: 0; }
+.stripe-card { min-height: 3rem; }
+
 .spot-legend { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; font-size: 0.875rem; margin-top: 0; }
 .spot-legend li::before {
     content: ""; display: inline-block; width: 0.9rem; height: 0.9rem; border-radius: 3px;

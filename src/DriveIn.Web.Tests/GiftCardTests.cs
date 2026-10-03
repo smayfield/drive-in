@@ -11,7 +11,7 @@ public class GiftCardTests
 {
     // 5 PM in Chicago on the day of the 8 PM showing (see TicketSalesTests.SetUpAsync).
     private static readonly DateTimeOffset ShowDayAfternoon = new(2026, 9, 5, 22, 0, 0, TimeSpan.Zero);
-    private static readonly CardInput Visa = new("Pat Buyer", "4242 4242 4242 4242", 12, 2030, "123");
+    private const string Visa = "pm_test_visa_4242_0001"; // a test card token (see TestCardTokens)
 
     private static async Task<Setup> SetUpWithGiftCardsAsync()
     {
@@ -36,7 +36,7 @@ public class GiftCardTests
     }
 
     private static async Task<Ticket> BuyTicketAsync(Setup s, ClaimsPrincipal buyer, PriceOption option, string? giftCode, int row = 1, int spot = 1,
-        CardInput? card = null)
+        string? card = null)
     {
         var hold = await s.Sales.HoldAsync(buyer, s.Showing.Id, row, spot);
         var result = await s.Sales.PurchaseAsync(buyer, hold.TicketId, new PurchaseInput(option.Id, [], card, giftCode), TestApp.BaseUri);
@@ -444,7 +444,7 @@ public class GiftCardTests
         Assert.Equal(20m, balance.Balance);
         var charge = Assert.Single(s.App.Payments.Charges);
         Assert.Equal(5m, charge.Amount);
-        Assert.Null(charge.Card);
+        Assert.True(charge.CardPresent);
         Assert.Equal((25m, 20m, 5m), (sold.Ticket.Total, sold.Ticket.GiftCardAmount, sold.Ticket.CardAmount));
         Assert.Equal($"Paid with gift card ending {card.Last4} ($20.00) and card at the gate ($5.00)", TicketReceipt.PaidWith(sold.Ticket));
         Assert.NotNull(sold.Ticket.AdmittedAt);

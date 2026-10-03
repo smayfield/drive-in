@@ -7,7 +7,7 @@ namespace DriveIn.Web.Tests.Pages;
 
 public class TicketPageTests
 {
-    private static readonly CardInput Visa = new("Pat Buyer", "4242 4242 4242 4242", 12, 2030, "123");
+    private const string Visa = "pm_test_visa_4242_0001"; // a test card token (see TestCardTokens)
 
     [Fact]
     public async Task My_tickets_lists_upcoming_and_past_tickets_and_gift_cards()

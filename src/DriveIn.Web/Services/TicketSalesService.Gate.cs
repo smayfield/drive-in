@@ -69,7 +69,7 @@ public sealed partial class TicketSalesService
         var showtimeId = await db.Tickets.Where(t => t.Id == ticketId && t.UserId == userId).Select(t => (int?)t.ShowtimeId)
             .FirstOrDefaultAsync() ?? throw new AppValidationException("The hold on this spot ran out. Choose a spot again.");
         await auth.RequireAsync(user, await TheaterOfShowtimeAsync(db, showtimeId), TheaterPermissions.SellAtGate);
-        var ticket = await SellHeldAsync(db, userId, ticketId, priceOptionId, addOnIds, typedCard: null, giftCardCode, atGate: true);
+        var ticket = await SellHeldAsync(db, userId, ticketId, priceOptionId, addOnIds, paymentMethodId: null, giftCardCode, atGate: true);
         return await LoadViewAsync(db, ticket.Id);
     }
 

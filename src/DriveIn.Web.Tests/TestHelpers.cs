@@ -195,6 +195,7 @@ public static class Principals
 public sealed class FakePaymentProcessor : IPaymentProcessor
 {
     public bool IsAvailable { get; set; } = true;
+    public PaymentClient Client { get; set; } = PaymentClient.Test;
     public string? DeclineWith { get; set; }
     // When set, the charge fails with this (the processor erroring, as opposed to declining).
     public Exception? FailWith { get; set; }
@@ -205,7 +206,11 @@ public sealed class FakePaymentProcessor : IPaymentProcessor
         Charges.Add(request);
         if (FailWith is not null)
             return Task.FromException<PaymentResult>(FailWith);
-        return Task.FromResult(DeclineWith is null ? new PaymentResult(true, $"FAKE-{Charges.Count}") : PaymentResult.Declined(DeclineWith));
+        // Reports the brand and last four of a test card token, as a real processor reports the card it charged.
+        var card = TestCardTokens.Parse(request.PaymentMethodId);
+        return Task.FromResult(DeclineWith is null
+            ? new PaymentResult(true, $"FAKE-{Charges.Count}", CardBrand: card?.Brand, CardLast4: card?.Last4)
+            : PaymentResult.Declined(DeclineWith));
     }
 }
 

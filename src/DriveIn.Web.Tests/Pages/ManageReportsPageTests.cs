@@ -6,7 +6,7 @@ namespace DriveIn.Web.Tests.Pages;
 
 public class ManageReportsPageTests
 {
-    private static readonly CardInput Visa = new("Pat Buyer", "4242 4242 4242 4242", 12, 2030, "123");
+    private const string Visa = "pm_test_visa_4242_0001"; // a test card token (see TestCardTokens)
 
     // A $10 ticket for the Sep 5 showing and a $50 gift card, then the clock moves to Sep 10.
     private static async Task<TicketSalesTests.Setup> WithSalesAsync()

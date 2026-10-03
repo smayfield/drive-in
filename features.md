@@ -223,9 +223,17 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
     possible (the left one of two equally central; `SpotChoice.Best`). **Or choose a spot** lists every free, fitting spot by label
     and row. Both pick exactly as clicking the map would.
   - Maps that only show a layout (the lot map, a read-only screen layout) stay a single `role="img"` with a summary label.
-- **Payment** (`IPaymentProcessor`, `Payments.cs`): credit card only. `Payments:Provider=Dummy` approves everything without
-  charging (set in `appsettings.Development.json`); unset (production) means nothing can be sold online or at the gate. Only card
-  brand and last four are stored. Total $0 after discounts needs no card.
+- **Payment** (`IPaymentProcessor`, `Payments.cs`, `StripePayments.cs`): credit card only. The card never reaches the server: the
+  checkout (`CardFields`, `wwwroot/payments.js`) turns it into a payment method token in the browser and the services take only
+  the token (`PurchaseInput.PaymentMethodId`; `PaymentTokens.Require` refuses anything not shaped like `pm_...`). The processor's
+  `PaymentClient` says how: Stripe's Payment Element (`stripe.createPaymentMethod`), the test card form (plain inputs Blazor never
+  binds; `tokenizeTest` checks the number, expiry and code and makes `pm_test_{brand}_{last4}_{random}`), or none.
+  `PaymentRequest` carries the amount in cents, currency (`Payments:Currency`, `usd`), description, the token (null = card-present
+  at the gate), an idempotency key (`ticket-{id}-{Paying stamp}` or `giftcard-{random}`) and metadata (kind, ticket, theater,
+  showing ids). Providers: `Dummy` approves test tokens and card-present charges, declines `pm_test_decline_...` (test number
+  4000 0000 0000 0002) and anything else (set in `appsettings.Development.json`; demo theaters always use it); `Stripe`
+  (untested, test-mode keys only, see README); unset (production) means nothing can be sold online or at the gate. Only the
+  brand and last four the processor reports are stored. Total $0 after discounts needs no card.
 - **Ticket states** (`TicketStatus`): Held (expires), Paying (being charged; never swept, so a crash mid-charge leaves the spot
   off sale rather than risk a double sale), Pending (free-admission request; never swept), Sold. On approval: sold to buyer, receipt emailed
   (`TicketReceipt`): QR code (inline image) linking to `tickets/{code}` (random 128-bit code) and a 4-character gate code
@@ -240,7 +248,8 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   only at the issuing theater, from 3 hours before the showing starts until it ends. Lookup matches the theater's tickets from
   yesterday on and lists duplicates if a gate code collides.
 - **Sell** (`tickets.sell`): choose one of today's showings (selling continues after start, until end), a spot on the live map
-  (held like online), ticket option and add-ons, then charge. Card-present (`PaymentRequest.Card` null); the ticket has no buyer
+  (held like online), ticket option and add-ons, then charge. Card-present (`PaymentRequest.PaymentMethodId` null; with Stripe it goes to `ICardReader`, a Stripe Terminal stub that
+  declines for now); the ticket has no buyer
   account, `SoldById` is the attendant, and the car is checked in on sale. Competes with online buyers for the same spots. The
   attendant picks the car's vehicle size, with the same large-spot rule as online.
 - **Move** (`tickets.move`, `TicketSalesService.Moves.cs`): from a looked-up ticket, choose the car's vehicle size and a new spot on
@@ -393,6 +402,8 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 - Security headers (`Services/SecurityHeaders.cs`, after the exception handler so error pages get them too) on every app
   response: a CSP (`script-src 'self'` plus a per-request nonce on Blazor's import map, the only inline script; inline
   styles allowed for MudBlazor and Quill; images `self`, `data:`, `blob:`; `connect-src 'self'` for the circuit;
+  `frame-src 'none'`; only when `Payments:Provider=Stripe`, Stripe's hosts for its card form: js.stripe.com in `script-src`,
+  api.stripe.com in `connect-src`, and js.stripe.com and hooks.stripe.com as the only `frame-src`;
   `form-action` adds accounts.google.com for Google sign-in's redirect; `frame-ancestors 'none'`, `object-src 'none'`,
   `base-uri 'self'`), `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`,
   `Cross-Origin-Opener-Policy: same-origin` and a `Permissions-Policy` (camera, geolocation and payment for this site only;
@@ -559,7 +570,8 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 
 ## 17. Not built
 
-- A real payment processor (production can't sell until `Payments:Provider` is set to one).
+- A tried-and-enabled payment processor: `StripePaymentProcessor` exists but hasn't been run against Stripe (test keys only), and
+  production can't sell until `Payments:Provider` is set. 3-D Secure, and Stripe Terminal readers at the gate.
 - Concessions ordering (the Concessions role has no permissions yet).
 - Paying invoices online (payments are recorded by an admin), sales tax on invoices, and overdue reminders or suspension for
   non-payment.

@@ -10,7 +10,7 @@ namespace DriveIn.Web.Tests.Pages;
 // available", the list of spots, and the live region for the viewer's hold. (Arrow-key focus is lot-map.js, in the browser.)
 public class SeatMapAccessibilityTests
 {
-    private static readonly CardInput Visa = new("Pat Buyer", "4242 4242 4242 4242", 12, 2030, "123");
+    private const string Visa = "pm_test_visa_4242_0001"; // a test card token (see TestCardTokens)
 
     private static async Task<(TicketSalesTests.Setup S, PageHost Host)> BuyerAsync()
     {

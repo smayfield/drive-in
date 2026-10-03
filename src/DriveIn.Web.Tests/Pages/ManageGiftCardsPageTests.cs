@@ -7,7 +7,7 @@ namespace DriveIn.Web.Tests.Pages;
 
 public class ManageGiftCardsPageTests
 {
-    private static readonly CardInput Visa = new("Pat Buyer", "4242 4242 4242 4242", 12, 2030, "123");
+    private const string Visa = "pm_test_visa_4242_0001"; // a test card token (see TestCardTokens)
 
     [Fact]
     public async Task The_owner_turns_gift_card_sales_on_and_off()

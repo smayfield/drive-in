@@ -216,11 +216,25 @@ builder.Services.AddScoped<BillingService>();
 builder.Services.AddScoped<BillingReportService>();
 
 // Online ticket sales. Card payments are off unless a processor is configured; "Dummy" (development only) approves
-// everything without taking money.
+// everything without taking money; "Stripe" is untested so far and accepts only test-mode keys (see StripeOptions).
+// Either way the card is tokenized in the browser and never reaches this server (see PaymentClient).
 builder.Services.Configure<PaymentOptions>(builder.Configuration.GetSection(PaymentOptions.Section));
+PaymentOptions.Validate(builder.Configuration.GetSection(PaymentOptions.Section).Get<PaymentOptions>() ?? new PaymentOptions());
 builder.Services.AddSingleton<DummyPaymentProcessor>(); // also used for demo theaters' test sales
-if (builder.Configuration[$"{PaymentOptions.Section}:Provider"] == "Dummy")
+// Matched like the other providers: case and surrounding spaces don't matter.
+var paymentProvider = builder.Configuration[$"{PaymentOptions.Section}:Provider"]?.Trim() ?? "";
+var useStripe = paymentProvider.Equals("Stripe", StringComparison.OrdinalIgnoreCase);
+if (paymentProvider.Equals("Dummy", StringComparison.OrdinalIgnoreCase))
     builder.Services.AddSingleton<IPaymentProcessor>(sp => sp.GetRequiredService<DummyPaymentProcessor>());
+else if (useStripe)
+{
+    var stripe = builder.Configuration.GetSection(StripeOptions.Section).Get<StripeOptions>() ?? new StripeOptions();
+    StripeOptions.Validate(stripe); // fail at startup rather than at the first sale
+    builder.Services.Configure<StripeOptions>(builder.Configuration.GetSection(StripeOptions.Section));
+    builder.Services.AddSingleton<Stripe.IStripeClient>(new Stripe.StripeClient(stripe.SecretKey));
+    builder.Services.AddSingleton<ICardReader, StripeTerminalReader>();
+    builder.Services.AddSingleton<IPaymentProcessor, StripePaymentProcessor>();
+}
 else
     builder.Services.AddSingleton<IPaymentProcessor, UnavailablePaymentProcessor>();
 builder.Services.AddSingleton<SpotEvents>();
@@ -295,8 +309,9 @@ else
     app.UseHsts();
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+// Stripe's hosts are allowed only when Stripe is the processor (its card form needs them).
 app.UseSecurityHeaders(app.Environment.IsDevelopment(),
-    app.Services.GetRequiredService<IOptions<PublicImagesOptions>>().Value.ImageOrigin);
+    app.Services.GetRequiredService<IOptions<PublicImagesOptions>>().Value.ImageOrigin, stripe: useStripe);
 app.UseHttpsRedirection();
 
 // Explicit so they run after UseForwardedHeaders. Left implicit, WebApplication inserts them at the

@@ -119,7 +119,7 @@ else
 
                     @if (DueByCard > 0)
                     {
-                        <CardFields Form="card" />
+                        <CardFields @ref="cardFields" Client="sale.Payment" Amount="DueByCard" />
                     }
 
                     <MudText Typo="Typo.body2" Class="muted mb-3">
@@ -152,7 +152,7 @@ else
 
     private int optionId;
     private IReadOnlySet<int> addOnIds = new HashSet<int>();
-    private readonly CardForm card = new();
+    private CardFields? cardFields;
     private string giftCode = "";
     private GiftCardBalance? gift;
 
@@ -239,9 +239,10 @@ else
         busy = true;
         try
         {
-            var input = new PurchaseInput(optionId, addOnIds.ToList(), card.ToInput(), gift is null ? null : giftCode);
+            // Only a token for the card goes to the server (see CardFields).
+            var paymentMethod = DueByCard > 0 && cardFields is not null ? await cardFields.TokenizeAsync() : null;
+            var input = new PurchaseInput(optionId, addOnIds.ToList(), paymentMethod, gift is null ? null : giftCode);
             var result = await Sales.PurchaseAsync(User, hold.TicketId, input, BaseUri);
-            card.Clear();
             Nav.NavigateTo($"tickets/{Uri.EscapeDataString(result.Code)}?new={(result.ReceiptSent ? "sent" : "unsent")}");
         }
         finally
