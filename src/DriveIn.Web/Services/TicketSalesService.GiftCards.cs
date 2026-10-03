@@ -82,67 +82,47 @@ public sealed partial class TicketSalesService
             throw new AppValidationException("Your account needs an email address to receive the gift card.");
         var now = time.GetUtcNow();
         var paymentMethod = PaymentTokens.Require(input.PaymentMethodId);
-        var code = await NewGiftCardCodeAsync(db);
+
+        // Saved before charging, so a charge whose outcome isn't heard can still be settled with the processor
+        // (PaymentReconcileService) and the card issued, instead of the buyer paying for nothing.
+        var purchase = new GiftCardPurchase
+        {
+            TheaterId = theater.Id, PurchaserId = userId, PurchaserEmail = buyerEmail, PurchaserName = buyer?.DisplayName,
+            Amount = amount, RecipientName = recipientName, RecipientEmail = recipientEmail, Message = message,
+            Status = GiftCardPurchaseStatus.Paying, StartedAt = now, IsTest = theater.IsDemo,
+        };
+        db.GiftCardPurchases.Add(purchase);
+        await db.SaveChangesAsync();
 
         PaymentResult result;
         try
         {
-            // One key per purchase attempt: a retry inside the processor's client can't charge twice, and buying another
-            // card is a new charge.
+            // The purchase's key: a retry can't charge twice, and buying another card is a new purchase and a new charge.
             var charge = new PaymentRequest(PaymentRequest.ToCents(amount), paymentOptions.Value.Currency, $"{theater.Name}: gift card",
-                paymentMethod, $"giftcard-{Guid.NewGuid():N}",
-                new Dictionary<string, string> { ["kind"] = "gift_card", ["theater_id"] = theater.Id.ToString() });
+                paymentMethod, purchase.PaymentKey,
+                new Dictionary<string, string>
+                {
+                    ["kind"] = "gift_card", ["gift_card_purchase_id"] = purchase.Id.ToString(), ["theater_id"] = theater.Id.ToString(),
+                });
             result = await ProcessorFor(theater).ChargeAsync(charge);
         }
-        catch
+        catch (Exception ex)
         {
+            // Unknown outcome: left Paying for PaymentReconcileService, which issues the card if the charge went through.
             metrics.Payment("gift_card", "error", theater.IsDemo);
-            throw;
+            logger.LogError(ex, "Couldn't confirm the charge for gift card purchase {PurchaseId}; left for reconciliation", purchase.Id);
+            throw new AppValidationException("We couldn't confirm your payment just now. You won't be charged twice: if it went through, " +
+                "your gift card is emailed to you and appears under My tickets within a few minutes.");
         }
         metrics.Payment("gift_card", result.Approved ? "approved" : "declined", theater.IsDemo);
         if (!result.Approved)
+        {
+            await FailGiftCardPurchaseAsync(purchase.Id);
             throw new AppValidationException($"Your payment wasn't approved: {result.DeclineReason ?? "declined"}. Check your card details or try another card.");
-
-        var giftCard = new GiftCard
-        {
-            TheaterId = theater.Id, Code = code, InitialAmount = amount, Balance = amount, PurchasedAt = now,
-            PurchaserId = userId, PurchaserEmail = buyerEmail, RecipientName = recipientName, RecipientEmail = recipientEmail,
-            Message = message, CardBrand = result.CardBrand, CardLast4 = result.CardLast4,
-            PaymentReference = result.Reference, IsTest = theater.IsDemo,
-        };
-        giftCard.Transactions.Add(new GiftCardTransaction
-        {
-            Kind = GiftCardTransactionKind.Purchase, Amount = amount, BalanceAfter = amount, At = now,
-        });
-        db.GiftCards.Add(giftCard);
-        for (var attempt = 1; ; attempt++)
-        {
-            try
-            {
-                await db.SaveChangesAsync();
-                break;
-            }
-            catch (DbUpdateException ex) when (IsGiftCardCodeClash(ex) && attempt < 5)
-            {
-                // Another card took this code between the check and the save. The buyer has paid, so pick another
-                // rather than fail; the unique index means two cards can never share a code.
-                giftCard.Code = await NewGiftCardCodeAsync(db);
-            }
-            catch (Exception ex)
-            {
-                // The card has been charged, so leave a trail for support to issue it by hand.
-                logger.LogError(ex, "Charged {Amount} for a gift card at theater {TheaterId} but couldn't save it (payment {Reference})",
-                    amount, theater.Id, result.Reference);
-                throw;
-            }
         }
 
-        metrics.GiftCardSold(giftCard.IsTest, amount);
-
-        var buyerEmailed = await TrySendGiftCardAsync(buyerEmail, giftCard, theater, baseUri, buyer?.DisplayName, forRecipient: false);
-        bool? recipientEmailed = recipientEmail is null ? null
-            : await TrySendGiftCardAsync(recipientEmail, giftCard, theater, baseUri, buyer?.DisplayName, forRecipient: true);
-        return new GiftCardPurchaseResult(giftCard, buyerEmailed, recipientEmailed);
+        return await CompleteGiftCardPurchaseAsync(purchase.Id, result, baseUri)
+            ?? throw new InvalidOperationException($"Gift card purchase {purchase.Id} was paid for but is no longer Paying.");
     }
 
     // The gift cards the user bought, and those sent to their (confirmed) email address, newest first, so a lost email
@@ -225,44 +205,6 @@ public sealed partial class TicketSalesService
         ticket.GiftCardId = gift.Id;
         ticket.GiftCardLast4 = gift.Last4;
         ticket.GiftCardAmount = amount;
-    }
-
-    // The rest of the payment fell through (declined, or the processor failed): the spot goes back to Held and any gift
-    // card money is put back, in one save so it can't be lost half way. Done in a fresh context, retrying if someone
-    // else spends the card meanwhile.
-    private async Task AbortPaymentAsync(ApplicationDbContext db, Ticket ticket, GiftCard? gift, decimal giftAmount)
-    {
-        if (gift is null)
-        {
-            await BackToHeldAsync(db, ticket);
-            return;
-        }
-        for (var attempt = 1; ; attempt++)
-        {
-            await using var fresh = await dbFactory.CreateDbContextAsync();
-            var t = await fresh.Tickets.FirstAsync(x => x.Id == ticket.Id);
-            var g = await fresh.GiftCards.FirstAsync(x => x.Id == gift.Id);
-            g.Balance += giftAmount;
-            g.Stamp = Guid.NewGuid();
-            fresh.GiftCardTransactions.Add(new GiftCardTransaction
-            {
-                GiftCardId = g.Id, Kind = GiftCardTransactionKind.Restore, Amount = giftAmount, BalanceAfter = g.Balance,
-                TicketId = t.Id, At = time.GetUtcNow(),
-            });
-            t.GiftCardId = null;
-            t.GiftCardLast4 = null;
-            t.GiftCardAmount = 0;
-            t.Status = TicketStatus.Held;
-            t.Stamp = Guid.NewGuid();
-            try
-            {
-                await fresh.SaveChangesAsync();
-                return;
-            }
-            catch (DbUpdateConcurrencyException) when (attempt < 5)
-            {
-            }
-        }
     }
 
     // --- Staff ---

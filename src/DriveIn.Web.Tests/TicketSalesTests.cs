@@ -558,7 +558,7 @@ public class TicketSalesTests
     public async Task The_dummy_processor_approves_test_cards_and_card_present_charges_and_declines_the_rest()
     {
         var dummy = new DummyPaymentProcessor(Microsoft.Extensions.Logging.Abstractions.NullLogger<DummyPaymentProcessor>.Instance);
-        PaymentRequest Charge(string? pm) => new(1000, "usd", "test", pm, "key", new Dictionary<string, string>());
+        PaymentRequest Charge(string? pm) => new(1000, "usd", "test", pm, $"key-{pm}", new Dictionary<string, string>());
 
         var approved = await dummy.ChargeAsync(Charge("pm_test_visa_4242_ab12"));
         Assert.Equal((true, "Visa", "4242"), (approved.Approved, approved.CardBrand, approved.CardLast4));

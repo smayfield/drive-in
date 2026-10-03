@@ -114,7 +114,7 @@
           "for": "5m",
           "annotations": {
             "summary": "More than 5% of requests failed with a 5xx in the last 10 minutes.",
-            "description": "See Drive-In: Site performance \u2192 5xx by route, then `docker compose logs web`."
+            "description": "See Drive-In: Site performance → 5xx by route, then `docker compose logs web`."
           },
           "labels": {
             "severity": "warning"
@@ -171,7 +171,7 @@
           "for": "10m",
           "annotations": {
             "summary": "95th percentile response time has been over 2 seconds for 10 minutes.",
-            "description": "See Drive-In: Site performance \u2192 Slowest routes and Database query time; check CPU and memory on Drive-In: Server."
+            "description": "See Drive-In: Site performance → Slowest routes and Database query time; check CPU and memory on Drive-In: Server."
           },
           "labels": {
             "severity": "warning"
@@ -228,7 +228,7 @@
           "for": "0s",
           "annotations": {
             "summary": "More than 10 errors were logged in 5 minutes.",
-            "description": "See Drive-In: Site performance \u2192 Errors logged for which part of the app, then `docker compose logs web`."
+            "description": "See Drive-In: Site performance → Errors logged for which part of the app, then `docker compose logs web`."
           },
           "labels": {
             "severity": "warning"
@@ -464,6 +464,62 @@
           "isPaused": false
         },
         {
+          "uid": "payment-stuck",
+          "title": "Payment stuck unsettled",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "drivein-db",
+              "model": {
+                "refId": "A",
+                "rawQuery": true,
+                "editorMode": "code",
+                "format": "table",
+                "rawSql": "SELECT (SELECT count(*) FROM tickets WHERE status = 'Paying' AND payment_started_at < now() - interval '45 minutes') + (SELECT count(*) FROM gift_card_purchases WHERE status = 'Paying' AND started_at < now() - interval '45 minutes') AS stuck"
+              }
+            },
+            {
+              "refId": "C",
+              "datasourceUid": "__expr__",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "model": {
+                "refId": "C",
+                "type": "threshold",
+                "expression": "A",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "gt",
+                      "params": [
+                        0
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "0s",
+          "annotations": {
+            "summary": "A ticket or gift card purchase has waited over 45 minutes for its payment to be settled.",
+            "description": "The reconciler gives up on charges the processor doesn't know after 30 minutes, so this is one the processor still calls pending, or the reconciler isn't running (see Background job failures). Check the charge in the processor's dashboard by its payment key (tickets.payment_key, or giftcard-{id})."
+          },
+          "labels": {
+            "severity": "warning"
+          },
+          "isPaused": false
+        },
+        {
           "uid": "go-live-waiting",
           "title": "Go-live request waiting over a day",
           "condition": "C",
@@ -512,7 +568,7 @@
           "for": "0s",
           "annotations": {
             "summary": "A theater has been waiting more than 24 hours for an admin to approve going live.",
-            "description": "Admin \u2192 Theaters to activate or decline it."
+            "description": "Admin → Theaters to activate or decline it."
           },
           "labels": {
             "severity": "info"

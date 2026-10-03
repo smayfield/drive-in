@@ -136,6 +136,13 @@ invitee sets a password or continues with Google using the invited address.
     Known gaps: cards that ask for 3-D Secure are declined for now, and gate sales need Stripe Terminal readers
     (`StripeTerminalReader` is a stub that declines).
   - Unset (as in production): nothing is sold, online or at the gate.
+- **Charges can't be lost or doubled.** Every charge carries an idempotency key (`ticket-{id}-{stamp}`, `giftcard-{id}`), and
+  everything the sale needs is saved before charging. If checkout never hears the outcome (a timeout, or the server dying
+  mid-charge), the ticket or gift card purchase stays Paying and `PaymentReconcileService` asks the processor about it after
+  5 minutes: it's sold (receipt emailed) if the charge went through, and undone if it failed or the processor still has no
+  record of it after 30 minutes. With Stripe, a signed webhook at `/payments/stripe/webhook` settles it right away (set
+  `Payments:Stripe:WebhookSecret`, SSM `/drive-in/stripe-webhook-secret`, and subscribe it to payment_intent.succeeded and
+  payment_intent.payment_failed). Grafana alerts if one is still Paying after 45 minutes.
 - On approval the spot is sold to the buyer and a **receipt** is emailed with a QR code (an inline image) linking to
   `tickets/{code}` (a random 128-bit code) and a 4-character **gate code** (e.g. `K7QM`; no look-alike characters)
   the guest can read out instead. Buyers see their tickets under My tickets and can resend the receipt.

@@ -55,7 +55,7 @@ public class MetricsTests
     }
 
     [Fact]
-    public async Task A_processor_failure_counts_as_a_payment_error_and_the_buyer_keeps_the_hold()
+    public async Task A_processor_failure_counts_as_a_payment_error_and_is_left_for_reconciliation()
     {
         await using var s = await SetUpAsync();
         using var payments = Collect<long>(s.App, "drivein.payments");
@@ -63,12 +63,29 @@ public class MetricsTests
         s.App.Payments.FailWith = new HttpRequestException("processor unreachable");
 
         var hold = await s.Sales.HoldAsync(buyer, s.Showing.Id, 1, 1);
-        await Assert.ThrowsAsync<HttpRequestException>(() => s.Sales.PurchaseAsync(buyer, hold.TicketId, Buy(s.Single), TestApp.BaseUri));
+        await Assert.ThrowsAsync<AppValidationException>(() => s.Sales.PurchaseAsync(buyer, hold.TicketId, Buy(s.Single), TestApp.BaseUri));
 
         Assert.Equal("error", Tag(Assert.Single(payments.GetMeasurementSnapshot()), "result"));
-        // Back to held (not stuck paying), so the buyer can try again.
+        // Still paying: whether the card was charged isn't known, so the reconciler asks the processor (PaymentReconcileTests).
         await using var db = s.App.Db();
-        Assert.Equal(TicketStatus.Held, (await db.Tickets.FindAsync(hold.TicketId))!.Status);
+        Assert.Equal(TicketStatus.Paying, (await db.Tickets.FindAsync(hold.TicketId))!.Status);
+    }
+
+    [Fact]
+    public async Task Reconciled_payments_are_counted_by_outcome()
+    {
+        await using var s = await SetUpAsync();
+        using var reconciled = Collect<long>(s.App, "drivein.payments.reconciled");
+        var buyer = await BuyerAsync(s.App);
+        s.App.Payments.LoseAnswerWith = new TimeoutException();
+        var hold = await s.Sales.HoldAsync(buyer, s.Showing.Id, 1, 1);
+        await Assert.ThrowsAsync<AppValidationException>(() => s.Sales.PurchaseAsync(buyer, hold.TicketId, Buy(s.Single), TestApp.BaseUri));
+
+        s.App.Time.Advance(TicketSalesService.ReconcileAfter);
+        await s.Sales.ReconcilePaymentsAsync(TestApp.BaseUri);
+
+        var m = Assert.Single(reconciled.GetMeasurementSnapshot());
+        Assert.Equal(("ticket", "completed", "job"), (Tag(m, "for"), Tag(m, "outcome"), Tag(m, "via")));
     }
 
     [Fact]

@@ -22,6 +22,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<CompEvent> CompEvents => Set<CompEvent>();
     public DbSet<GiftCard> GiftCards => Set<GiftCard>();
     public DbSet<GiftCardTransaction> GiftCardTransactions => Set<GiftCardTransaction>();
+    public DbSet<GiftCardPurchase> GiftCardPurchases => Set<GiftCardPurchase>();
     public DbSet<Invitation> Invitations => Set<Invitation>();
     public DbSet<TheaterRole> TheaterRoles => Set<TheaterRole>();
     public DbSet<TheaterRolePermission> TheaterRolePermissions => Set<TheaterRolePermission>();
@@ -176,6 +177,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             t.HasIndex(x => new { x.Status, x.HeldUntil });
             t.HasIndex(x => x.UserId);
             t.HasIndex(x => x.ShortCode);
+            t.HasIndex(x => x.PaymentKey).IsUnique();
             t.HasOne(x => x.SoldBy)
                 .WithMany()
                 .HasForeignKey(x => x.SoldById)
@@ -232,6 +234,26 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             g.HasOne(x => x.Purchaser)
                 .WithMany()
                 .HasForeignKey(x => x.PurchaserId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<GiftCardPurchase>(x =>
+        {
+            x.Property(y => y.Amount).HasPrecision(8, 2);
+            x.Property(y => y.Status).HasConversion<string>().HasMaxLength(20);
+            x.Property(y => y.Stamp).IsConcurrencyToken();
+            x.HasIndex(y => new { y.Status, y.StartedAt });
+            x.HasOne(y => y.Theater)
+                .WithMany()
+                .HasForeignKey(y => y.TheaterId)
+                .OnDelete(DeleteBehavior.Cascade);
+            x.HasOne(y => y.Purchaser)
+                .WithMany()
+                .HasForeignKey(y => y.PurchaserId)
+                .OnDelete(DeleteBehavior.SetNull);
+            x.HasOne(y => y.GiftCard)
+                .WithMany()
+                .HasForeignKey(y => y.GiftCardId)
                 .OnDelete(DeleteBehavior.SetNull);
         });
 

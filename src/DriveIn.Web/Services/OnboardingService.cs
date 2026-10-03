@@ -188,6 +188,7 @@ public sealed partial class OnboardingService(
         db.Tickets.RemoveRange(tests);
         db.CompEvents.RemoveRange(await db.CompEvents.Where(e => e.IsTest && e.TheaterId == theaterId).ToListAsync());
         db.GiftCards.RemoveRange(await db.GiftCards.Include(g => g.Transactions).Where(g => g.IsTest && g.TheaterId == theaterId).ToListAsync());
+        db.GiftCardPurchases.RemoveRange(await db.GiftCardPurchases.Where(p => p.IsTest && p.TheaterId == theaterId).ToListAsync());
         theater.Mode = TheaterMode.Live;
         theater.LiveSince = time.GetUtcNow();
         theater.GoLiveRequestedAt = null;

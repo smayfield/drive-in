@@ -28,6 +28,7 @@ public sealed class DriveInMetrics
     private readonly Counter<long> offlineAdmissions;
     private readonly Counter<long> holdsExpired;
     private readonly Counter<long> payments;
+    private readonly Counter<long> paymentsReconciled;
     private readonly Counter<long> giftCardsSold;
     private readonly Counter<double> giftCardRevenue;
     private readonly Counter<long> emails;
@@ -64,6 +65,8 @@ public sealed class DriveInMetrics
             "Spot holds that ran out before the buyer paid.");
         payments = meter.CreateCounter<long>("drivein.payments", "{payment}",
             "Card charges (for: ticket, gift_card; result: approved, declined, error; test).");
+        paymentsReconciled = meter.CreateCounter<long>("drivein.payments.reconciled", "{payment}",
+            "Charges settled after their outcome wasn't heard at checkout (for: ticket, gift_card; outcome: completed, released; via: job, webhook).");
         giftCardsSold = meter.CreateCounter<long>("drivein.gift_cards.sold", "{card}", "Gift cards sold (test).");
         giftCardRevenue = meter.CreateCounter<double>("drivein.gift_cards.revenue", "{USD}",
             "Gift card face value sold, in dollars (test).");
@@ -112,6 +115,9 @@ public sealed class DriveInMetrics
 
     public void Payment(string forWhat, string result, bool test) =>
         payments.Add(1, new TagList { { "for", forWhat }, { "result", result }, { "test", test } });
+
+    public void PaymentReconciled(string forWhat, string outcome, string via) =>
+        paymentsReconciled.Add(1, new TagList { { "for", forWhat }, { "outcome", outcome }, { "via", via } });
 
     public void GiftCardSold(bool test, decimal amount)
     {

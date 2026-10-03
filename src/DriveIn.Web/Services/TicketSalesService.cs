@@ -254,8 +254,10 @@ public sealed partial class TicketSalesService(
     {
         var userId = Guard.RequireUserId(user);
         await using var db = await dbFactory.CreateDbContextAsync();
-        var ticket = await SellHeldAsync(db, userId, ticketId, input.PriceOptionId, input.AddOnIds, input.PaymentMethodId, input.GiftCardCode, atGate: false);
-        var sent = await TrySendReceiptAsync(await LoadViewAsync(db, ticket.Id), baseUri);
+        var (ticket, completedHere) = await SellHeldAsync(db, userId, ticketId, input.PriceOptionId, input.AddOnIds,
+            input.PaymentMethodId, input.GiftCardCode, atGate: false);
+        // If a processor webhook finished the sale first, it sent the receipt too.
+        var sent = !completedHere || await TrySendReceiptAsync(await LoadViewAsync(db, ticket.Id), baseUri);
         return new PurchaseResult(ticket.Code!, sent);
     }
 
@@ -263,7 +265,13 @@ public sealed partial class TicketSalesService(
     // buyer's card (its payment method token) is charged and the ticket is theirs. At the gate the charge is card-present (the processor's
     // terminal), the ticket has no buyer account, and the car is admitted as it's sold. A gift card (of the theater's)
     // pays first, and only the rest is charged to the card; if that charge fails the gift card is made whole again.
-    private async Task<Ticket> SellHeldAsync(ApplicationDbContext db, string userId, int ticketId, int priceOptionId,
+    //
+    // Everything the sale needs is saved with the ticket going to Paying (price, add-ons, gate code, PaymentKey), so a
+    // charge whose outcome isn't heard (the processor timed out, or the server died) can be finished or undone later
+    // by CompletePaidTicketAsync / AbortTicketPaymentAsync, the same code this uses. Only a definite decline undoes the
+    // sale here; an error leaves it Paying for PaymentReconcileService to settle with the processor.
+    // Returns the sold ticket, and whether this call sold it (false if a webhook got there first).
+    private async Task<(Ticket Ticket, bool CompletedHere)> SellHeldAsync(ApplicationDbContext db, string userId, int ticketId, int priceOptionId,
         IReadOnlyList<int> addOnIds, string? paymentMethodId, string? giftCardCode, bool atGate)
     {
         var ticket = await db.Tickets.Include(t => t.Showtime!.Screen!.Theater)
@@ -298,12 +306,31 @@ public sealed partial class TicketSalesService(
             if (string.IsNullOrEmpty(buyerEmail))
                 throw new AppValidationException("Your account needs an email address to receive tickets.");
         }
-        var shortCode = await NewShortCodeAsync(db, theater.Id, now);
+        // Worked out before Paying, so nothing between going to Paying and charging can fail and strand the spot.
+        var description = cardAmount == 0 ? ""
+            : $"{theater.Name}: {ScheduleService.ToView(theater, await WithFeaturesAsync(db, showtime)).Title}, spot {ticket.SpotLabel}";
 
         // Paying: the hold can no longer expire out from under the charge. The gift card's share comes off its balance in
         // the same save, so a balance can't be spent twice; a concurrent spend makes this fail rather than overdraw it.
         ticket.Status = TicketStatus.Paying;
         ticket.Stamp = Guid.NewGuid();
+        ticket.PaymentKey = $"ticket-{ticket.Id}-{ticket.Stamp:N}";
+        ticket.PaymentStartedAt = now;
+        ticket.OptionName = option.Name;
+        ticket.OptionPrice = option.Price;
+        ticket.AddOns = quote.Lines.Select((l, i) => new TicketAddOn
+        {
+            Position = i + 1, Name = l.AddOn.Name, Kind = l.AddOn.Kind, Amount = l.AddOn.Amount, Effect = l.Effect,
+        }).ToList();
+        ticket.Total = quote.Total;
+        ticket.IsTest = theater.IsDemo;
+        ticket.ShortCode = await NewShortCodeAsync(db, theater.Id, now);
+        ticket.Email = buyerEmail;
+        if (atGate)
+        {
+            ticket.SoldAtGate = true;
+            ticket.SoldById = userId;
+        }
         if (gift is not null)
             SpendGiftCard(db, gift, ticket, giftAmount, now);
         try
@@ -320,74 +347,38 @@ public sealed partial class TicketSalesService(
         }
 
         PaymentResult result;
-        try
+        if (cardAmount == 0)
+            result = new PaymentResult(true, null);
+        else
         {
-            if (cardAmount == 0)
-                result = new PaymentResult(true, null);
-            else
+            try
             {
-                var description = $"{theater.Name}: {ScheduleService.ToView(theater, await WithFeaturesAsync(db, showtime)).Title}, spot {ticket.SpotLabel}";
-                try
-                {
-                    result = await ProcessorFor(theater).ChargeAsync(TicketCharge(ticket, theater, cardAmount, description, paymentMethod));
-                }
-                catch
-                {
-                    // Only the processor's own failures count as payment errors (they page someone).
-                    metrics.Payment("ticket", "error", theater.IsDemo);
-                    throw;
-                }
+                result = await ProcessorFor(theater).ChargeAsync(TicketCharge(ticket, theater, cardAmount, description, paymentMethod));
             }
-        }
-        catch
-        {
-            await AbortPaymentAsync(db, ticket, gift, giftAmount);
-            throw;
-        }
-        if (cardAmount > 0)
+            catch (Exception ex)
+            {
+                // We don't know whether the card was charged, so the ticket stays Paying (its spot off sale) until the
+                // processor says, rather than risk charging twice or selling the spot twice. Only the processor's own
+                // failures count as payment errors (they page someone).
+                metrics.Payment("ticket", "error", theater.IsDemo);
+                logger.LogError(ex, "Couldn't confirm the charge for ticket {TicketId} ({PaymentKey}); left for reconciliation",
+                    ticket.Id, ticket.PaymentKey);
+                throw new AppValidationException(atGate
+                    ? "The payment couldn't be confirmed. Don't take the card again: if it went through, the ticket is sold within a few minutes; if not, the spot goes back on sale."
+                    : "We couldn't confirm your payment just now. You won't be charged twice: if it went through, your ticket appears under My tickets within a few minutes and is emailed to you; if not, the spot goes back on sale.");
+            }
             metrics.Payment("ticket", result.Approved ? "approved" : "declined", theater.IsDemo);
+        }
         if (!result.Approved)
         {
-            await AbortPaymentAsync(db, ticket, gift, giftAmount);
+            await AbortTicketPaymentAsync(ticket.Id, ticket.PaymentKey);
             throw new AppValidationException(atGate
                 ? $"The card was declined: {result.DeclineReason ?? "declined"}. Try another card."
                 : $"Your payment wasn't approved: {result.DeclineReason ?? "declined"}. Check your card details or try another card.");
         }
 
-        ticket.Status = TicketStatus.Sold;
-        ticket.HeldUntil = null;
-        ticket.SoldAt = now;
-        ticket.OptionName = option.Name;
-        ticket.OptionPrice = option.Price;
-        ticket.AddOns = quote.Lines.Select((l, i) => new TicketAddOn
-        {
-            Position = i + 1, Name = l.AddOn.Name, Kind = l.AddOn.Kind, Amount = l.AddOn.Amount, Effect = l.Effect,
-        }).ToList();
-        ticket.Total = quote.Total;
-        ticket.PaymentReference = result.Reference;
-        ticket.IsTest = theater.IsDemo;
-        ticket.Code = NewCode();
-        ticket.ShortCode = shortCode;
-        if (atGate)
-        {
-            ticket.UserId = null;
-            ticket.SoldAtGate = true;
-            ticket.SoldById = userId;
-            ticket.AdmittedAt = now;
-        }
-        else
-        {
-            ticket.Email = buyerEmail;
-            ticket.CardBrand = result.CardBrand;
-            ticket.CardLast4 = result.CardLast4;
-        }
-        ticket.Stamp = Guid.NewGuid();
-        await db.SaveChangesAsync();
-        events.Publish(ticket.ShowtimeId);
-        metrics.TicketSold(atGate ? DriveInMetrics.Gate : DriveInMetrics.Online, ticket.IsTest, ticket.Total);
-        if (atGate)
-            metrics.TicketAdmitted("sold_at_gate");
-        return ticket;
+        var (sold, completedHere) = await CompletePaidTicketAsync(ticket.Id, ticket.PaymentKey, result);
+        return (sold ?? throw new InvalidOperationException($"Ticket {ticket.Id} was paid for but is no longer Paying."), completedHere);
     }
 
     // --- Tickets ---
@@ -481,11 +472,12 @@ public sealed partial class TicketSalesService(
 
     // --- Helpers ---
 
-    // The charge for a ticket in Paying. The key is the ticket and its Paying stamp, so retrying this same charge can't
-    // charge twice, while a later checkout of the same ticket (after a decline put it back to Held) is a new charge.
+    // The charge for a ticket in Paying. Its key (Ticket.PaymentKey) is the ticket and its Paying stamp, so retrying
+    // this same charge can't charge twice, while a later checkout of the same ticket (after a decline put it back to
+    // Held) is a new charge.
     private PaymentRequest TicketCharge(Ticket ticket, Theater theater, decimal amount, string description, string? paymentMethod) =>
         new(PaymentRequest.ToCents(amount), paymentOptions.Value.Currency, description, paymentMethod,
-            $"ticket-{ticket.Id}-{ticket.Stamp:N}",
+            ticket.PaymentKey!,
             new Dictionary<string, string>
             {
                 ["kind"] = "ticket", ["ticket_id"] = ticket.Id.ToString(), ["theater_id"] = theater.Id.ToString(),
@@ -581,13 +573,6 @@ public sealed partial class TicketSalesService(
                 ? $"Spot {label} is for cars and other standard vehicles, and this screen has no spots for large vehicles."
                 : $"Spot {label} is for cars and other standard vehicles. Large vehicles park in the spots marked L, so they don't block the view.");
         return label;
-    }
-
-    private static async Task BackToHeldAsync(ApplicationDbContext db, Ticket ticket)
-    {
-        ticket.Status = TicketStatus.Held;
-        ticket.Stamp = Guid.NewGuid();
-        await db.SaveChangesAsync();
     }
 
     private async Task<bool> TrySendReceiptAsync(TicketView view, string baseUri)

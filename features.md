@@ -234,10 +234,24 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   4000 0000 0000 0002) and anything else (set in `appsettings.Development.json`; demo theaters always use it); `Stripe`
   (untested, test-mode keys only, see README); unset (production) means nothing can be sold online or at the gate. Only the
   brand and last four the processor reports are stored. Total $0 after discounts needs no card.
-- **Ticket states** (`TicketStatus`): Held (expires), Paying (being charged; never swept, so a crash mid-charge leaves the spot
-  off sale rather than risk a double sale), Pending (free-admission request; never swept), Sold. On approval: sold to buyer, receipt emailed
+- **Ticket states** (`TicketStatus`): Held (expires), Paying (being charged; never swept as a hold, see below), Pending
+  (free-admission request; never swept), Sold. On approval: sold to buyer, receipt emailed
   (`TicketReceipt`): QR code (inline image) linking to `tickets/{code}` (random 128-bit code) and a 4-character gate code
   (no look-alike characters, e.g. `K7QM`). Receipts can be resent from My tickets.
+- **Settling payments** (`TicketSalesService.Payments.cs`): going to Paying saves everything the sale needs (option, add-ons,
+  total, gate code, buyer email, gate seller) plus `tickets.payment_key` (the idempotency key) and `payment_started_at`. Only a
+  definite decline undoes it at checkout (back to Held, details cleared, gift card money restored); a processor error leaves it
+  Paying and tells the buyer (or attendant) they won't be charged twice. Finishing (`CompletePaidTicketAsync`) and undoing
+  (`AbortTicketPaymentAsync`) are the same code for checkout, webhooks and reconciliation, idempotent and keyed on the payment
+  key, so they can race safely. `PaymentReconcileService` runs every minute on the jobs leader (`IJobLeadership`, like the other
+  jobs; idempotent anyway): Paying tickets and gift card purchases at least
+  5 minutes old are looked up with the processor by key (`IPaymentProcessor.GetStatusAsync`). Succeeded: sold (receipt or gift
+  card emailed; gate sales checked in). Failed, or unknown to the processor 30 minutes after starting: undone (the spot is swept
+  once its hold has run out). Pending: waits. A ticket paid entirely by gift card is simply finished. Stripe also calls
+  `POST /payments/stripe/webhook` (signed with `Payments:Stripe:WebhookSecret`; 404 without it) on payment_intent.succeeded /
+  payment_failed, which settles that key at once by asking Stripe for the intent. A success for a sale that's no longer waiting
+  is logged as an error for support (refund or sell by hand). The `PaymentReconciliation` migration sent tickets the old flow
+  left Paying (no key, never charged) back to Held, putting back any gift card money they had taken.
 - **Gate codes** are unique among a theater's upcoming tickets, enforced when issued (not by a DB constraint).
 - **No refunds or cancellations**, including weather.
 - **Test data:** demo-theater tickets have `IsTest`.
@@ -297,7 +311,9 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 
 - `giftcards.manage` turns sales on per theater; `giftcards.view` lists sales, balances, amount owed. Only Manager gets both by
   default (migration added to existing Managers).
-- Purchase at `/theaters/{slug}/giftcards`: any user who can browse the theater, $5 to $500, by card. A 16-character code
+- Purchase at `/theaters/{slug}/giftcards`: any user who can browse the theater, $5 to $500, by card. Each attempt is a
+  `gift_card_purchases` row (Paying → Completed or Failed) saved before charging, keyed `giftcard-{id}`, so an unheard charge
+  is settled like a ticket's (above) and the card issued then. A 16-character code
   (about 78 random bits) is emailed to the buyer and an optional recipient. Staff see only the last four characters.
   Codes are unique across all theaters (unique index on `gift_cards.code`); a new code is checked against existing ones, and
   if the save still clashes (charged by then) it retries with a fresh code rather than failing the paid purchase.
@@ -462,10 +478,11 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   `drivein.tickets.sold` and `drivein.tickets.revenue` (dollars) `{channel=online|gate|comp, test}`,
   `drivein.tickets.admitted{how=scan|sold_at_gate|offline}`, `drivein.tickets.moved`, `drivein.holds.expired`,
   `drivein.gate.offline_admissions{outcome=synced|conflict}` (offline check-ins as they sync; a retried one isn't counted again),
-  `drivein.payments{for=ticket|gift_card, result=approved|declined|error, test}`, `drivein.gift_cards.sold{test}` and
+  `drivein.payments{for=ticket|gift_card, result=approved|declined|error, test}`,
+  `drivein.payments.reconciled{for=ticket|gift_card, outcome=completed|released, via=job|webhook}`, `drivein.gift_cards.sold{test}` and
   `drivein.gift_cards.revenue{test}` (dollars), `drivein.emails{result=sent|failed}` (every sender is wrapped in `MeteredEmailSender`; a send the caller
   cancels isn't counted),
-  `drivein.jobs.failures{job=hold_expiry|billing|geocoding|business_gauges|notification_email}`, `drivein.invoices.issued`,
+  `drivein.jobs.failures{job=hold_expiry|billing|geocoding|business_gauges|notification_email|payment_reconcile}`, `drivein.invoices.issued`,
   `drivein.invoices.payments` (dollars), and `drivein.errors.logged{category, level}` (every Error/Critical log message,
   `ErrorCountingLoggerProvider`: failures inside Blazor circuits never become 5xx responses),
   `drivein.messages.sent{kind=theater|support, side=customer|theater|support}`, `drivein.notifications.emailed` (digests),
@@ -491,7 +508,8 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   swap over 1 GB (15 min), Caddy 502/503/504 above 0.02/s (5 min), PostgreSQL down (3 min), a scrape target down (10 min),
   last pg_dump or base backup over 26 h old, WAL archive failures for 10 min (critical). Group App: the app stopped reporting (5 min), 5xx over 5% of at least 20 requests in 10 min,
   p95 over 2 s (10 min), more than 10 errors logged in 5 min, any critical error, any email failure (15 min), any background
-  job failure (15 min), any payment processor error (15 min), and a go-live request waiting over 24 h (SQL). Repeats every
+  job failure (15 min), any payment processor error (15 min), a ticket or gift card purchase still Paying 45 minutes after
+  payment started (SQL), and a go-live request waiting over 24 h (SQL). Repeats every
   12 h while firing. CloudWatch alarms on the same topic cover what Grafana can't see
   from the box: EC2 system status (also auto-recovers the instance), instance status, CPU over 90% for 15 min, and any
   surplus CPU credits charged (t4g "unlimited" billing).

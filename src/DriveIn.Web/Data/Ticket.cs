@@ -44,7 +44,15 @@ public class Ticket
     // tickets are deleted when the theater goes live.
     public bool IsTest { get; set; }
 
-    // --- Set when sold ---
+    // --- Set when payment starts (Paying), kept when sold ---
+
+    // The processor's idempotency key for this charge (TicketSalesService.TicketCharge), and when it started. A charge
+    // whose outcome the server didn't hear (a crash, a timeout) is looked up with the processor by this key and the
+    // sale finished or undone (PaymentReconcileService, or a processor webhook).
+    [MaxLength(100)] public string? PaymentKey { get; set; }
+    public DateTimeOffset? PaymentStartedAt { get; set; }
+
+    // --- Set when payment starts and finished when sold (undone if it falls through) ---
 
     public DateTimeOffset? SoldAt { get; set; }
 
@@ -104,8 +112,9 @@ public class Ticket
 public enum TicketStatus
 {
     Held,
-    // Being charged. Deliberately never swept: if the server dies mid-charge we can't tell whether the card was
-    // charged, so the spot stays off sale until someone checks with the processor rather than risk selling it twice.
+    // Being charged. Never swept as an expired hold: if the server dies mid-charge we can't tell whether the card was
+    // charged, so the spot stays off sale until PaymentReconcileService (or a processor webhook) asks the processor
+    // by PaymentKey, then finishes the sale or puts the spot back, rather than risk selling it twice.
     Paying,
     // A free-admission request waiting for approval. Holds the spot with no expiry (never swept) until it is
     // approved (becomes Sold) or denied (deleted).
