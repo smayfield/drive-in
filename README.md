@@ -14,7 +14,7 @@ For the full list of features and behaviors (rules, limits, routes, permission k
 | `src/DriveIn.Web/` | The app: marketing home page, Identity account pages, theater browsing, owner/employee management, admin UI. |
 | `src/DriveIn.Web/Data/Migrations/` | EF Core migrations (the schema's source of truth). |
 | `src/DriveIn.Web.Tests/` | xUnit tests: authorization matrix and services against a real DI container with EF InMemory, and bUnit tests of the pages (`Pages/`). |
-| `deploy/` | Production compose file, Caddyfiles, `deploy.sh`, `backup.sh` (copied to the server on each deploy). |
+| `deploy/` | Production compose file, Caddyfiles, `deploy.sh`, `backup.sh`, `restore.sh` (copied to the server on each deploy), and `postgres/` (PostgreSQL + pgBackRest image). |
 | `deploy/grafana/`, `deploy/victoriametrics/` | The metrics site: Grafana's data sources, dashboards and alert rules, and what VictoriaMetrics scrapes. |
 | `infra/dns.yml` | CloudFormation: Route 53 hosted zone. |
 | `infra/email.yml` | CloudFormation: SES domain identity (DKIM, MAIL FROM). |
@@ -111,6 +111,7 @@ invitee sets a password or continues with Google using the invited address.
   A buyer holds one spot at a time. Expired holds are released every 10 seconds (`HoldExpiryService`).
 - Seat maps update live: every hold, release and sale is published in-process (`SpotEvents`) to open maps. That
   works because the app is a single server; running several would need a shared bus such as Postgres LISTEN/NOTIFY.
+  (Deploys briefly run two copies; see Deploys below.)
 - **Payment** is by credit card only, through `IPaymentProcessor`. **Card numbers never reach the server**: the checkout
   page turns the card into a payment method token in the browser (`wwwroot/payments.js`, `CardFields`) and sends only that.
   With Stripe the card fields are Stripe's Payment Element, in Stripe's own iframe, which keeps the site in PCI DSS's
@@ -261,7 +262,21 @@ dotnet ef database update --project src/DriveIn.Web
 ```
 
 Production applies migrations during deploy with an EF migration bundle (`Dockerfile.migrate`),
-before the new app version starts; if a migration fails, the old version keeps running.
+before the new app version starts; if a migration fails, the old version keeps running. Because deploys are
+blue/green, the old version also runs on the migrated schema for about a minute, so **a migration must work with the
+previous release**. Additions are fine. Renames, drops and new required columns take two releases (CLAUDE.md).
+
+**Deploys** don't take the site down (`deploy/rollout.sh`, run by `deploy.sh`). The app runs as one of two compose
+services, `web-blue` and `web-green`. A deploy:
+1. starts the idle one with the new image;
+2. waits for its `/readyz` (the database is reachable);
+3. points Caddy at it (`caddy/upstream` on the server) and reloads Caddy;
+4. after a 60-second drain, stops the old one gracefully.
+
+If the new copy never gets ready, the deploy fails and the old copy keeps serving. Open Blazor circuits on the old copy
+show the reconnect banner once it stops, then reload onto the new one. Holds and sales are in the database, so nothing
+is lost. Background jobs only run in the copy holding a Postgres advisory lock, so the overlap never runs them twice.
+To see which color is live: `cat /opt/drive-in/caddy/upstream`.
 
 ## Workflow
 
@@ -406,5 +421,53 @@ before redeploying. Patches within the image come from `dnf upgrade` on the serv
   Recent errors: `fields @timestamp, Category, Message, Exception | filter LogLevel in ["Error", "Critical"] | sort @timestamp desc`.
   The Grafana alerts already cover error rates (`drivein.errors.logged`), so there's no CloudWatch metric filter on top.
   If CloudWatch can't be reached, Docker buffers then drops lines rather than stalling the app.
-- Backups: nightly `pg_dump` to `s3://<OpsBucket>/backups/` (30 days), plus daily EBS snapshots (7).
-  Run one now with `sudo drive-in-backup <OpsBucket>`.
+- Backups: see below. Run the nightly ones now with `sudo drive-in-backup <OpsBucket>`.
+
+### Backups and restores
+
+What's kept (all in `s3://<OpsBucket>/`, a private, encrypted, versioned bucket: a deleted or overwritten object can
+be recovered for 14 days):
+
+| What | Where | How often | Kept | Restores to |
+|---|---|---|---|---|
+| WAL (every change) | `pitr/archive/` | as written; at least every minute while anything changes | back to the oldest base backup | any moment, about a minute ago at worst |
+| Base backups (pgBackRest) | `pitr/backup/` | nightly: full on Sundays, differential otherwise | four fulls (about four weeks) | the starting point for the WAL |
+| `pg_dump` | `backups/drive-in-*.dump` | nightly 07:15 UTC | 30 days | that night |
+| Data Protection keys | `backups/dpkeys-*.tar.gz` | nightly | 30 days | sign-in cookies, emailed links and 2FA keep working |
+| EBS snapshot of the disk | EC2 snapshots | daily 08:00 UTC | 7 | the whole server, that morning |
+
+PostgreSQL archives its write-ahead log through [pgBackRest](https://pgbackrest.org/) (`deploy/postgres/Dockerfile`,
+settings as `PGBACKREST_*` in `deploy/docker-compose.prod.yml`), using the instance role. `deploy.sh` creates its
+repository (the `drivein` stanza) and takes the first full backup. The pg_dump is a second, independent copy that
+doesn't depend on pgBackRest. Grafana alerts when WAL archiving fails (`WAL archiving failing`, within about 20 minutes)
+or a nightly backup is overdue (`Backup overdue`, `Base backup overdue`). The Server dashboard shows both ages. If S3
+is unreachable, WAL waits on the disk. Past 2 GB it's dropped to protect the database, leaving a gap in point-in-time
+recovery until the next base backup.
+
+**Restoring.** On the server (`aws ssm start-session --target <InstanceId>`), `sudo bash /opt/drive-in/restore.sh`:
+
+- `list`: the base backups and the time range pgBackRest can restore to, plus the latest dumps and key backups.
+- `pitr "<time>"`, e.g. `pitr "2026-10-02 14:05:00+00"` (UTC; just before the mistake): stops the web app and
+  PostgreSQL, restores the newest base backup before that time, replays WAL up to it, and starts again. Changes after
+  the target are discarded from the live database, but stay in the archive, so you can restore again to a later time.
+  `pitr latest` replays everything (for a damaged data directory). It then takes a full backup, since recovery starts a
+  new timeline. It asks you to type `restore` (or pass `--yes`).
+- `dump [<key>|latest]`: replaces the database with a nightly pg_dump (if pgBackRest itself is the problem).
+- `dpkeys [<key>|latest]`: puts back the Data Protection keys (after moving to a new server or volume).
+
+Restoring onto a **new server** (the old one or its disk is gone): deploy the stack and app as in the one-time setup.
+The first deploy starts an empty database, which pgBackRest refuses to archive into the old repository because its
+system id differs. Then run `restore.sh dpkeys latest` and `restore.sh pitr latest`; the restored database has the old
+system id again. Then `sudo drive-in-backup <OpsBucket> full`.
+
+**Restore drill (monthly, no downtime):** `sudo bash /opt/drive-in/restore.sh drill`, or `drill "<time>"`. It
+restores into a scratch volume and a throwaway PostgreSQL next to the live one, with archiving off so it never writes
+to the repository. It waits for WAL replay, then prints row counts and the last sale time for both the restored and
+the live database, and removes the scratch copy. It works if the restored counts are at or just under live and the last
+sale is close to the target. It needs about the database's size in free disk and a few hundred MB of memory for a few
+minutes. Every path in `restore.sh` (`drill`, `pitr`, `dump`, `dpkeys`) was tested against a local S3 emulator when
+it was written.
+
+**Upgrading PostgreSQL:** a minor release (security fixes) is a one-line change to `FROM postgres:17.x` in
+`deploy/postgres/Dockerfile`, through a PR. The image is rebuilt only when that file changes, and the database restarts
+on that deploy. A major version (18) needs `pg_upgrade` or a dump and restore, plus a new stanza (`pgbackrest stanza-upgrade`).

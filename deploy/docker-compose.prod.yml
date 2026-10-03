@@ -1,5 +1,5 @@
 # Production stack for drive-in.online, run on the EC2 server by deploy.sh.
-# Variables (REGISTRY, TAG, DB_PASSWORD, GOOGLE_*, ADMIN_EMAIL, GEOCODING_CONTACT_EMAIL, PUBLIC_HOST,
+# Variables (REGISTRY, TAG, PG_TAG, OPS_BUCKET, DB_PASSWORD, GOOGLE_*, ADMIN_EMAIL, GEOCODING_CONTACT_EMAIL, PUBLIC_HOST,
 # GRAFANA_*, ALERTS_TOPIC_ARN) come from the .env file deploy.sh writes from SSM Parameter Store. Local development uses the
 # docker-compose.yml at the repo root.
 name: drive-in
@@ -16,6 +16,40 @@ x-logging: &awslogs
     mode: non-blocking
     max-buffer-size: 4m
 
+# The web app. Two copies of one definition, web-blue and web-green, for zero-downtime deploys: deploy/rollout.sh starts
+# the idle color with the new image, waits for its /readyz, points Caddy at it, then stops the other after a drain.
+# Each has a profile so a plain `docker compose up` never starts both; naming one starts it. 768 MB each leaves room
+# for both during the overlap on the 2 GB server (plus swap) next to PostgreSQL, Grafana and the rest.
+x-web: &web
+  image: ${REGISTRY}/drive-in-web:${TAG}
+  logging: *awslogs
+  restart: unless-stopped
+  environment:
+    ASPNETCORE_ENVIRONMENT: Production
+    ConnectionStrings__DefaultConnection: Host=postgres;Database=drivein;Username=drivein;Password=${DB_PASSWORD}
+    Authentication__Google__ClientId: ${GOOGLE_CLIENT_ID}
+    Authentication__Google__ClientSecret: ${GOOGLE_CLIENT_SECRET}
+    DataProtection__KeysPath: /keys
+    Seed__AdminEmail: ${ADMIN_EMAIL}
+    # Sent to OpenStreetMap's Nominatim in the User-Agent, as its usage policy asks. Optional.
+    Geocoding__ContactEmail: ${GEOCODING_CONTACT_EMAIL:-}
+    Email__Provider: Ses
+    # Business and performance metrics, pushed to VictoriaMetrics (Grafana at /grafana/).
+    Metrics__OtlpEndpoint: http://victoriametrics:8428/opentelemetry/v1/metrics
+    # Trust X-Forwarded-* only from the edge network (Caddy); must match its subnet below.
+    ForwardedHeaders__KnownNetworks__0: 172.30.0.0/24
+    # SES credentials come from the EC2 instance role (IMDS hop limit is 2 for containers).
+    AWS_REGION: us-east-1
+  volumes:
+    - dpkeys:/keys
+  depends_on:
+    postgres:
+      condition: service_healthy
+  networks:
+    - default
+    - edge
+  mem_limit: 768m
+
 services:
   caddy:
     image: caddy:2
@@ -29,50 +63,59 @@ services:
       - ./caddy:/etc/caddy:ro
       - caddy_data:/data
       - caddy_config:/config
-    depends_on:
-      - web
     networks:
       edge:
         # Fixed so Grafana trusts its auth-proxy header from Caddy only (GF_AUTH_PROXY_WHITELIST).
         ipv4_address: 172.30.0.10
 
-  web:
-    image: ${REGISTRY}/drive-in-web:${TAG}
-    logging: *awslogs
-    restart: unless-stopped
-    environment:
-      ASPNETCORE_ENVIRONMENT: Production
-      ConnectionStrings__DefaultConnection: Host=postgres;Database=drivein;Username=drivein;Password=${DB_PASSWORD}
-      Authentication__Google__ClientId: ${GOOGLE_CLIENT_ID}
-      Authentication__Google__ClientSecret: ${GOOGLE_CLIENT_SECRET}
-      DataProtection__KeysPath: /keys
-      Seed__AdminEmail: ${ADMIN_EMAIL}
-      # Sent to OpenStreetMap's Nominatim in the User-Agent, as its usage policy asks. Optional.
-      Geocoding__ContactEmail: ${GEOCODING_CONTACT_EMAIL:-}
-      Email__Provider: Ses
-      # Business and performance metrics, pushed to VictoriaMetrics (Grafana at /grafana/).
-      Metrics__OtlpEndpoint: http://victoriametrics:8428/opentelemetry/v1/metrics
-      # Trust X-Forwarded-* only from the edge network (Caddy); must match its subnet below.
-      ForwardedHeaders__KnownNetworks__0: 172.30.0.0/24
-      # SES credentials come from the EC2 instance role (IMDS hop limit is 2 for containers).
-      AWS_REGION: us-east-1
-    volumes:
-      - dpkeys:/keys
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - default
-      - edge
+  web-blue:
+    <<: *web
+    profiles: [blue]
 
+  web-green:
+    <<: *web
+    profiles: [green]
+
+  # PostgreSQL with pgBackRest (deploy/postgres/Dockerfile). Every finished WAL segment is pushed to
+  # s3://<OpsBucket>/pitr/, and at least once a minute while anything is written (archive_timeout), so a restore can stop
+  # at any moment up to about a minute ago. backup.sh takes the base backups. Restores: deploy/restore.sh and the README.
   postgres:
-    image: postgres:17
+    image: ${REGISTRY}/drive-in-postgres:${PG_TAG}
     logging: *awslogs
     restart: unless-stopped
+    command:
+      - postgres
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_command=pgbackrest archive-push %p
+      - -c
+      - archive_timeout=60
     environment:
       POSTGRES_DB: drivein
       POSTGRES_USER: drivein
       POSTGRES_PASSWORD: ${DB_PASSWORD}
+      PGBACKREST_STANZA: drivein
+      PGBACKREST_PG1_PATH: /var/lib/postgresql/data
+      PGBACKREST_PG1_USER: drivein
+      PGBACKREST_REPO1_TYPE: s3
+      PGBACKREST_REPO1_PATH: /pitr
+      PGBACKREST_REPO1_S3_BUCKET: ${OPS_BUCKET}
+      PGBACKREST_REPO1_S3_ENDPOINT: s3.us-east-1.amazonaws.com
+      PGBACKREST_REPO1_S3_REGION: us-east-1
+      # The EC2 instance role, through IMDSv2 (hop limit 2 for containers). No stored keys.
+      PGBACKREST_REPO1_S3_KEY_TYPE: auto
+      # Four weekly full backups (about four weeks of point-in-time recovery); daily differentials in between.
+      PGBACKREST_REPO1_RETENTION_FULL: "4"
+      PGBACKREST_COMPRESS_TYPE: zst
+      # If S3 can't be reached, WAL piles up in pg_wal and the "WAL archiving failing" alert fires. Past 2 GB pgBackRest
+      # drops it (point-in-time recovery has a gap until the next base backup) rather than fill the disk and stop the
+      # database.
+      PGBACKREST_ARCHIVE_PUSH_QUEUE_MAX: 2GiB
+      # Warnings and errors only (each archived segment would otherwise log two lines). backup.sh asks for info.
+      PGBACKREST_LOG_LEVEL_CONSOLE: warn
+      PGBACKREST_LOG_LEVEL_STDERR: "off"
+      PGBACKREST_LOG_LEVEL_FILE: "off"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

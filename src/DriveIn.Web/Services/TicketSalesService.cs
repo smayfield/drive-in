@@ -669,7 +669,7 @@ public sealed class SpotEvents
 
 // Releases expired holds every few seconds so everyone's seat map shows the spot free again promptly.
 public sealed class HoldExpiryService(IServiceScopeFactory scopes, TimeProvider time, DriveInMetrics metrics,
-    ILogger<HoldExpiryService> logger)
+    IJobLeadership leadership, ILogger<HoldExpiryService> logger)
     : BackgroundService
 {
     public static readonly TimeSpan Interval = TimeSpan.FromSeconds(10);
@@ -681,6 +681,8 @@ public sealed class HoldExpiryService(IServiceScopeFactory scopes, TimeProvider 
         {
             try
             {
+                if (!await leadership.IsLeaderAsync(stoppingToken))
+                    continue;
                 await using var scope = scopes.CreateAsyncScope();
                 await scope.ServiceProvider.GetRequiredService<TicketSalesService>().ReleaseExpiredHoldsAsync(stoppingToken);
             }
