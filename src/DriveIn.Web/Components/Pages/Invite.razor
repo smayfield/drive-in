@@ -1,5 +1,6 @@
-@page "/invite/{Token}"
+﻿@page "/invite/{Token}"
 @attribute [ExcludeFromInteractiveRouting]
+@attribute [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(RateLimitPolicies.Account)]
 @layout AccountLayout
 @using System.ComponentModel.DataAnnotations
 @using DriveIn.Web.Components.Account

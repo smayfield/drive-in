@@ -90,6 +90,10 @@ public sealed partial class TicketSalesService
         var canMove = permissions.Contains(TheaterPermissions.MoveTickets);
         if (!canAdmit && !canMove)
             throw new AccessDeniedException();
+        // Codes that match nothing are counted, so the 4-character gate codes can't be run through quickly; real scans
+        // at a busy gate match, so they never count.
+        var limitKey = ActionRateLimiter.KeyForUser(userId);
+        limiter.Check(RateLimitPolicies.GateCodeMisses, limitKey);
         var now = time.GetUtcNow();
 
         List<Ticket> tickets;
@@ -111,7 +115,10 @@ public sealed partial class TicketSalesService
                 throw new AppValidationException($"Not valid here: this ticket is for {elsewhere.Showtime!.Screen!.Theater!.Name}.");
         }
         if (tickets.Count == 0)
+        {
+            limiter.Miss(RateLimitPolicies.GateCodeMisses, limitKey);
             throw new AppValidationException("No ticket matches that code. Check it and try again.");
+        }
         return tickets
             .Select(t => new TicketLookup(ToView(t), t.UserId == userId, canAdmit, AdmitProblem(t), canMove, MoveProblem(t)))
             .OrderBy(l => l.AdmitProblem is not null).ThenBy(l => l.View.Ticket.Showtime!.StartsAt)

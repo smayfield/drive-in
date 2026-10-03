@@ -72,12 +72,7 @@ public sealed class TestApp : IAsyncDisposable
         services.AddDbContextFactory<ApplicationDbContext>(o => o
             .UseInMemoryDatabase(dbName)
             .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning)), ServiceLifetime.Scoped);
-        services.AddIdentityCore<ApplicationUser>(o =>
-            {
-                o.SignIn.RequireConfirmedAccount = true;
-                o.User.RequireUniqueEmail = true;
-                o.Stores.SchemaVersion = IdentitySchemaVersions.Version3;
-            })
+        services.AddIdentityCore<ApplicationUser>(AppIdentityOptions.Configure)
             .AddRoles<IdentityRole>()
             .AddEntityFrameworkStores<ApplicationDbContext>()
             .AddSignInManager()
@@ -95,6 +90,8 @@ public sealed class TestApp : IAsyncDisposable
         services.AddSingleton<IAppEmailSender>(Email);
         services.AddSingleton<IEmailSender<ApplicationUser>, IdentityEmailSender>();
         services.AddSingleton<TimeProvider>(Time);
+        services.AddOptions<RateLimitOptions>();
+        services.AddSingleton<ActionRateLimiter>();
         services.AddSingleton<IGeocoder>(Geocoder);
         services.AddSingleton<IWeatherForecaster>(Weather);
         services.AddScoped<WeatherService>();

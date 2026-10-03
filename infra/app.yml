@@ -100,10 +100,20 @@ Resources:
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+      # Versioned, so a deleted or overwritten backup (say, by someone who got onto the server) can be recovered for
+      # 14 days.
+      VersioningConfiguration: { Status: Enabled }
       LifecycleConfiguration:
         Rules:
           - { Id: expire-backups, Status: Enabled, Prefix: backups/, ExpirationInDays: 30 }
           - { Id: expire-deploy-files, Status: Enabled, Prefix: deploy/, ExpirationInDays: 30 }
+          # pitr/ (pgBackRest's base backups and WAL) has no expiry rule: pgBackRest expires it itself, keeping every
+          # WAL file the backups it keeps need. A rule here could break that chain.
+          - Id: expire-old-versions
+            Status: Enabled
+            NoncurrentVersionExpiration: { NoncurrentDays: 14 }
+            ExpiredObjectDeleteMarker: true
+            AbortIncompleteMultipartUpload: { DaysAfterInitiation: 2 }
 
   EcrWeb:
     Type: AWS::ECR::Repository
@@ -124,6 +134,17 @@ Resources:
         LifecyclePolicyText: >-
           {"rules":[{"rulePriority":1,"description":"Keep last 10 images",
           "selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":10},
+          "action":{"type":"expire"}}]}
+  # PostgreSQL with pgBackRest (deploy/postgres/Dockerfile), tagged by its Dockerfile's hash; few tags, rarely added.
+  EcrPostgres:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: drive-in-postgres
+      ImageScanningConfiguration: { ScanOnPush: true }
+      LifecyclePolicy:
+        LifecyclePolicyText: >-
+          {"rules":[{"rulePriority":1,"description":"Keep last 5 images",
+          "selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":5},
           "action":{"type":"expire"}}]}
 
   # Every container's console output (docker's awslogs driver; deploy/docker-compose.prod.yml), one stream per
@@ -171,9 +192,18 @@ Resources:
                 Action: s3:ListBucket
                 Resource: !GetAtt OpsBucket.Arn
                 Condition: { StringLike: { "s3:prefix": "deploy/*" } }
+              # Nightly pg_dump and Data Protection keys (backup.sh); read back by restore.sh.
               - Effect: Allow
-                Action: s3:PutObject
+                Action: [s3:PutObject, s3:GetObject]
                 Resource: !Sub ${OpsBucket.Arn}/backups/*
+              # pgBackRest's repository (WAL archive and base backups). It deletes what it expires itself.
+              - Effect: Allow
+                Action: [s3:PutObject, s3:GetObject, s3:DeleteObject]
+                Resource: !Sub ${OpsBucket.Arn}/pitr/*
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt OpsBucket.Arn
+                Condition: { StringLike: { "s3:prefix": ["backups/*", "pitr", "pitr/*"] } }
               # Docker (the daemon, with the instance role) ships container logs to the log group.
               - Effect: Allow
                 Action: [logs:CreateLogStream, logs:PutLogEvents]
@@ -423,6 +453,7 @@ Resources:
                 Resource:
                   - !GetAtt EcrWeb.Arn
                   - !GetAtt EcrMigrate.Arn
+                  - !GetAtt EcrPostgres.Arn
               - Effect: Allow
                 Action: s3:PutObject
                 Resource: !Sub ${OpsBucket.Arn}/deploy/*

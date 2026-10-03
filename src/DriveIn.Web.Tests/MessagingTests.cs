@@ -222,6 +222,7 @@ public class MessagingTests
             await m.StartWithTheaterAsync(customer, w.Theater.Id, $"Question {i}", "Hi");
         var limit = await Assert.ThrowsAsync<AppValidationException>(() => m.StartSupportAsync(customer, null, "One more", "Hi"));
         Assert.Contains("up to 10", limit.Message);
+        w.App.Time.Advance(new RateLimitOptions().Messages.Window); // past the burst limit, which those 10 used up
         await m.PostAsync(customer, id, "Replies are still fine.");
 
         w.App.Time.Advance(TimeSpan.FromDays(1));
@@ -395,5 +396,23 @@ public class MessagingTests
         Assert.Equal("Pat", (await w.Messaging.GetAsync(Principals.For(w.Owner), id)).CustomerName);
         Assert.Equal("Pat (customer@example.com)", (await w.Messaging.GetAsync(Principals.For(w.Admin, admin: true), id)).CustomerName);
         Assert.All((await NotificationsAsync(w.App)), n => Assert.Equal("New message from Pat", n.Title));
+    }
+
+    [Fact]
+    public async Task Bursts_of_messages_are_limited_per_person()
+    {
+        await using var w = await SetUpAsync();
+        var id = await AskAsync(w); // the first message counts too
+        var limit = new RateLimitOptions().Messages;
+        var customer = Principals.For(w.Customer);
+
+        for (var i = 1; i < limit.PermitLimit; i++)
+            await w.Messaging.PostAsync(customer, id, $"Follow-up {i}");
+        var refused = await Assert.ThrowsAsync<AppValidationException>(() => w.Messaging.PostAsync(customer, id, "One more"));
+
+        Assert.StartsWith("Too many attempts", refused.Message);
+        await w.Messaging.PostAsync(Principals.For(w.Replier), id, "Staff can still answer.");
+        w.App.Time.Advance(limit.Window);
+        await w.Messaging.PostAsync(customer, id, "One more");
     }
 }

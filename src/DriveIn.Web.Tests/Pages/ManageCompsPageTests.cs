@@ -27,7 +27,7 @@ public class ManageCompsPageTests
     private static void PickSpot(IRenderedComponent<ManageComps> page, string label)
     {
         page.Find("button.gate-showing").Click();
-        page.WaitForText("Pick a green spot for the guest's car.");
+        page.WaitForText("Pick an available spot for the guest's car.");
         page.Find($"g[aria-label='Spot {label}: available']").Click();
         page.WaitForText($"Spot {label}");
     }
@@ -64,7 +64,7 @@ public class ManageCompsPageTests
 
         page.ClickButton("Cancel");
 
-        page.WaitForText("Pick a green spot for the guest's car.");
+        page.WaitForText("Pick an available spot for the guest's car.");
     }
 
     [Fact]

@@ -13,7 +13,7 @@ public sealed record TheaterSummary(
 
 public sealed class TheaterService(
     IDbContextFactory<ApplicationDbContext> dbFactory, IAuthorizationService auth, TimeProvider time, IGeocoder geocoder,
-    DriveInMetrics metrics)
+    DriveInMetrics metrics, ActionRateLimiter limiter)
 {
     // --- Browsing (any signed-in user) ---
 
@@ -49,11 +49,17 @@ public sealed class TheaterService(
             .ToList();
     }
 
-    // A place a customer typed ("Austin, TX", a ZIP code); null when it can't be found. Any signed-in user.
-    public async Task<GeoPoint?> FindPlaceAsync(ClaimsPrincipal user, string place, CancellationToken ct = default)
+    // A place a visitor typed ("Austin, TX", a ZIP code); null when it can't be found. Anyone, signed in or not, like the
+    // theater list. Each search may be a lookup at the geocoder, whose public server allows about one a second for the
+    // whole site, so searches are limited per caller: clientKey is the request's partition (HttpRateLimiting.PartitionKey:
+    // the signed-in user, else the client's IP), and without one the user (or everyone signed out together). The geocoder
+    // also throttles and caches lookups, and gives up rather than queue for long.
+    public async Task<GeoPoint?> FindPlaceAsync(ClaimsPrincipal user, string place, string? clientKey = null, CancellationToken ct = default)
     {
-        Guard.RequireUserId(user);
-        return string.IsNullOrWhiteSpace(place) ? null : await geocoder.GeocodeAsync(place, ct);
+        if (string.IsNullOrWhiteSpace(place))
+            return null;
+        limiter.Hit(RateLimitPolicies.PlaceSearch, clientKey ?? ActionRateLimiter.KeyFor(user));
+        return await geocoder.GeocodeAsync(place, ct);
     }
 
     public async Task<Theater?> GetBySlugAsync(ClaimsPrincipal user, string slug)

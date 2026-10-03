@@ -4,12 +4,14 @@ using DriveIn.Web.Authorization;
 using DriveIn.Web.Components;
 using DriveIn.Web.Components.Account;
 using DriveIn.Web.Data;
+using DriveIn.Web.Endpoints;
 using DriveIn.Web.Services;
 using MudBlazor.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -94,14 +96,15 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
     options.UseNpgsql(connectionString).UseSnakeCaseNamingConvention(), ServiceLifetime.Scoped);
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
+// Only one running copy of the app does the background jobs (a deploy briefly runs two): the one holding a Postgres lock.
+builder.Services.AddSingleton<IJobLeadership>(sp =>
+    new PostgresJobLeadership(connectionString, sp.GetRequiredService<ILogger<PostgresJobLeadership>>()));
+// /healthz: the process is up (Caddy's health check). /readyz: it can also reach the database (deploy.sh waits for it
+// before sending traffic to a newly started copy).
+builder.Services.AddHealthChecks()
+    .AddCheck<DatabaseHealthCheck>("database", tags: [DatabaseHealthCheck.Tag]);
 
-builder.Services.AddIdentityCore<ApplicationUser>(options =>
-    {
-        options.SignIn.RequireConfirmedAccount = true;
-        options.User.RequireUniqueEmail = true;
-        options.Stores.SchemaVersion = IdentitySchemaVersions.Version3;
-        options.Lockout.AllowedForNewUsers = true;
-    })
+builder.Services.AddIdentityCore<ApplicationUser>(AppIdentityOptions.Configure)
     .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddSignInManager()
@@ -112,6 +115,12 @@ builder.Services.AddAuthorizationBuilder()
     .AddPolicy(Policies.Admin, p => p.RequireRole(Roles.Admin));
 builder.Services.AddScoped<TheaterAccess>();
 builder.Services.AddScoped<IAuthorizationHandler, TheaterAuthorizationHandler>();
+
+// Rate limits (RateLimits section): endpoint limits for the account pages' form posts, and ActionRateLimiter for
+// actions taken in interactive circuits (messages, place searches, gift card and gate codes). See RateLimiting.cs.
+builder.Services.Configure<RateLimitOptions>(builder.Configuration.GetSection(RateLimitOptions.Section));
+builder.Services.AddSingleton<ActionRateLimiter>();
+builder.Services.AddAppRateLimiting();
 
 // Business and activity metrics (see DriveInMetrics), plus the platform's own: requests, Blazor circuits, the runtime,
 // outbound HTTP and the database. Pushed over OTLP to VictoriaMetrics when Metrics:OtlpEndpoint is set (production
@@ -302,7 +311,12 @@ app.UseHttpsRedirection();
 // start of the pipeline, where the Google callback and login redirects would see http:// behind Caddy.
 app.UseAuthentication();
 app.UseAuthorization();
+// After authentication (signed-in users are limited by account, others by IP) and forwarded headers (the real IP).
+app.UseRateLimiter();
 app.UseAntiforgery();
+
+app.MapHealthChecks("/healthz", new HealthCheckOptions { Predicate = _ => false });
+app.MapHealthChecks("/readyz", new HealthCheckOptions { Predicate = c => c.Tags.Contains(DatabaseHealthCheck.Tag) });
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
@@ -310,6 +324,9 @@ app.MapRazorComponents<App>()
 
 // Add additional endpoints required by the Identity /Account Razor components.
 app.MapAdditionalIdentityEndpoints();
+
+// The offline gate page's admit list, sync, service worker and manifest.
+app.MapGateOfflineEndpoints();
 
 // A theater's logo, for whoever may browse the theater (signed in or not, like the theater's page).
 app.MapGet("/theaters/{slug}/logo", async (string slug, HttpContext http, TheaterService theaters) =>

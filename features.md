@@ -14,7 +14,26 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 - Google sign-in (`Authentication:Google:ClientId/ClientSecret`; callback `/signin-google`). Links automatically to an existing
   confirmed account with the same verified email; links manageable at Account → External logins.
 - Two-factor (authenticator app, recovery codes), passkeys (add, rename, remove), download/delete personal data.
-- Login uses `lockoutOnFailure: false`, so failed passwords don't lock an account out.
+- **Lockout** (`AppIdentityOptions`, shared by `Program.cs` and the tests): 10 wrong passwords (or 2FA / recovery codes) in a row
+  lock the account for 15 minutes (`lockoutOnFailure: true`); a successful sign-in resets the count. A locked account can't sign
+  in by any method (password, passkey, Google) and is sent to `/Account/Lockout`, which says how long and links to Forgot password:
+  resetting the password lifts a lockout from wrong passwords, but not an admin's lock (`LockoutEnd` = max), which never ends.
+- **Rate limits** (`Services/RateLimiting.cs`, config section `RateLimits`, each rule `PermitLimit` per `WindowSeconds` in a
+  fixed window). Per signed-in user, or per client IP when signed out (an IPv6 address by its /64), except where noted:
+  - Endpoint limits (ASP.NET Core's limiter; `UseRateLimiter` after forwarded headers and authentication): `Account`, 10 a
+    minute, for form posts to every account page (`[EnableRateLimiting]` in `Components/Account/Pages/_Imports.razor`, and on
+    `Invite`) and the `/Account/PerformExternalLogin` and passkey options endpoints. One budget across those pages; viewing a
+    page (GET/HEAD) never counts. Over it: `429` with `Retry-After` and a small "Too many attempts" page.
+  - Circuit actions (`ActionRateLimiter`, a singleton the services call, since endpoint limits never see what happens over a
+    circuit's WebSocket; in memory on the app's clock, so one server, reset on restart; signed-out callers share one budget).
+    Over a limit the service throws `AppValidationException` ("Too many attempts. Please wait ... and try again."):
+    `Messages` 10 a minute (new conversations and replies), `PlaceSearch` 20 a minute (`FindPlaceAsync`; the theater list is
+    a static page, so it passes the request's own partition, `HttpRateLimiting.PartitionKey`, and signed-out visitors are
+    limited per IP rather than together), and, counting only
+    codes that match nothing, `GiftCardMissesPerUser` 10 per 10 minutes and `GiftCardMissesPerTheater` 100 an hour across
+    everyone at a theater (checkout and gate gift card checks; past either, no code is looked up) and `GateCodeMisses` 30 a
+    minute (`FindAtGateAsync`; real scans never count).
+  - Every refusal counts `drivein.rate_limited{policy}` (section 14).
 - `Admin` is the only Identity role. The user whose email equals `Seed:AdminEmail` is made admin at sign-in (re-granted if removed).
 - Owner = `Theater.OwnerId`; Employee = `ApplicationUser.EmployeeTheaterId`, one theater per employee account. Not Identity roles.
   `AppClaimsPrincipalFactory` adds the employee-theater claim.
@@ -90,6 +109,7 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 | `/manage/{id}/employees` | Employees and invitations |
 | `/manage/{id}/roles` | Role editor (lists the permission catalog automatically) |
 | `/manage/{id}/gate` | Check-in, gate sales, moving tickets |
+| `/manage/{id}/gate/offline` | Offline check-in (static page + JS, installable; `tickets.admit`) |
 | `/manage/{id}/comps` | Free admission |
 | `/manage/{id}/giftcards` | Gift cards |
 | `/manage/{id}/reports` | Sales, attendance and gift card reports |
@@ -137,15 +157,22 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 
 - **Public theater pages**: `/theaters/{slug}` (showings, news, the theater's menu) and its pages and posts (section 16) need no
   sign-in and are statically rendered (section 12); `CanBrowse` still hides demo and inactive theaters from everyone but their
-  members, and an unknown or hidden theater is a 404. Signed-out visitors see "Sign in to buy" on showings. The theater list and near-me search, the showing (spot map) and gift-card pages, and buying all need sign-in.
-- **Near me** (`/theaters`): a ZIP code or city (geocoded by `TheaterService.FindPlaceAsync`), or **Use my location**
-  (`wwwroot/geo.js`, browser geolocation rounded to 2 decimals), within 25/50/100 (default)/250 miles or any distance.
-  `TheaterService.ListNearAsync` applies the same visibility as the list (`CanBrowse`: demo theaters only for members),
-  leaves out theaters without coordinates, and sorts nearest first (haversine, `Geo.DistanceMiles`). The search is in the
-  query string (`near` or `lat`+`lon`, `radius`). Without a search the list is alphabetical.
+  members, and an unknown or hidden theater is a 404. Signed-out visitors see "Sign in to buy" on showings. The theater list
+  and near-me search are public too (below). The showing (spot map) and gift-card pages, and buying, need sign-in.
+- **Theater list and near me** (`/theaters`, public, static SSR in `PublicLayout`; "Theaters" is in every top bar and "Find a
+  theater" in the marketing nav for signed-out visitors): signed-out visitors see live theaters, members also see their demo
+  ones (`ListActiveAsync`, the `CanBrowse` rule as a query). The search is a plain GET form, so it works without JavaScript:
+  a ZIP code or city (`near`, geocoded by `TheaterService.FindPlaceAsync`, open to anyone) within 25/50/100 (default)/250
+  miles or any distance (`radius`). **Use my location** (`wwwroot/geo.js`) ships hidden and is shown by the script when the
+  browser has geolocation; it asks for the position and opens `?lat=&lon=&radius=` (rounded to 2 decimals, about a
+  kilometer, so the exact spot stays out of the URL), or explains a refusal inline. `TheaterService.ListNearAsync` applies the
+  same visibility, leaves out theaters without coordinates, and sorts nearest first (haversine, `Geo.DistanceMiles`). Without
+  a search the list is alphabetical.
 - **Geocoding** (`Geocoding:Provider`, case-insensitive; an unknown value fails at startup): `Nominatim` (OpenStreetMap, default; `NominatimGeocoder`) or `None`. Nominatim allows one
   request a second, so lookups are serialized and spaced, and results (misses too) are cached in memory for a day (up to 10,000 places); a bare
-  5-digit query is looked up as a US postcode. Failures return "not found" and are logged.
+  5-digit query is looked up as a US postcode. Since anyone can search, a lookup that can't get its turn within 10 s
+  (`QueueTimeout`) gives up as "not found" (not cached) rather than queue. Failures return "not found" and are logged.
+  Searches are also limited per signed-in user or per client IP (`PlaceSearch`, section 1).
 - **Weather** (`WeatherService`, `WeatherLine`): the forecast over each showing, from the hour it starts through the hour it
   ends: the worst WMO condition, the temperature at start and end, the highest chance of rain, and wind when it's 25 km/h or
   more. It appears on the theater page's showing stubs, the showing page (with a "check the forecast" chip when rain is 50%+
@@ -169,7 +196,23 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   can't be picked (map and service both check). The choice is locked while holding (choose a different spot to change it) and is
   stored on the ticket (`Ticket.VehicleSize`), shown on the receipt, ticket page, My tickets and at the gate.
 - **Live maps:** holds/releases/sales are published through in-process `SpotEvents` to open maps. Single-server only; multiple
-  servers would need a shared bus (e.g. Postgres LISTEN/NOTIFY).
+  servers would need a shared bus (e.g. Postgres LISTEN/NOTIFY). During a deploy's minute of overlap, a map open on the old
+  copy misses changes made through the new one until it's refreshed; the database still allows one hold per spot.
+- **Accessible seat maps** (`SeatMap` / `LotMap`, `lot-map.js`; online checkout, the gate's sale and move, free admission, and the
+  screen page's large-vehicle marking):
+  - An interactive map is a labelled `role="group"` (e.g. "Spots at North: 42 of 120 available", plus how many fit a large
+    vehicle when one is chosen) of spot buttons with **one tab stop**. The arrow keys move between spots (up is toward the screen;
+    up/down go to the nearest spot across, as rows are centered), Home/End go to the ends of the row, Enter or Space picks.
+    Focus moves in the browser (`lot-map.js`), with no round trip; picking goes through Blazor as a click.
+  - Every spot stays a button: unavailable ones (held, sold, too small for the vehicle) are `aria-disabled`, so focus and the arrow
+    keys keep their place when a spot changes under them. When the focused spot changes state, the map's polite live region says so;
+    `SeatMap` also announces when the viewer's own hold starts or ends.
+  - States don't rest on color: held spots are hatched, sold ones crossed out, cars-only ones dashed; the key (a list, read by
+    screen readers) shows the same marks. Spot labels are at least 4.5:1 against their spot. Instructions say "available", not "green".
+  - **Best available** picks the free spot that fits the vehicle in the row nearest the screen, as near that row's middle as
+    possible (the left one of two equally central; `SpotChoice.Best`). **Or choose a spot** lists every free, fitting spot by label
+    and row. Both pick exactly as clicking the map would.
+  - Maps that only show a layout (the lot map, a read-only screen layout) stay a single `role="img"` with a summary label.
 - **Payment** (`IPaymentProcessor`, `Payments.cs`, `StripePayments.cs`): credit card only. The card never reaches the server: the
   checkout (`CardFields`, `wwwroot/payments.js`) turns it into a payment method token in the browser and the services take only
   the token (`PurchaseInput.PaymentMethodId`; `PaymentTokens.Require` refuses anything not shaped like `pm_...`). The processor's
@@ -228,6 +271,27 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   expired hold is fine) and fit the vehicle. The ticket keeps its codes, payment and check-in; spot, label and vehicle change.
   Each move is a `ticket_moves` row (from/to spot, label and vehicle, who, when). Moving alone lets staff look tickets up at the
   gate but not check them in. Manager and Ticketing roles get `tickets.move` by default (a migration added it to existing ones).
+- **Offline check-in** (`tickets.admit`, `/manage/{id}/gate/offline`, linked from the Check in panel): for when the lot's signal
+  drops. A static page plus plain JS (`wwwroot/gate-offline/`, `Endpoints/GateOfflineEndpoints.cs`,
+  `TicketSalesService.Offline.cs`), not a Blazor circuit, installable to a home screen (web manifest; a service worker scoped to
+  the page keeps the page, scripts and styles, network first for the page with a 5-second fallback to the copy).
+  - **Admit list** (`GET .../gate/offline/data`, JSON, `no-store`, ETag so an unchanged list is a 304): the showings the gate can
+    admit to today (as for gate sales) and every sold ticket for them, used or not: id, showing, spot, large vehicle, kind
+    (online / gate / comp), test, gate code, check-in time, and the ticket code only as a SHA-256 hash, with no names or emails, so a lost
+    device holds no usable ticket links. Gate codes are kept as they are (they're read out at the gate and only admit at this
+    theater today). Kept in IndexedDB; fetched on open and every 30 s while reachable, which also picks up new sales.
+  - **Checking in** works like the online panel (gate code, ticket code, or a scanned ticket link; then Check in) with the same
+    rules judged on the device's clock: once, from 3 hours before the showing until it ends. Tickets for other days aren't on the
+    device, so they aren't found. Check-ins are queued on the device (each with a random id) and shown as used straight away.
+  - **Sync** (`POST .../gate/offline/sync`, up to 200 check-ins; the antiforgery token from the list's `X-Gate-Token` header goes
+    back in `RequestVerificationToken`): applied with the same rules as of when the car came in (a device clock ahead of the
+    server counts as now), so a check-in synced after the showing ended still counts. Idempotent: the ticket's `Stamp` is set to the
+    check-in's id, so a retried sync answers `already_synced` (also matched by the exact check-in time, since a later move gives
+    the ticket a new `Stamp`). Conflicts (`already_used` by another check-in, `not_found` for a
+    withdrawn free ticket or another theater's, `not_valid` at the time) are listed on the page under "Needs a look" until
+    cleared, since the car is already in; a ticket moved since is admitted and reports its new spot.
+  - The page shows Online / Offline / Signed out / No access, when the list was last updated (and that later sales aren't on it
+    while offline), and how many check-ins are waiting to sync.
 
 ## 7. Free admission (`TicketSalesService.Comps.cs`, `/manage/{id}/comps`)
 
@@ -327,7 +391,7 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 
 - `[ExcludeFromInteractiveRouting]` static SSR with plain CSS (`static.css`, `marketing.css`, `public.css`): `/`, `/features`,
   `/pricing`, `/faq`, `/legal`, `/legal/terms`, `/legal/privacy`, `/legal/license`, `/invite/{token}`, `/Error`, `/not-found`,
-  account pages, and the public theater pages: `/theaters/{slug}`, `/theaters/{slug}/pages/{page}`, `/theaters/{slug}/news` and
+  account pages, and the public theater pages: `/theaters` (the list and near-me search, section 5), `/theaters/{slug}`, `/theaters/{slug}/pages/{page}`, `/theaters/{slug}/news` and
   `/theaters/{slug}/news/{post}` (section 16). Signed-out visitors and crawlers read those without opening a Blazor circuit.
   They use `PublicLayout` (the static top bar over a 1280px page, like the app's); `public.css` is written against the
   `app.css` tokens rather than MudBlazor's palette variables, so the marquee and stubs look the same there as on the
@@ -341,6 +405,11 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 - Blazor Web App, interactive server by default (`Routes`); MudBlazor for interactive pages in `AppLayout`; no Bootstrap.
 - Light/dark follow OS via `wwwroot/theme.js` (`data-theme`, `di-scheme` cookie so the server prerenders the right palette);
   palettes in `Layout/DriveInTheme.cs`, `app.css`, `marketing.css`.
+- Fonts are self-hosted (`wwwroot/fonts/fonts.css`, OFL): Bungee and Bungee Shade (display) and Barlow 400–700 (text),
+  Latin and Latin Extended subsets. Nothing is loaded from Google Fonts or another font CDN.
+- Production only answers to its own host names (`AllowedHosts` in `appsettings.Production.json`: the apex, `app.`, `www.`
+  and `localhost`); a request for any other Host gets a 400. Anything new that calls the app by another name (e.g. a
+  container health check on `web:8080`) has to be added there.
 - Public pages use the marquee header (its bulbs chase around the sign; still under `prefers-reduced-motion`) and the
   ticket `Stub` (`public.css`); manage/admin pages are plain dense MudBlazor with `ManageHeader` / `AdminHeader`.
 - Data: PostgreSQL via EF Core, snake_case, migrations in `Data/Migrations`. Interactive components don't hold a DbContext;
@@ -356,7 +425,25 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   microphone and USB off). A new third-party script, style, font, frame or API host must be added to the CSP there.
   Grafana (`/grafana/`) is proxied by Caddy and keeps its own headers. HSTS comes from `UseHsts` in production.
 - Deploy: merge to `main` runs tests, builds ARM64 images, runs an EF migration bundle, then deploys via SSM; Caddy fronts the app.
-  Nightly `pg_dump` (30 days) plus daily EBS snapshots (7). Metrics and alerts: see section 14.
+  Zero downtime, blue/green on the one server (`deploy/rollout.sh`): compose services `web-blue` / `web-green` (one
+  definition, profiles `blue` / `green`, 768 MB each). The idle color starts with the new image, `/readyz` must pass
+  (asked from a throwaway container on the edge network, `Host: localhost`), then Caddy's `upstream` file and the staged
+  `Caddyfile.next` are switched together and Caddy reloads; the old color drains 60 s, then gets a graceful stop. If
+  the new copy isn't ready in 180 s, or Caddy rejects the switch, the old one keeps serving and the deploy fails.
+  Caddy health-checks the upstream (`/healthz` every 5 s, 3 failures) and keeps WebSockets open across reloads
+  (`stream_close_delay` 5m). Migrations must work with the previous release (CLAUDE.md).
+- Health: `/healthz` (process up, no checks) and `/readyz` (database reachable, `DatabaseHealthCheck`), anonymous.
+- Background jobs (`HoldExpiryService`, `NotificationEmailService`, `BillingJobService`, `BusinessGauges`) run only in the
+  copy holding the Postgres session advisory lock `PostgresJobLeadership.LockKey` (unpooled connection, checked before each
+  run; a stopped or disconnected copy releases it). `TheaterGeocodingBackfill` runs once per start in every copy; it's
+  idempotent.
+  Metrics and alerts: see section 14.
+- Backups (README "Backups and restores"): point-in-time recovery with pgBackRest (`deploy/postgres/Dockerfile`, image
+  `drive-in-postgres:pg-<Dockerfile hash>`, rebuilt only when that file changes): WAL archived to `s3://<OpsBucket>/pitr/`
+  continuously (`archive_timeout` 60 s), nightly base backups (full Sundays, else differential; four fulls kept). Also a
+  nightly `pg_dump` and Data Protection keys tarball (`backups/`, 30 days), and daily EBS snapshots (7). The bucket is
+  versioned (old versions kept 14 days). `deploy/restore.sh`: `list`, `drill` (scratch restore beside the live database),
+  `pitr <time>|latest`, `dump`, `dpkeys`. Alerts: WAL archiving failing, pg_dump or base backup overdue.
 - Logs: every container's console output goes to CloudWatch Logs (`/drive-in/containers`, 30 days; Docker's `awslogs`
   driver, non-blocking, one stream per container). In production the web app logs JSON with scopes (trace id, request path).
 
@@ -370,7 +457,8 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   Caddy's fixed IP (172.30.0.10). No login form, basic auth or anonymous access; Grafana publishes no port.
 - **VictoriaMetrics** (13 months) scrapes node-exporter (host CPU, memory, swap, disk, PSI), Caddy (`:2020`, request
   counts, latency, status codes), postgres-exporter and itself every 30 s (`deploy/victoriametrics/scrape.yml`). `backup.sh`
-  pushes `drivein_backup_last_success_timestamp_seconds` after each nightly backup.
+  pushes `drivein_backup_last_success_timestamp_seconds` (pg_dump) and `drivein_pitr_backup_last_success_timestamp_seconds`
+  (pgBackRest base backup) after each success; postgres-exporter's `pg_stat_archiver_*` covers WAL archiving.
 - **Business data** comes from SQL: the "Drive-In DB" data source connects as `grafana_ro` (`deploy/grafana-ro.sql`, re-run on
   every deploy): read-only sessions, 30 s statement timeout, `pg_monitor`, and column-level SELECT on every table except
   `user_claims`, `user_logins`, `user_passkeys` and `user_tokens`, leaving out bearer codes (`code`, `short_code`), hashes,
@@ -387,7 +475,8 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   `drivein.users.registered{method=password|google|invite|admin}`, `drivein.theaters.signed_up`,
   `drivein.theaters.go_live_requested`, `drivein.theaters.activated{how=go_live|admin_created}`,
   `drivein.tickets.sold` and `drivein.tickets.revenue` (dollars) `{channel=online|gate|comp, test}`,
-  `drivein.tickets.admitted{how=scan|sold_at_gate}`, `drivein.tickets.moved`, `drivein.holds.expired`,
+  `drivein.tickets.admitted{how=scan|sold_at_gate|offline}`, `drivein.tickets.moved`, `drivein.holds.expired`,
+  `drivein.gate.offline_admissions{outcome=synced|conflict}` (offline check-ins as they sync; a retried one isn't counted again),
   `drivein.payments{for=ticket|gift_card, result=approved|declined|error, test}`,
   `drivein.payments.reconciled{for=ticket|gift_card, outcome=completed|released, via=job|webhook}`, `drivein.gift_cards.sold{test}` and
   `drivein.gift_cards.revenue{test}` (dollars), `drivein.emails{result=sent|failed}` (every sender is wrapped in `MeteredEmailSender`; a send the caller
@@ -396,7 +485,9 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   `drivein.invoices.payments` (dollars), and `drivein.errors.logged{category, level}` (every Error/Critical log message,
   `ErrorCountingLoggerProvider`: failures inside Blazor circuits never become 5xx responses),
   `drivein.messages.sent{kind=theater|support, side=customer|theater|support}`, `drivein.notifications.emailed` (digests),
-  and `drivein.content.published{kind=page|post}` (a page or post's first publish).
+  `drivein.content.published{kind=page|post}` (a page or post's first publish), and
+  `drivein.rate_limited{policy=account|messages|place_search|gift_card_misses_user|gift_card_misses_theater|gate_code_misses}`
+  (requests and actions refused by a rate limit, section 1).
 - **`BusinessGauges`** (hosted service, only when `Metrics:OtlpEndpoint` is set) reads totals every minute and reports them as gauges: `drivein.users{kind=customer|employee}`,
   `drivein.theaters{mode}` (active), `drivein.screens.live`, `drivein.showings.upcoming` (next 7 days, live theaters),
   `drivein.theaters.go_live_pending`, `drivein.free_admission.pending`, `drivein.invoices.outstanding` (dollars). Nothing is
@@ -406,15 +497,15 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   - **Drive-In: Business**: totals (customers, new accounts, live/demo theaters, go-live requests, live screens, tickets, revenue,
     cars admitted, gift cards, invoiced, owed) and daily trends from SQL (real sales only; test tickets and gift cards left out),
     top theaters and pending go-lives, plus live activity from the counters (sales, payments, sign-ups, abandoned holds, open
-    sessions, emails, messages and notification emails, content published per day).
+    sessions, emails, messages and notification emails, content published per day, offline gate check-ins synced vs conflicts).
   - **Drive-In: Site performance**: requests, 5xx, latency (p50/95/99, leaving out the Blazor circuit's connection), busiest and
     slowest routes, errors logged by category, unhandled exceptions, job failures, payments, emails, circuits and connections,
-    sign-ins, outbound calls, database time and pool, EF Core, and the .NET runtime (memory, CPU, GC, thread pool).
+    sign-ins, rate-limited requests by policy, outbound calls, database time and pool, EF Core, and the .NET runtime (memory, CPU, GC, thread pool).
   - **Drive-In: Server**: host, edge, PostgreSQL, backups, monitoring targets.
 - **Alerts** email through the `drive-in-alerts` SNS topic (`infra/app.yml`, `AlertEmail`), which Grafana publishes to with the
   instance role. Grafana rules (folder Drive-In, group Server): disk over 80% (10 min), memory available under 10% (10 min),
   swap over 1 GB (15 min), Caddy 502/503/504 above 0.02/s (5 min), PostgreSQL down (3 min), a scrape target down (10 min),
-  last backup over 26 h old. Group App: the app stopped reporting (5 min), 5xx over 5% of at least 20 requests in 10 min,
+  last pg_dump or base backup over 26 h old, WAL archive failures for 10 min (critical). Group App: the app stopped reporting (5 min), 5xx over 5% of at least 20 requests in 10 min,
   p95 over 2 s (10 min), more than 10 errors logged in 5 min, any critical error, any email failure (15 min), any background
   job failure (15 min), any payment processor error (15 min), a ticket or gift card purchase still Paying 45 minutes after
   payment started (SQL), and a go-live request waiting over 24 h (SQL). Repeats every
@@ -439,7 +530,8 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   even though they pass every theater permission check (unless they own the theater).
 - **The customer's side**: `/messages` lists their conversations (theaters and support), `/messages/{id}` is the thread. Only
   the theater (or, for support, an admin) closes a conversation; nobody can post in a closed one until it's reopened.
-- Limits: 10 new conversations per person per 24 hours (replies are unlimited). Unread state is per person
+- Limits: 10 new conversations per person per 24 hours, and at most 10 messages (new conversations and replies) a minute
+  (`RateLimits:Messages`, section 1). Unread state is per person
   (`conversation_reads`): opening a thread marks it read for you only. Deleting an account keeps its conversations and
   messages, shown as "Deleted account". The personal-data download includes the messages you wrote.
 - Threads, inboxes, the bell and `/notifications` update live through in-process `MessageEvents` / `NotificationEvents`

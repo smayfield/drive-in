@@ -82,10 +82,10 @@ public class ManageGatePageTests
         page.WaitForText("Move to another spot");
 
         page.ClickButton("Move to another spot");
-        page.WaitForText("Pick a green spot");
+        page.WaitForText("Pick an available spot");
         page.ClickButton("Cancel");
         page.ClickButton("Move to another spot");
-        page.WaitForText("Pick a green spot");
+        page.WaitForText("Pick an available spot");
         page.Find("g[aria-label='Spot B4: available']").Click();
         page.ClickButton("Move A1 → B4");
 
@@ -101,7 +101,7 @@ public class ManageGatePageTests
         var page = Open(host, s);
 
         page.Find("button.gate-showing").Click();
-        page.WaitForText("Pick a green spot for the car. 7 of 7 are open.");
+        page.WaitForText("Pick an available spot for the car. 7 of 7 are open.");
         page.Find("g[aria-label='Spot A2: available']").Click();
         page.WaitForText("Spot A2");
         Assert.Contains("held 10:00", page.Text());
