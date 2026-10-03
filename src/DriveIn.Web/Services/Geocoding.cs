@@ -102,7 +102,8 @@ public sealed partial class NominatimGeocoder(
 
         if (!await gate.WaitAsync(QueueTimeout, ct))
         {
-            logger.LogWarning("Geocoding \"{Query}\" gave up waiting for earlier lookups", normalized);
+            // Information, not Warning, and without the visitor's text: in a burst this fires for every lookup turned away.
+            logger.LogInformation("A geocoding lookup gave up waiting for earlier ones");
             return null;
         }
         try

@@ -43,21 +43,21 @@
 @if (Searching)
 {
     <div class="d-flex flex-wrap align-items-baseline gap-2 mb-3" role="status">
-        <p class="mb-0">
-            @if (placeNotFound)
-            {
-                @* The alert above says why. *@
-            }
-            else if (theaters.Count == 0)
-            {
-                @($"No theaters {RadiusText} {PlaceText}.")
-                @if (Radius != AnyDistance) { <span> Try a larger distance.</span> }
-            }
-            else
-            {
-                @($"{theaters.Count} theater{(theaters.Count == 1 ? "" : "s")} {RadiusText} {PlaceText}, nearest first.")
-            }
-        </p>
+        @* After a failed search the alert above says why, so there's no line here. *@
+        @if (!placeNotFound)
+        {
+            <p class="mb-0">
+                @if (theaters.Count == 0)
+                {
+                    @($"No theaters {RadiusText} {PlaceText}.")
+                    @if (Radius != AnyDistance) { <span> Try a larger distance.</span> }
+                }
+                else
+                {
+                    @($"{theaters.Count} theater{(theaters.Count == 1 ? "" : "s")} {RadiusText} {PlaceText}, nearest first.")
+                }
+            </p>
+        }
         <a href="theaters">Show all theaters</a>
     </div>
 }

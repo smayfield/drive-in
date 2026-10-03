@@ -55,7 +55,7 @@
                 lon: position.lon.toFixed(2),
                 radius: (form && form.elements.radius && form.elements.radius.value) || "100"
             });
-            var url = (form ? form.getAttribute("action") : "theaters") + "?" + query.toString();
+            var url = ((form && form.getAttribute("action")) || "theaters") + "?" + query.toString();
             if (window.Blazor && typeof window.Blazor.navigateTo === "function") {
                 window.Blazor.navigateTo(url);
             } else {

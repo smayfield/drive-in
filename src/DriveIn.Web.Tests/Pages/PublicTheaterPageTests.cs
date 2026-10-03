@@ -149,6 +149,8 @@ public class PublicTheaterPageTests
 
         page.WaitForText("We couldn't find \"Atlantis\". Try a ZIP code, or a city and state.");
         Assert.DoesNotContain("Starlight", page.Text());
+        // The alert says why; the status line doesn't add an empty paragraph.
+        Assert.Empty(page.Find("[role=status]").QuerySelectorAll("p"));
     }
 
     [Fact]
