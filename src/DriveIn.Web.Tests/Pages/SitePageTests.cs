@@ -80,7 +80,7 @@ public class SitePageTests
         Assert.Contains("Admin: Users", text);
         Assert.Contains("Sign out", text);
 
-        admin.Find("button[aria-label='Open menu']").Click();
+        admin.ClickOn("button[aria-label='Open menu']");
     }
 
     [Fact]

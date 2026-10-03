@@ -185,6 +185,11 @@ public static class RenderedExtensions
             (last ? buttons[^1] : buttons[0]).Click();
         }).GetAwaiter().GetResult();
 
+    // Clicks the element matching this CSS selector (a seat map spot, a showing card...). Like ClickButton, found and
+    // clicked on the renderer's dispatcher, so a re-render in between can't leave the click aimed at a stale handler.
+    public static void ClickOn<T>(this IRenderedComponent<T> page, string selector) where T : IComponent =>
+        page.InvokeAsync(() => page.Find(selector).Click()).GetAwaiter().GetResult();
+
     // The inputs and textareas of the MudBlazor fields with this label (or aria-label / placeholder), in page order.
     public static List<IElement> Fields<T>(this IRenderedComponent<T> page, string label) where T : IComponent =>
         page.FindAll(".mud-input-control")

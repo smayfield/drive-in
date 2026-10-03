@@ -312,7 +312,7 @@ public class MessagesPageTests
         var id = await AskAsync(w);
         bell.WaitForAssertion(() => Assert.NotEmpty(bell.FindAll("button[aria-label='Notifications, 1 unread']")));
 
-        bell.Find("button[aria-label='Notifications, 1 unread']").Click();
+        bell.ClickOn("button[aria-label='Notifications, 1 unread']");
         var popovers = host.Popovers!;
         popovers.WaitForAssertion(() => Assert.Contains("New message from Customer", popovers.Markup));
         popovers.FindAll(".mud-menu-item").First(i => i.TextContent.Contains("New message from Customer")).Click();
@@ -330,7 +330,7 @@ public class MessagesPageTests
         var bell = host.Render<NotificationBell>();
         bell.WaitForAssertion(() => Assert.NotEmpty(bell.FindAll("button[aria-label='Notifications, 1 unread']")));
 
-        bell.Find("button[aria-label='Notifications, 1 unread']").Click();
+        bell.ClickOn("button[aria-label='Notifications, 1 unread']");
         var popovers = host.Popovers!;
         popovers.WaitForAssertion(() => Assert.Contains("Mark all read", popovers.Markup));
         popovers.FindAll("button").First(b => b.TextContent.Trim() == "Mark all read").Click();
@@ -358,7 +358,7 @@ public class MessagesPageTests
 
         await w.Messaging.PostAsync(Principals.For(w.Customer), id, "Hello?");
         page.WaitForAssertion(() => Assert.Single(page.FindAll(".conversation-item.unread")));
-        page.Find(".conversation-item.unread").Click();
+        page.ClickOn(".conversation-item.unread");
         page.WaitForAssertion(() => Assert.EndsWith($"manage/{w.Theater.Id}/messages/{id}", host.Nav.Uri));
         Assert.Equal(0, await w.Notifications.CountUnreadAsync(Principals.For(w.Owner)));
     }

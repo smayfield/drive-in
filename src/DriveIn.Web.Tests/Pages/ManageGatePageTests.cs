@@ -86,7 +86,7 @@ public class ManageGatePageTests
         page.ClickButton("Cancel");
         page.ClickButton("Move to another spot");
         page.WaitForText("Pick an available spot");
-        page.Find("g[aria-label='Spot B4: available']").Click();
+        page.ClickOn("g[aria-label='Spot B4: available']");
         page.ClickButton("Move A1 → B4");
 
         page.WaitForText("Moved to spot B4 on North. Send the car there.");
@@ -100,9 +100,9 @@ public class ManageGatePageTests
         await using var _ = host;
         var page = Open(host, s);
 
-        page.Find("button.gate-showing").Click();
+        page.ClickOn("button.gate-showing");
         page.WaitForText("Pick an available spot for the car. 7 of 7 are open.");
-        page.Find("g[aria-label='Spot A2: available']").Click();
+        page.ClickOn("g[aria-label='Spot A2: available']");
         page.WaitForText("Spot A2");
         Assert.Contains("held 10:00", page.Text());
         page.ChooseRadio("Car load");
@@ -121,9 +121,9 @@ public class ManageGatePageTests
         var (host, s) = await OwnerAsync();
         await using var _ = host;
         var page = Open(host, s);
-        page.Find("button.gate-showing").Click();
+        page.ClickOn("button.gate-showing");
         page.WaitForText("are open");
-        page.Find("g[aria-label='Spot A2: available']").Click();
+        page.ClickOn("g[aria-label='Spot A2: available']");
         page.WaitForText("Spot A2");
 
         page.ClickButton("Cancel");
@@ -143,9 +143,9 @@ public class ManageGatePageTests
             new GiftCardPurchaseInput(50m, "Sam", null, null, Visa), TestApp.BaseUri)).Card;
         s.App.Payments.Charges.Clear();
         var page = Open(host, s);
-        page.Find("button.gate-showing").Click();
+        page.ClickOn("button.gate-showing");
         page.WaitForText("are open");
-        page.Find("g[aria-label='Spot A2: available']").Click();
+        page.ClickOn("g[aria-label='Spot A2: available']");
         page.WaitForText("Spot A2");
 
         page.SetField("Gift card code (optional)", card.Code);

@@ -176,7 +176,7 @@ public class ContentPageTests
         page.ClickButton("Choose a cover image");
         var dialogs = host.Dialogs!;
         dialogs.WaitForAssertion(() => Assert.NotEmpty(dialogs.FindAll(".image-tile")));
-        dialogs.Find(".image-tile").Click();
+        dialogs.ClickOn(".image-tile");
         dialogs.WaitForAssertion(() => Assert.Equal("The screen", dialogs.Find("input:not([type=checkbox]):not([type=radio])").GetAttribute("value")));
         dialogs.FindAll("button").Single(b => b.TextContent.Trim() == "Use as cover").Click();
         page.WaitForText("Change cover");
