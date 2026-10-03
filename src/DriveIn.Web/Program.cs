@@ -210,6 +210,7 @@ builder.Services.AddScoped<BillingReportService>();
 // everything without taking money; "Stripe" is untested so far and accepts only test-mode keys (see StripeOptions).
 // Either way the card is tokenized in the browser and never reaches this server (see PaymentClient).
 builder.Services.Configure<PaymentOptions>(builder.Configuration.GetSection(PaymentOptions.Section));
+PaymentOptions.Validate(builder.Configuration.GetSection(PaymentOptions.Section).Get<PaymentOptions>() ?? new PaymentOptions());
 builder.Services.AddSingleton<DummyPaymentProcessor>(); // also used for demo theaters' test sales
 // Matched like the other providers: case and surrounding spaces don't matter.
 var paymentProvider = builder.Configuration[$"{PaymentOptions.Section}:Provider"]?.Trim() ?? "";
