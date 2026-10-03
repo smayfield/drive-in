@@ -595,7 +595,7 @@ public class TicketSalesTests
         var result = await stripe.ChargeAsync(new PaymentRequest(30, "usd", "x", "pm_1Qabc", "k", new Dictionary<string, string>()));
 
         Assert.False(result.Approved);
-        Assert.Contains("at least $0.50", result.DeclineReason);
+        Assert.Contains("at least 0.50 USD", result.DeclineReason);
     }
 
     [Theory]

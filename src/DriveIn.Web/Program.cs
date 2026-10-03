@@ -211,14 +211,16 @@ builder.Services.AddScoped<BillingReportService>();
 // Either way the card is tokenized in the browser and never reaches this server (see PaymentClient).
 builder.Services.Configure<PaymentOptions>(builder.Configuration.GetSection(PaymentOptions.Section));
 builder.Services.AddSingleton<DummyPaymentProcessor>(); // also used for demo theaters' test sales
-var paymentProvider = builder.Configuration[$"{PaymentOptions.Section}:Provider"];
+// Matched like the other providers: case and surrounding spaces don't matter.
+var paymentProvider = builder.Configuration[$"{PaymentOptions.Section}:Provider"]?.Trim() ?? "";
+var useStripe = paymentProvider.Equals("Stripe", StringComparison.OrdinalIgnoreCase);
 // Theaters' payout accounts (Manage → Payouts) go with the processor: Stripe Connect, a dummy that's enabled at once, or none.
-if (paymentProvider == "Dummy")
+if (paymentProvider.Equals("Dummy", StringComparison.OrdinalIgnoreCase))
 {
     builder.Services.AddSingleton<IPaymentProcessor>(sp => sp.GetRequiredService<DummyPaymentProcessor>());
     builder.Services.AddSingleton<IPayoutAccounts, DummyPayoutAccounts>();
 }
-else if (paymentProvider == "Stripe")
+else if (useStripe)
 {
     var stripe = builder.Configuration.GetSection(StripeOptions.Section).Get<StripeOptions>() ?? new StripeOptions();
     StripeOptions.Validate(stripe); // fail at startup rather than at the first sale
@@ -292,7 +294,7 @@ else
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 // Stripe's hosts are allowed only when Stripe is the processor (its card form needs them).
-app.UseSecurityHeaders(app.Environment.IsDevelopment(), stripe: paymentProvider == "Stripe");
+app.UseSecurityHeaders(app.Environment.IsDevelopment(), stripe: useStripe);
 app.UseHttpsRedirection();
 
 // Explicit so they run after UseForwardedHeaders. Left implicit, WebApplication inserts them at the
