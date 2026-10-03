@@ -47,7 +47,7 @@ public class PublicPurchasePageTests
         Assert.Contains("$10.00 One occupant", text);
         Assert.Contains("7 of 7 available", text);
 
-        page.Find("g[aria-label='Spot B2: available']").Click();
+        page.ClickOn("g[aria-label='Spot B2: available']");
         page.WaitForText("Spot B2 is yours for 10:00");
         page.ChooseRadio("Car load");
         page.Check("Veteran");
@@ -67,7 +67,7 @@ public class PublicPurchasePageTests
         await using var __ = s;
         s.App.Payments.DeclineWith = "Insufficient funds.";
         var page = OpenShowing(host, s);
-        page.Find("g[aria-label='Spot A1: available']").Click();
+        page.ClickOn("g[aria-label='Spot A1: available']");
         page.WaitForText("Spot A1 is yours for");
         EnterCard(host, page);
 
@@ -84,7 +84,7 @@ public class PublicPurchasePageTests
         await using var _ = host;
         await using var __ = s;
         var page = OpenShowing(host, s);
-        page.Find("g[aria-label='Spot A1: available']").Click();
+        page.ClickOn("g[aria-label='Spot A1: available']");
         page.WaitForText("Spot A1 is yours for");
         // The card inputs aren't bound to anything: Blazor never sees what's typed into them.
         Assert.All(page.FindAll(".test-card input"), input => Assert.Null(input.GetAttribute("value")));
@@ -103,7 +103,7 @@ public class PublicPurchasePageTests
         await using var _ = host;
         await using var __ = s;
         var page = OpenShowing(host, s);
-        page.Find("g[aria-label='Spot A1: available']").Click();
+        page.ClickOn("g[aria-label='Spot A1: available']");
         page.WaitForText("Spot A1 is yours for");
         host.Context.JSInterop.SetupModule("./payments.js")
             .Setup<CardFields.CardToken>("tokenizeTest", _ => true).SetResult(new CardFields.CardToken(null, "That card has expired."));
@@ -127,7 +127,7 @@ public class PublicPurchasePageTests
         mount.SetResult(true);
         stripe.Setup<CardFields.CardToken>("tokenizeStripe", _ => true).SetResult(new CardFields.CardToken("pm_1Qstripe", null));
         var page = OpenShowing(host, s);
-        page.Find("g[aria-label='Spot A1: available']").Click();
+        page.ClickOn("g[aria-label='Spot A1: available']");
         page.WaitForText("Spot A1 is yours for");
 
         Assert.Empty(page.FindAll(".test-card"));
@@ -150,7 +150,7 @@ public class PublicPurchasePageTests
         stripe.Setup<bool>("mountStripe", _ => true).SetException(new Microsoft.JSInterop.JSException("Couldn't load Stripe."));
         stripe.Setup<CardFields.CardToken>("tokenizeStripe", _ => true).SetException(new Microsoft.JSInterop.JSException("not mounted"));
         var page = OpenShowing(host, s);
-        page.Find("g[aria-label='Spot A1: available']").Click();
+        page.ClickOn("g[aria-label='Spot A1: available']");
 
         page.WaitForText("The card form couldn't load.");
         page.ClickButton("Pay $10.00");
@@ -167,7 +167,7 @@ public class PublicPurchasePageTests
         await using var _ = host;
         await using var __ = s;
         var page = OpenShowing(host, s);
-        page.Find("g[aria-label='Spot A1: available']").Click();
+        page.ClickOn("g[aria-label='Spot A1: available']");
         page.WaitForText("Spot A1 is yours for");
 
         page.ClickButton("Choose a different spot");
@@ -188,7 +188,7 @@ public class PublicPurchasePageTests
             new GiftCardPurchaseInput(50m, "Sam", null, null, Visa), TestApp.BaseUri)).Card;
         s.App.Payments.Charges.Clear();
         var page = OpenShowing(host, s);
-        page.Find("g[aria-label='Spot A1: available']").Click();
+        page.ClickOn("g[aria-label='Spot A1: available']");
         page.WaitForText("Spot A1 is yours for");
 
         page.SetField("Gift card code (optional)", card.Code);
