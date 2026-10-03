@@ -95,9 +95,10 @@
     {
         get
         {
+            // The theater list is public, so everyone gets it.
+            yield return new("theaters", "Theaters");
             if (signedIn)
             {
-                yield return new("theaters", "Theaters");
                 yield return new("tickets", "My tickets");
                 yield return new("messages", "Messages");
                 if (!manages && !isEmployee)

@@ -4,7 +4,7 @@
 @inject TheaterService Theaters
 @inject NotificationService Notifications
 
-@* The top bar for statically rendered pages (account, Invite, Error): the same look and links as the interactive
+@* The top bar for statically rendered pages (account, Invite, Error, the public theater pages): the same look and links as the interactive
    AppLayout bar. The menu toggle is a checkbox so it works without any interactivity. *@
 <header class="static-bar">
     <div class="static-bar-inner">
@@ -14,9 +14,10 @@
         <label for="nav-toggle" class="static-toggle" aria-label="Toggle navigation">&#9776;</label>
 
         <nav class="static-nav" aria-label="Main">
+            @* The theater list is public, so everyone gets it. *@
+            <NavLink class="app-link" href="theaters">Theaters</NavLink>
             <AuthorizeView>
                 <Authorized>
-                    <NavLink class="app-link" href="theaters">Theaters</NavLink>
                     <NavLink class="app-link" href="tickets">My tickets</NavLink>
                     <NavLink class="app-link" href="messages">Messages</NavLink>
                     @if (!manages && context.User.GetEmployeeTheaterId() is null)
