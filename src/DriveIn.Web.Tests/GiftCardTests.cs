@@ -582,4 +582,52 @@ public class GiftCardTests
         Assert.Empty(check.GiftCardTransactions);
         Assert.Empty(check.Tickets);
     }
+
+    // --- Guessing ---
+
+    [Fact]
+    public async Task Wrong_codes_past_the_limit_stop_all_lookups_for_that_person_until_the_window_ends()
+    {
+        await using var s = await SetUpWithGiftCardsAsync();
+        var card = await BuyCardAsync(s, await BuyerAsync(s.App), 50m);
+        var guesser = await BuyerAsync(s.App, "guesser@example.com");
+        var limit = new RateLimitOptions().GiftCardMissesPerUser;
+
+        for (var i = 0; i < limit.PermitLimit; i++)
+        {
+            var miss = await Assert.ThrowsAsync<AppValidationException>(() => s.Sales.CheckGiftCardAsync(guesser, s.Showing.Id, "ABCD-EFGH-JKMN-PQRT"));
+            Assert.StartsWith("That gift card isn't valid", miss.Message);
+        }
+        // Even a real code is refused now, so guessing can't go on.
+        var refused = await Assert.ThrowsAsync<AppValidationException>(() => s.Sales.CheckGiftCardAsync(guesser, s.Showing.Id, card.Code));
+        Assert.StartsWith("Too many attempts", refused.Message);
+        // Checkout too.
+        var buy = await Assert.ThrowsAsync<AppValidationException>(() => BuyTicketAsync(s, guesser, s.CarLoad, card.Code));
+        Assert.StartsWith("Too many attempts", buy.Message);
+        // Someone else isn't affected.
+        Assert.Equal(50m, (await s.Sales.CheckGiftCardAsync(await BuyerAsync(s.App, "friend@example.com"), s.Showing.Id, card.Code)).Balance);
+
+        s.App.Time.Advance(limit.Window);
+        Assert.Equal(50m, (await s.Sales.CheckGiftCardAsync(guesser, s.Showing.Id, card.Code)).Balance);
+    }
+
+    [Fact]
+    public async Task Wrong_codes_from_many_people_at_one_theater_hit_the_theater_limit()
+    {
+        await using var s = await SetUpWithGiftCardsAsync();
+        var card = await BuyCardAsync(s, await BuyerAsync(s.App), 50m);
+        var options = new RateLimitOptions();
+        var perUser = options.GiftCardMissesPerUser.PermitLimit;
+        var misses = 0;
+        for (var person = 0; misses < options.GiftCardMissesPerTheater.PermitLimit; person++)
+        {
+            var guesser = await BuyerAsync(s.App, $"guesser{person}@example.com");
+            for (var i = 0; i < perUser && misses < options.GiftCardMissesPerTheater.PermitLimit; i++, misses++)
+                await Assert.ThrowsAsync<AppValidationException>(() => s.Sales.CheckGiftCardAsync(guesser, s.Showing.Id, "ABCD-EFGH-JKMN-PQRT"));
+        }
+
+        var newcomer = await BuyerAsync(s.App, "new@example.com");
+        var refused = await Assert.ThrowsAsync<AppValidationException>(() => s.Sales.CheckGiftCardAsync(newcomer, s.Showing.Id, card.Code));
+        Assert.StartsWith("Too many attempts", refused.Message);
+    }
 }

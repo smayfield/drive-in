@@ -1,10 +1,10 @@
 name: CI
 
-# Builds and tests every pull request to main, so a change is checked before it's merged (merging deploys; see
-# deploy.yml, which tests again as a safety net). Make "build-and-test" a required status check in branch protection.
+# Builds and tests every pull request, so a change is checked before it's merged (merging to main deploys; see
+# deploy.yml, which tests again as a safety net). Any base branch, so stacked PRs (based on another PR's branch) are
+# checked too. Make "build-and-test" a required status check in branch protection.
 on:
   pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:

@@ -38,8 +38,8 @@ public static class SecurityHeaders
         "default-src 'self'",
         $"script-src 'self' 'nonce-{nonce}'",
         // MudBlazor and Quill set inline styles (style attributes and the theme's <style> element).
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-        "font-src 'self' https://fonts.gstatic.com",
+        "style-src 'self' 'unsafe-inline'",
+        "font-src 'self'",
         // Inline images: QR codes and pasted images are data: URIs; previews of a chosen file are blob: URLs. Public
         // theaters' images redirect to the image CDN (PublicImages.cs).
         "img-src 'self' data: blob:" + (string.IsNullOrEmpty(imageOrigin) ? "" : " " + imageOrigin),
