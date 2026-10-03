@@ -359,6 +359,11 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 - Blazor Web App, interactive server by default (`Routes`); MudBlazor for interactive pages in `AppLayout`; no Bootstrap.
 - Light/dark follow OS via `wwwroot/theme.js` (`data-theme`, `di-scheme` cookie so the server prerenders the right palette);
   palettes in `Layout/DriveInTheme.cs`, `app.css`, `marketing.css`.
+- Fonts are self-hosted (`wwwroot/fonts/fonts.css`, OFL): Bungee and Bungee Shade (display) and Barlow 400–700 (text),
+  Latin and Latin Extended subsets. Nothing is loaded from Google Fonts or another font CDN.
+- Production only answers to its own host names (`AllowedHosts` in `appsettings.Production.json`: the apex, `app.`, `www.`
+  and `localhost`); a request for any other Host gets a 400. Anything new that calls the app by another name (e.g. a
+  container health check on `web:8080`) has to be added there.
 - Public pages use the marquee header (its bulbs chase around the sign; still under `prefers-reduced-motion`) and the
   ticket `Stub` (`public.css`); manage/admin pages are plain dense MudBlazor with `ManageHeader` / `AdminHeader`.
 - Data: PostgreSQL via EF Core, snake_case, migrations in `Data/Migrations`. Interactive components don't hold a DbContext;

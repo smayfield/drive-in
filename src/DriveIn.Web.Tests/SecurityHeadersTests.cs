@@ -52,6 +52,9 @@ public class SecurityHeadersTests
         // Google sign-in is a form post that redirects to Google; form-action covers the redirect.
         Assert.Contains("form-action 'self' https://accounts.google.com", csp);
         Assert.Contains("connect-src 'self';", csp);
+        // Fonts are self-hosted (wwwroot/fonts), so no font CDN is allowed.
+        Assert.Contains("font-src 'self';", csp);
+        Assert.Contains("style-src 'self' 'unsafe-inline';", csp);
     }
 
     [Fact]
