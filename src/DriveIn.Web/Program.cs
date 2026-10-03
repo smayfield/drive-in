@@ -264,6 +264,23 @@ builder.Services.AddHostedService<NotificationEmailService>();
 builder.Services.AddSingleton(sp => new HtmlContent(sp.GetRequiredService<IOptions<NotificationOptions>>().Value.SiteUrl));
 builder.Services.AddScoped<ContentService>();
 
+// Public theaters' images, copied to S3 and served by CloudFront when PublicImages:Bucket and :BaseUrl are set
+// (production); otherwise the app serves every image itself.
+builder.Services.Configure<PublicImagesOptions>(builder.Configuration.GetSection(PublicImagesOptions.Section));
+builder.Services.AddScoped<PublicImageLocator>();
+if (builder.Configuration.GetSection(PublicImagesOptions.Section).Get<PublicImagesOptions>() is { Enabled: true })
+{
+    // Region and credentials come from the environment (AWS_REGION + the EC2 instance role).
+    builder.Services.AddSingleton<Amazon.S3.IAmazonS3, Amazon.S3.AmazonS3Client>();
+    builder.Services.AddSingleton<Amazon.CloudFront.IAmazonCloudFront, Amazon.CloudFront.AmazonCloudFrontClient>();
+    builder.Services.AddSingleton<IPublicImageStore, S3PublicImageStore>();
+    builder.Services.AddHostedService<PublicImagePublisher>();
+}
+else
+{
+    builder.Services.AddSingleton<IPublicImageStore, NoPublicImageStore>();
+}
+
 var app = builder.Build();
 
 app.UseForwardedHeaders();
@@ -278,7 +295,8 @@ else
     app.UseHsts();
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
-app.UseSecurityHeaders(app.Environment.IsDevelopment());
+app.UseSecurityHeaders(app.Environment.IsDevelopment(),
+    app.Services.GetRequiredService<IOptions<PublicImagesOptions>>().Value.ImageOrigin);
 app.UseHttpsRedirection();
 
 // Explicit so they run after UseForwardedHeaders. Left implicit, WebApplication inserts them at the
@@ -303,8 +321,18 @@ app.MapAdditionalIdentityEndpoints();
 app.MapGateOfflineEndpoints();
 
 // A theater's logo, for whoever may browse the theater (signed in or not, like the theater's page).
-app.MapGet("/theaters/{slug}/logo", async (string slug, HttpContext http, TheaterService theaters) =>
+// Public theaters' images redirect to their copy in the image CDN once there is one (PublicImages.cs). The redirect
+// is kept for a few minutes only, so a theater that stops being public soon stops pointing there.
+static IResult ToCdn(HttpContext http, string url)
 {
+    http.Response.Headers.CacheControl = "public, max-age=300";
+    return Results.Redirect(url);
+}
+
+app.MapGet("/theaters/{slug}/logo", async (string slug, HttpContext http, TheaterService theaters, PublicImageLocator cdn) =>
+{
+    if (await cdn.LogoUrlAsync(slug) is string cdnUrl)
+        return ToCdn(http, cdnUrl);
     var logo = await theaters.GetLogoAsync(http.User, slug);
     if (logo is null)
         return Results.NotFound();
@@ -315,8 +343,10 @@ app.MapGet("/theaters/{slug}/logo", async (string slug, HttpContext http, Theate
 });
 
 // A film's poster, visible to whoever may browse the film's theater.
-app.MapGet("/films/{filmId:int}/poster", async (int filmId, HttpContext http, ScheduleService schedule) =>
+app.MapGet("/films/{filmId:int}/poster", async (int filmId, HttpContext http, ScheduleService schedule, PublicImageLocator cdn) =>
 {
+    if (await cdn.PosterUrlAsync(filmId) is string cdnUrl)
+        return ToCdn(http, cdnUrl);
     var poster = await schedule.GetPosterAsync(http.User, filmId);
     if (poster is null)
         return Results.NotFound();
@@ -327,8 +357,11 @@ app.MapGet("/films/{filmId:int}/poster", async (int filmId, HttpContext http, Sc
 
 // An image from a theater's library (its pages and posts), for whoever may browse the theater. An image's bytes never
 // change (a new upload is a new id), so a public theater's can be cached anywhere for a week.
-app.MapGet("/theaters/{slug}/images/{id:int}", async (string slug, int id, HttpContext http, ContentService content) =>
+app.MapGet("/theaters/{slug}/images/{id:int}", async (string slug, int id, HttpContext http, ContentService content,
+    PublicImageLocator cdn) =>
 {
+    if (await cdn.ImageUrlAsync(slug, id) is string cdnUrl)
+        return ToCdn(http, cdnUrl);
     var image = await content.GetImageAsync(http.User, slug, id);
     if (image is null)
         return Results.NotFound();

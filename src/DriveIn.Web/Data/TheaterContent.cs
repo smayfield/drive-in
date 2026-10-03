@@ -118,6 +118,11 @@ public class TheaterImage
 
     public byte[] Data { get; set; } = [];
 
+    // Where its public copy is in the image CDN, while the theater is public (PublicImagePublisher). An image's bytes
+    // never change, so the copy never goes stale.
+    [MaxLength(CdnKeys.MaxLength)]
+    public string? CdnKey { get; set; }
+
     public DateTimeOffset UploadedAt { get; set; }
 
     public string? UploadedById { get; set; }

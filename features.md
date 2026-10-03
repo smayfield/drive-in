@@ -125,6 +125,18 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 - **Season:** optional opens/closes (either end optional). Showings must fall inside; can't be changed to exclude scheduled showings.
 - **Logo** (`theater_logos`): JPG/GIF/PNG, max 2 MB, type sniffed from bytes (no SVG), stored in DB; served at
   `/theaters/{slug}/logo` to anyone who can browse the theater (signed in or not).
+- **Image CDN** (`PublicImages.cs`; on when `PublicImages:Bucket` and `:BaseUrl` are set, as in production from SSM
+  `/drive-in/images-*`): public (active, live) theaters' logos, posters and library images are copied to S3 and served by
+  CloudFront at `img.drive-in.online` (`infra/app.yml`: private bucket with origin access control, versioned 30 days,
+  managed CachingOptimized and SecurityHeaders policies). Keys: `t/{theaterId}/logo-{LogoUpdatedAt ticks}-{hash}.ext`,
+  `poster-{filmId}-{PosterUpdatedAt ticks}-{hash}`, `image-{imageId}-{hash}` (hash = 128 bits of the bytes' SHA-256, so
+  unguessable), objects `Cache-Control: public, max-age=31536000, immutable`; the key is stored in `cdn_key` on
+  `theater_logos` / `film_posters` / `theater_images` (not readable by `grafana_ro`). `/theaters/{slug}/logo`,
+  `/films/{id}/poster` and `/theaters/{slug}/images/{id}` 302 to the copy (cached 5 min) when the theater is public and the
+  key names the current upload (`PublicImageLocator`); otherwise they serve the bytes as before. `PublicImagePublisher`
+  (every 2 min, job leader only; failures count as `drivein.jobs.failures{job="public_images"}`) copies what's missing
+  (which also backfills existing images), clears keys of theaters that aren't public, and deletes, then invalidates in
+  CloudFront, every object no key refers to. The CSP's `img-src` adds the CDN origin when it's on.
 - **Screens:** 1 to 4 per theater (new theaters start with "Screen 1"); order sets lot-map position. Spot layout = list of rows,
   nearest the screen first, each with its own spot count, centered. Label schemes per screen: row letter + spot number (`B7`),
   row number + spot letter (`2G`), single number (`207`). Spots numbered left to right facing the screen. A screen with sales can't
@@ -424,7 +436,7 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 - **Business data** comes from SQL: the "Drive-In DB" data source connects as `grafana_ro` (`deploy/grafana-ro.sql`, re-run on
   every deploy): read-only sessions, 30 s statement timeout, `pg_monitor`, and column-level SELECT on every table except
   `user_claims`, `user_logins`, `user_passkeys` and `user_tokens`, leaving out bearer codes (`code`, `short_code`), hashes,
-  `security_stamp`, image bytes (`data`), `payment_reference`, any `*email*` column and what people write in the app
+  `security_stamp`, image bytes (`data`) and CDN keys (`cdn_key`), `payment_reference`, any `*email*` column and what people write in the app
   (`messages.body`, `conversations.subject`, `notifications.title`) and theaters' page text (`theater_pages.body_html`,
   `theater_pages.summary`); on `users` only `id`, `created_at`,
   `email_confirmed`, `employee_theater_id`, `lockout_end` and `two_factor_enabled`.
