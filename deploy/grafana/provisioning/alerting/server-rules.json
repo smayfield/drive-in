@@ -405,6 +405,120 @@
             "severity": "warning"
           },
           "isPaused": false
+        },
+        {
+          "uid": "wal-archive-failing",
+          "title": "WAL archiving failing",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "victoriametrics",
+              "model": {
+                "refId": "A",
+                "expr": "increase(pg_stat_archiver_failed_count[10m])",
+                "instant": true,
+                "range": false,
+                "intervalMs": 15000,
+                "maxDataPoints": 43200
+              }
+            },
+            {
+              "refId": "C",
+              "datasourceUid": "__expr__",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "model": {
+                "refId": "C",
+                "type": "threshold",
+                "expression": "A",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "gt",
+                      "params": [
+                        0
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "10m",
+          "annotations": {
+            "summary": "PostgreSQL can't archive WAL to S3, so point-in-time recovery is falling behind (pg_wal is filling up; past 2 GB it's dropped).",
+            "description": "Over SSM: `docker compose -f docker-compose.prod.yml logs --since 30m postgres` in /opt/drive-in shows pgBackRest's error; `docker compose -f docker-compose.prod.yml exec -u postgres postgres pgbackrest check` retries. README: Backups and restores."
+          },
+          "labels": {
+            "severity": "critical"
+          },
+          "isPaused": false
+        },
+        {
+          "uid": "pitr-backup-stale",
+          "title": "Base backup overdue",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "victoriametrics",
+              "model": {
+                "refId": "A",
+                "expr": "time() - max_over_time(drivein_pitr_backup_last_success_timestamp_seconds[30d])",
+                "instant": true,
+                "range": false,
+                "intervalMs": 15000,
+                "maxDataPoints": 43200
+              }
+            },
+            {
+              "refId": "C",
+              "datasourceUid": "__expr__",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "model": {
+                "refId": "C",
+                "type": "threshold",
+                "expression": "A",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "gt",
+                      "params": [
+                        93600
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "0s",
+          "annotations": {
+            "summary": "The nightly pgBackRest base backup hasn't succeeded for over 26 hours.",
+            "description": "`journalctl -u drive-in-backup` over SSM; run `sudo drive-in-backup <OpsBucket>`; `sudo bash /opt/drive-in/restore.sh list` shows the backups pgBackRest has."
+          },
+          "labels": {
+            "severity": "warning"
+          },
+          "isPaused": false
         }
       ]
     }

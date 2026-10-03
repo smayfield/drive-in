@@ -386,7 +386,13 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   microphone and USB off). A new third-party script, style, font, frame or API host must be added to the CSP there.
   Grafana (`/grafana/`) is proxied by Caddy and keeps its own headers. HSTS comes from `UseHsts` in production.
 - Deploy: merge to `main` runs tests, builds ARM64 images, runs an EF migration bundle, then deploys via SSM; Caddy fronts the app.
-  Nightly `pg_dump` (30 days) plus daily EBS snapshots (7). Metrics and alerts: see section 14.
+  Metrics and alerts: see section 14.
+- Backups (README "Backups and restores"): point-in-time recovery with pgBackRest (`deploy/postgres/Dockerfile`, image
+  `drive-in-postgres:pg-<Dockerfile hash>`, rebuilt only when that file changes): WAL archived to `s3://<OpsBucket>/pitr/`
+  continuously (`archive_timeout` 60 s), nightly base backups (full Sundays, else differential; four fulls kept). Also a
+  nightly `pg_dump` and Data Protection keys tarball (`backups/`, 30 days), and daily EBS snapshots (7). The bucket is
+  versioned (old versions kept 14 days). `deploy/restore.sh`: `list`, `drill` (scratch restore beside the live database),
+  `pitr <time>|latest`, `dump`, `dpkeys`. Alerts: WAL archiving failing, pg_dump or base backup overdue.
 - Logs: every container's console output goes to CloudWatch Logs (`/drive-in/containers`, 30 days; Docker's `awslogs`
   driver, non-blocking, one stream per container). In production the web app logs JSON with scopes (trace id, request path).
 
@@ -400,7 +406,8 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   Caddy's fixed IP (172.30.0.10). No login form, basic auth or anonymous access; Grafana publishes no port.
 - **VictoriaMetrics** (13 months) scrapes node-exporter (host CPU, memory, swap, disk, PSI), Caddy (`:2020`, request
   counts, latency, status codes), postgres-exporter and itself every 30 s (`deploy/victoriametrics/scrape.yml`). `backup.sh`
-  pushes `drivein_backup_last_success_timestamp_seconds` after each nightly backup.
+  pushes `drivein_backup_last_success_timestamp_seconds` (pg_dump) and `drivein_pitr_backup_last_success_timestamp_seconds`
+  (pgBackRest base backup) after each success; postgres-exporter's `pg_stat_archiver_*` covers WAL archiving.
 - **Business data** comes from SQL: the "Drive-In DB" data source connects as `grafana_ro` (`deploy/grafana-ro.sql`, re-run on
   every deploy): read-only sessions, 30 s statement timeout, `pg_monitor`, and column-level SELECT on every table except
   `user_claims`, `user_logins`, `user_passkeys` and `user_tokens`, leaving out bearer codes (`code`, `short_code`), hashes,
@@ -446,7 +453,7 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 - **Alerts** email through the `drive-in-alerts` SNS topic (`infra/app.yml`, `AlertEmail`), which Grafana publishes to with the
   instance role. Grafana rules (folder Drive-In, group Server): disk over 80% (10 min), memory available under 10% (10 min),
   swap over 1 GB (15 min), Caddy 502/503/504 above 0.02/s (5 min), PostgreSQL down (3 min), a scrape target down (10 min),
-  last backup over 26 h old. Group App: the app stopped reporting (5 min), 5xx over 5% of at least 20 requests in 10 min,
+  last pg_dump or base backup over 26 h old, WAL archive failures for 10 min (critical). Group App: the app stopped reporting (5 min), 5xx over 5% of at least 20 requests in 10 min,
   p95 over 2 s (10 min), more than 10 errors logged in 5 min, any critical error, any email failure (15 min), any background
   job failure (15 min), any payment processor error (15 min), and a go-live request waiting over 24 h (SQL). Repeats every
   12 h while firing. CloudWatch alarms on the same topic cover what Grafana can't see
