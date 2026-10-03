@@ -24,7 +24,15 @@ else
         {
             <MudItem xs="12" lg="@(canSell ? (moving is null ? 4 : 6) : 8)">
                 <MudPaper Outlined Class="pa-3">
-                    <MudText Typo="Typo.h5" Class="mb-2">@(canAdmit ? "Check in" : "Find a ticket")</MudText>
+                    <div class="d-flex flex-wrap gap-2 align-center justify-space-between mb-2">
+                        <MudText Typo="Typo.h5">@(canAdmit ? "Check in" : "Find a ticket")</MudText>
+                        @if (canAdmit)
+                        {
+                            @* A static page with its own copy of tonight's tickets: keeps checking cars in when the signal drops. *@
+                            <MudButton Href="@($"manage/{theater.Id}/gate/offline")" Variant="Variant.Outlined" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.CloudOff">Offline gate</MudButton>
+                        }
+                    </div>
                     @* A plain input on purpose: handheld scanners type into it and press Enter, and it gets focus after each lookup. *@
                     <form class="d-flex gap-2 mb-2" @onsubmit="FindAsync">
                         <input @ref="codeInput" class="gate-input" autocomplete="off" autocapitalize="characters"

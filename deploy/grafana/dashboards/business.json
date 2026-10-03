@@ -1733,6 +1733,65 @@
       },
       "description": "Theaters' pages and posts published for the first time, by kind.",
       "interval": "1d"
+    },
+    {
+      "id": 32,
+      "type": "timeseries",
+      "title": "Offline gate check-ins per hour",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 53,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "sum by (outcome) (increase(drivein_gate_offline_admissions_total[1h]))",
+          "legendFormat": "{{outcome}}",
+          "range": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "min": 0,
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Check-ins made on the offline gate page, counted when they sync: synced, or conflict (the ticket was already used elsewhere, withdrawn, or not valid when the car came in). Conflicts are worth a look: a shared screenshot of a ticket shows up here."
     }
   ]
 }

@@ -25,6 +25,7 @@ public sealed class DriveInMetrics
     private readonly Counter<double> ticketRevenue;
     private readonly Counter<long> ticketsAdmitted;
     private readonly Counter<long> ticketsMoved;
+    private readonly Counter<long> offlineAdmissions;
     private readonly Counter<long> holdsExpired;
     private readonly Counter<long> payments;
     private readonly Counter<long> giftCardsSold;
@@ -55,8 +56,10 @@ public sealed class DriveInMetrics
         ticketRevenue = meter.CreateCounter<double>("drivein.tickets.revenue", "{USD}",
             "Ticket totals in dollars, gift card share included (channel, test).");
         ticketsAdmitted = meter.CreateCounter<long>("drivein.tickets.admitted", "{ticket}",
-            "Cars checked in at the gate (how: scan, sold_at_gate).");
+            "Cars checked in at the gate (how: scan, sold_at_gate, offline).");
         ticketsMoved = meter.CreateCounter<long>("drivein.tickets.moved", "{ticket}", "Tickets moved to another spot.");
+        offlineAdmissions = meter.CreateCounter<long>("drivein.gate.offline_admissions", "{admission}",
+            "Check-ins made on the offline gate page, when they sync (outcome: synced, conflict).");
         holdsExpired = meter.CreateCounter<long>("drivein.holds.expired", "{hold}",
             "Spot holds that ran out before the buyer paid.");
         payments = meter.CreateCounter<long>("drivein.payments", "{payment}",
@@ -100,6 +103,10 @@ public sealed class DriveInMetrics
     public void TicketAdmitted(string how) => ticketsAdmitted.Add(1, new KeyValuePair<string, object?>("how", how));
 
     public void TicketMoved() => ticketsMoved.Add(1);
+
+    // A check-in made offline reached the server: synced (applied now) or conflict (refused; the car is already in).
+    public void OfflineAdmissionSynced(bool conflict) =>
+        offlineAdmissions.Add(1, new KeyValuePair<string, object?>("outcome", conflict ? "conflict" : "synced"));
 
     public void HoldsExpired(int count) => holdsExpired.Add(count);
 

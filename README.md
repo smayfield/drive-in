@@ -129,6 +129,10 @@ invitee sets a password or continues with Google using the invited address.
   - **Move** ("Move tickets"): send a car to another spot at the same showing, e.g. a front-row ticket when the guest arrives
     in a large SUV, at check-in or after the car is in. Only spots available right now that fit the vehicle; each move is logged
     in `ticket_moves`.
+  - **Offline gate** (`/manage/{id}/gate/offline`, "Admit guests"): a plain page, not a live Blazor connection, that keeps
+    tonight's ticket list on the phone or tablet (ticket codes only as hashes, no names) and keeps checking cars in when the signal
+    drops. Check-ins wait on the device and sync when it's back; anything the server refuses (e.g. the same ticket used at another
+    gate) is listed for staff to look at. It can be added to the home screen. Details in [features.md](features.md).
 - **All sales are final**: there are no refunds or cancellations, including for weather. Sold tickets are records,
   so a showing with sales can't be removed or moved to another screen, a film or screen with sales can't be
   deleted, and a screen can't drop or relabel spots sold for upcoming showings.

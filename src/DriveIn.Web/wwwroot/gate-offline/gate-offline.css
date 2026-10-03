@@ -1,0 +1,56 @@
+/* The offline gate page (ManageGateOffline.razor). Static, so it uses the --di-* tokens from app.css, not MudBlazor's
+   palette. Used on a phone in the dark: big targets and unmistakable status. */
+.gate-offline-main { max-width: 760px; margin: 0 auto; padding: 1rem 16px 3rem; }
+.gate-offline h1 { font-size: 1.5rem; margin: 0 0 0.25rem; }
+.gate-offline h2 { font-size: 1.2rem; margin: 0 0 0.75rem; }
+.gate-muted { color: var(--di-muted); }
+
+.gate-offline-header { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-start; justify-content: space-between; margin-bottom: 0.75rem; }
+
+.gate-status { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center; margin-bottom: 0.75rem; font-size: 0.95rem; }
+.gate-pill {
+    display: inline-block;
+    padding: 0.15rem 0.7rem;
+    border-radius: 999px;
+    font-weight: 700;
+    border: 2px solid var(--di-line-strong);
+}
+/* Each state has its own word too, not just a color. */
+.gate-pill[data-state="online"] { border-color: var(--di-success); color: var(--di-success); }
+.gate-pill[data-state="offline"] { border-color: var(--di-warning); color: var(--di-warning); }
+.gate-pill[data-state="signed-out"], .gate-pill[data-state="denied"] { border-color: var(--di-danger); color: var(--di-danger); }
+
+.gate-card { background: var(--di-surface); border: 1px solid var(--di-line); border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+
+.gate-form { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; }
+.gate-offline .gate-input {
+    flex: 1;
+    min-width: 0;
+    padding: 0.6rem 0.85rem;
+    border: 1px solid var(--di-line-strong);
+    border-radius: 6px;
+    background: var(--di-surface);
+    color: var(--di-ink);
+    font-family: Menlo, Consolas, monospace;
+    font-size: 1.25rem;
+    letter-spacing: 0.08em;
+}
+
+.gate-result { border: 2px solid var(--di-line-strong); border-radius: 8px; padding: 0.75rem 1rem; margin-top: 0.75rem; }
+.gate-result.valid { border-color: var(--di-success); }
+.gate-result.invalid { border-color: var(--di-danger); }
+.gate-result.admitted { border-color: var(--di-success); background: color-mix(in srgb, var(--di-success) 10%, transparent); }
+.gate-verdict { font-size: 1.6rem; font-weight: 700; margin: 0 0 0.25rem; }
+.gate-result.valid .gate-verdict, .gate-result.admitted .gate-verdict { color: var(--di-success); }
+.gate-result.invalid .gate-verdict { color: var(--di-danger); }
+.gate-offline .gate-spot { font-size: 1.75rem; font-weight: 700; }
+.gate-chip { display: inline-block; margin-left: 0.4rem; padding: 0 0.5rem; border-radius: 999px; font-size: 0.85rem; font-weight: 600;
+    background: color-mix(in srgb, var(--di-warning) 20%, transparent); color: var(--di-ink); vertical-align: middle; }
+.gate-result .btn { margin-top: 0.5rem; }
+
+.gate-conflicts li { border-left: 4px solid var(--di-danger); padding: 0.4rem 0.75rem; margin-bottom: 0.5rem; background: color-mix(in srgb, var(--di-danger) 8%, transparent); }
+.gate-conflicts li.info { border-left-color: var(--di-info); background: color-mix(in srgb, var(--di-info) 8%, transparent); }
+
+.gate-showings { width: 100%; border-collapse: collapse; }
+.gate-showings th, .gate-showings td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--di-line); vertical-align: top; }
+.gate-showings td.num, .gate-showings th.num { text-align: right; white-space: nowrap; }

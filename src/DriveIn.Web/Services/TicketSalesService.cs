@@ -498,11 +498,12 @@ public sealed partial class TicketSalesService(
         return null;
     }
 
-    private string? AdmitProblem(Ticket ticket)
+    // Why the ticket can't admit a car now (or as of `asOf`, for a check-in made offline earlier), or null if it can.
+    private string? AdmitProblem(Ticket ticket, DateTimeOffset? asOf = null)
     {
         var showtime = ticket.Showtime!;
         var theater = showtime.Screen!.Theater!;
-        var now = time.GetUtcNow();
+        var now = asOf ?? time.GetUtcNow();
         var starts = TheaterTime.ToLocal(theater, showtime.StartsAt);
         if (ticket.AdmittedAt is DateTimeOffset at)
             return $"Already used: admitted {TheaterTime.ToLocal(theater, at):ddd, MMM d h:mm tt}.";
