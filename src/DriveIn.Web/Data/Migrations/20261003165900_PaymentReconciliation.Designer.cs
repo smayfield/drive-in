@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using DriveIn.Web.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace DriveIn.Web.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261003165900_PaymentReconciliation")]
+    partial class PaymentReconciliation
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1464,21 +1467,6 @@ namespace DriveIn.Web.Data.Migrations
                     b.Property<string>("OwnerId")
                         .HasColumnType("text")
                         .HasColumnName("owner_id");
-
-                    b.Property<string>("PayoutAccountId")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("payout_account_id");
-
-                    b.Property<string>("PayoutStatus")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("payout_status");
-
-                    b.Property<DateTimeOffset?>("PayoutStatusCheckedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("payout_status_checked_at");
 
                     b.Property<string>("Phone")
                         .HasMaxLength(40)

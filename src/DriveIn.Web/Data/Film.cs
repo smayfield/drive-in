@@ -52,6 +52,11 @@ public class FilmPoster
     public string ContentType { get; set; } = "";
 
     public byte[] Data { get; set; } = [];
+
+    // Where its public copy is in the image CDN, while the theater is public (PublicImagePublisher). It names the
+    // Film.PosterUpdatedAt version it was made from, so a replaced poster's old copy is never served.
+    [MaxLength(CdnKeys.MaxLength)]
+    public string? CdnKey { get; set; }
 }
 
 // One ticketed showing on a screen: one film, or several back to back (a double feature) with an intermission

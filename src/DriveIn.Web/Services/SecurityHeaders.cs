@@ -13,13 +13,16 @@ public static class SecurityHeaders
     public static string Nonce(HttpContext? context) =>
         context?.Items[NonceKey] as string ?? "";
 
-    public static IApplicationBuilder UseSecurityHeaders(this IApplicationBuilder app, bool development, bool stripe = false) =>
+    // imageOrigin: where public theaters' images are served from besides this site (the image CDN, when it's on).
+    // stripe: Stripe is the payment processor, so its card form's hosts are allowed (see ContentSecurityPolicy).
+    public static IApplicationBuilder UseSecurityHeaders(this IApplicationBuilder app, bool development, string? imageOrigin = null,
+        bool stripe = false) =>
         app.Use((context, next) =>
         {
             var nonce = Convert.ToBase64String(RandomNumberGenerator.GetBytes(16));
             context.Items[NonceKey] = nonce;
             var headers = context.Response.Headers;
-            headers.ContentSecurityPolicy = ContentSecurityPolicy(nonce, development, stripe);
+            headers.ContentSecurityPolicy = ContentSecurityPolicy(nonce, development, imageOrigin, stripe);
             headers.XContentTypeOptions = "nosniff";
             headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
             headers["Permissions-Policy"] = PermissionsPolicy;
@@ -35,14 +38,15 @@ public static class SecurityHeaders
 
     // stripe: Stripe is the payment processor (Payments:Provider), so the checkout's card form loads Stripe.js and Stripe's
     // card-field iframes. Only then are Stripe's hosts allowed (the ones Stripe's CSP guide lists for Elements).
-    public static string ContentSecurityPolicy(string nonce, bool development, bool stripe = false) => string.Join("; ",
+    public static string ContentSecurityPolicy(string nonce, bool development, string? imageOrigin = null, bool stripe = false) => string.Join("; ",
         "default-src 'self'",
         stripe ? $"script-src 'self' 'nonce-{nonce}' https://js.stripe.com" : $"script-src 'self' 'nonce-{nonce}'",
         // MudBlazor and Quill set inline styles (style attributes and the theme's <style> element).
         "style-src 'self' 'unsafe-inline'",
         "font-src 'self'",
-        // Inline images: QR codes and pasted images are data: URIs; previews of a chosen file are blob: URLs.
-        "img-src 'self' data: blob:",
+        // Inline images: QR codes and pasted images are data: URIs; previews of a chosen file are blob: URLs. Public
+        // theaters' images redirect to the image CDN (PublicImages.cs).
+        "img-src 'self' data: blob:" + (string.IsNullOrEmpty(imageOrigin) ? "" : " " + imageOrigin),
         // 'self' covers the Blazor circuit's WebSocket on the same host; Stripe.js creates payment methods at
         // api.stripe.com. Locally, dotnet watch's browser refresh connects to its own localhost port.
         "connect-src 'self'" + (stripe ? " https://api.stripe.com" : "") + (development ? " ws://localhost:* wss://localhost:*" : ""),

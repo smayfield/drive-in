@@ -25,6 +25,10 @@ umask 077
 # Assigned here, not in the heredoc below, so a missing parameter stops the deploy (set -e) before anything changes.
 GRAFANA_DB_PASSWORD=$(param grafana-db-password)
 ALERTS_TOPIC_ARN=$(param alerts-topic-arn)
+# The image CDN (infra/app.yml). Optional: without it (stack not updated yet) the app serves every image itself.
+IMAGES_BUCKET=$(param images-bucket 2>/dev/null || true)
+IMAGES_URL=$(param images-url 2>/dev/null || true)
+IMAGES_DISTRIBUTION_ID=$(param images-distribution-id 2>/dev/null || true)
 # Grafana's built-in admin password is never used (no login form or basic auth); keep it random.
 GRAFANA_ADMIN_PASSWORD=$(grep -s '^GRAFANA_ADMIN_PASSWORD=' .env | cut -d= -f2- || true)
 GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')}
@@ -45,6 +49,9 @@ PUBLIC_HOST=$PUBLIC_HOST
 GRAFANA_DB_PASSWORD=$GRAFANA_DB_PASSWORD
 GRAFANA_ADMIN_PASSWORD=$GRAFANA_ADMIN_PASSWORD
 ALERTS_TOPIC_ARN=$ALERTS_TOPIC_ARN
+IMAGES_BUCKET=$IMAGES_BUCKET
+IMAGES_URL=$IMAGES_URL
+IMAGES_DISTRIBUTION_ID=$IMAGES_DISTRIBUTION_ID
 EOF
 umask 022
 
