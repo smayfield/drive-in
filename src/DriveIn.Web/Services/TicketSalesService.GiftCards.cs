@@ -172,7 +172,7 @@ public sealed partial class TicketSalesService
         var theater = await TheaterOfShowtimeAsync(db, showtimeId);
         if (!TheaterService.CanBrowse(user, theater))
             throw new NotFoundException("Showing not found.");
-        return await CheckGiftCardAsync(db, theater, code);
+        return await CheckGiftCardAsync(db, theater, code, ActionRateLimiter.KeyFor(user));
     }
 
     public async Task<GiftCardBalance> CheckGiftCardAtGateAsync(ClaimsPrincipal user, int showtimeId, string code)
@@ -180,24 +180,32 @@ public sealed partial class TicketSalesService
         await using var db = await dbFactory.CreateDbContextAsync();
         var theater = await TheaterOfShowtimeAsync(db, showtimeId);
         await auth.RequireAsync(user, theater, TheaterPermissions.SellAtGate);
-        return await CheckGiftCardAsync(db, theater, code);
+        return await CheckGiftCardAsync(db, theater, code, ActionRateLimiter.KeyFor(user));
     }
 
-    private static async Task<GiftCardBalance> CheckGiftCardAsync(ApplicationDbContext db, Theater theater, string code)
+    private async Task<GiftCardBalance> CheckGiftCardAsync(ApplicationDbContext db, Theater theater, string code, string limitKey)
     {
-        var card = await FindGiftCardAsync(db, theater.Id, code, forUpdate: false);
+        var card = await FindGiftCardAsync(db, theater.Id, code, forUpdate: false, limitKey: limitKey);
         return new GiftCardBalance(card.Last4, card.Balance);
     }
 
     // The theater's gift card for a typed code. A bad code and another theater's code get the same answer, so this can't
-    // be used to find out which codes exist.
-    private static async Task<GiftCard> FindGiftCardAsync(ApplicationDbContext db, int theaterId, string? code, bool forUpdate)
+    // be used to find out which codes exist. Codes that match nothing are counted against the person trying them
+    // (limitKey) and the theater; past either limit, no code is looked up until the window ends.
+    private async Task<GiftCard> FindGiftCardAsync(ApplicationDbContext db, int theaterId, string? code, bool forUpdate, string limitKey)
     {
+        var theaterKey = ActionRateLimiter.KeyForTheater(theaterId);
+        limiter.Check(RateLimitPolicies.GiftCardMissesPerUser, limitKey);
+        limiter.Check(RateLimitPolicies.GiftCardMissesPerTheater, theaterKey);
         var normalized = GiftCardCodes.Normalize(code);
         var cards = forUpdate ? db.GiftCards : db.GiftCards.AsNoTracking();
         var card = normalized is null ? null : await cards.FirstOrDefaultAsync(g => g.Code == normalized && g.TheaterId == theaterId);
         if (card is null)
+        {
+            limiter.Miss(RateLimitPolicies.GiftCardMissesPerUser, limitKey);
+            limiter.Miss(RateLimitPolicies.GiftCardMissesPerTheater, theaterKey);
             throw new AppValidationException("That gift card isn't valid at this theater. Check the code and try again.");
+        }
         if (card.Balance <= 0)
             throw new AppValidationException($"The gift card ending {card.Last4} has no balance left.");
         return card;

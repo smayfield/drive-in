@@ -314,4 +314,24 @@ public class GateTests
     [InlineData("K0QM", null)] // no zero in the alphabet
     public void Gate_codes_are_read_forgivingly(string input, string? expected) =>
         Assert.Equal(expected, ShortCodes.Normalize(input));
+
+    [Fact]
+    public async Task Gate_codes_that_match_nothing_are_limited_but_real_scans_never_count()
+    {
+        await using var s = await SetUpAsync();
+        var code = await SellAsync(s, await BuyerAsync(s.App));
+        s.App.Time.SetUtcNow(ShowDayAfternoon.AddHours(1));
+        var attendant = await AttendantAsync(s, AdmitGuests);
+        var limit = new RateLimitOptions().GateCodeMisses;
+
+        for (var i = 0; i < 100; i++)
+            await s.Sales.FindAtGateAsync(attendant, s.Theater.Id, code); // a busy gate: every scan matches
+        for (var i = 0; i < limit.PermitLimit; i++)
+            await Assert.ThrowsAsync<AppValidationException>(() => s.Sales.FindAtGateAsync(attendant, s.Theater.Id, "ZZZZ"));
+
+        var refused = await Assert.ThrowsAsync<AppValidationException>(() => s.Sales.FindAtGateAsync(attendant, s.Theater.Id, code));
+        Assert.StartsWith("Too many attempts", refused.Message);
+        s.App.Time.Advance(limit.Window);
+        Assert.Single(await s.Sales.FindAtGateAsync(attendant, s.Theater.Id, code));
+    }
 }

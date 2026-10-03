@@ -23,6 +23,8 @@ img, svg { vertical-align: middle; }
 table { border-collapse: collapse; }
 button, input, select, textarea { font: inherit; color: inherit; }
 label { display: inline-block; }
+/* On the public static pages, hidden means hidden even when a class sets a display (e.g. a .btn that script reveals). */
+.public-main [hidden] { display: none !important; }
 code { font-size: 0.875em; }
 
 /* --- Layout --- */

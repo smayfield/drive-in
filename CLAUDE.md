@@ -8,7 +8,7 @@ See README.md for the full picture. Conventions worth knowing before changing co
 - **One app**: `src/DriveIn.Web` (Blazor Web App). `Routes` is interactive by default; pages marked
   `[ExcludeFromInteractiveRouting]` stay static SSR: the Identity account pages under `Components/Account` (they need
   the HTTP response for cookies), marketing and legal pages, Invite, Error and NotFound, and the public theater pages
-  (`Theaters/Details`, `TheaterContentPage`, `TheaterNews`, in `PublicLayout`, so anonymous visitors and crawlers don't open a
+  (`Theaters/Index`, `Details`, `TheaterContentPage`, `TheaterNews`, in `PublicLayout`, so anonymous visitors and crawlers don't open a
   circuit). So don't put `@rendermode` on pages.
 - **UI:** MudBlazor (MIT) for every interactive page, in `AppLayout`. Static pages use `AccountLayout` /
   `MarketingLayout` and plain CSS instead, since MudBlazor needs an interactive circuit. Light and dark follow the

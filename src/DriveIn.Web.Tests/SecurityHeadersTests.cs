@@ -54,6 +54,9 @@ public class SecurityHeadersTests
         Assert.Contains("connect-src 'self';", csp);
         Assert.Contains("frame-src 'none';", csp);
         Assert.DoesNotContain("stripe.com", csp); // not unless Stripe is the processor
+        // Fonts are self-hosted (wwwroot/fonts), so no font CDN is allowed.
+        Assert.Contains("font-src 'self';", csp);
+        Assert.Contains("style-src 'self' 'unsafe-inline';", csp);
     }
 
     [Fact]

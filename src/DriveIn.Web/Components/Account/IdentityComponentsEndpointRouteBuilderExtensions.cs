@@ -11,6 +11,7 @@ using Microsoft.Extensions.Primitives;
 using DriveIn.Web.Components.Account.Pages;
 using DriveIn.Web.Components.Account.Pages.Manage;
 using DriveIn.Web.Data;
+using DriveIn.Web.Services;
 
 namespace Microsoft.AspNetCore.Routing;
 
@@ -28,6 +29,7 @@ internal static class IdentityComponentsEndpointRouteBuilderExtensions
         // token gets a 400 at form binding, before the handler runs. They deliberately have no manual
         // ValidateRequestAsync call. Endpoints that bind no form data (passkey options,
         // DownloadPersonalData) must validate manually. Verified with token-less POSTs.
+        // The sign-in endpoints share the account pages' rate limit (RateLimitPolicies.Account).
 
         accountGroup.MapPost("/PerformExternalLogin", (
             HttpContext context,
@@ -46,7 +48,7 @@ internal static class IdentityComponentsEndpointRouteBuilderExtensions
 
             var properties = signInManager.ConfigureExternalAuthenticationProperties(provider, redirectUrl);
             return TypedResults.Challenge(properties, [provider]);
-        });
+        }).RequireRateLimiting(RateLimitPolicies.Account);
 
         accountGroup.MapPost("/Logout", async (
             ClaimsPrincipal user,
@@ -84,7 +86,7 @@ internal static class IdentityComponentsEndpointRouteBuilderExtensions
                 DisplayName = userName
             });
             return TypedResults.Content(optionsJson, contentType: "application/json");
-        });
+        }).RequireRateLimiting(RateLimitPolicies.Account);
 
         accountGroup.MapPost("/PasskeyRequestOptions", async (
             HttpContext context,
@@ -98,7 +100,7 @@ internal static class IdentityComponentsEndpointRouteBuilderExtensions
             var user = string.IsNullOrEmpty(username) ? null : await userManager.FindByNameAsync(username);
             var optionsJson = await signInManager.MakePasskeyRequestOptionsAsync(user);
             return TypedResults.Content(optionsJson, contentType: "application/json");
-        });
+        }).RequireRateLimiting(RateLimitPolicies.Account);
 
         var manageGroup = accountGroup.MapGroup("/Manage").RequireAuthorization();
 

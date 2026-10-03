@@ -25,18 +25,6 @@ public class PublicTheaterPageTests
     private static async Task<PageHost> BuyerHostAsync(TicketSalesTests.Setup s) =>
         new PageHost(s.App).SignIn(await TicketSalesTests.BuyerAsync(s.App));
 
-    // Answers the page's driveIn.getPosition call (its result type is private to the page).
-    private static void SetPosition(PageHost host, double? lat, double? lon, string? error)
-    {
-        var type = typeof(TheaterIndex).GetNestedType("BrowserPosition", System.Reflection.BindingFlags.NonPublic)!;
-        var setup = typeof(BunitJSInteropSetupExtensions).GetMethods()
-            .Single(m => m.Name == "Setup" && m.GetParameters() is [_, { ParameterType: var id }, { ParameterType: var args }]
-                && id == typeof(string) && args == typeof(object[]))
-            .MakeGenericMethod(type)
-            .Invoke(null, [host.Context.JSInterop, "driveIn.getPosition", Array.Empty<object>()])!;
-        setup.GetType().GetMethod("SetResult")!.Invoke(setup, [Activator.CreateInstance(type, lat, lon, error)]);
-    }
-
     [Fact]
     public async Task Every_open_theater_is_listed()
     {
@@ -51,34 +39,103 @@ public class PublicTheaterPageTests
     }
 
     [Fact]
-    public async Task A_search_goes_into_the_link_and_lists_theaters_nearest_first()
+    public async Task The_list_is_static_and_open_to_visitors_who_arent_signed_in()
+    {
+        Assert.NotNull(typeof(TheaterIndex).GetCustomAttributes(typeof(Microsoft.AspNetCore.Components.ExcludeFromInteractiveRoutingAttribute), false).SingleOrDefault());
+        Assert.Empty(typeof(TheaterIndex).GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), true));
+
+        var s = await PlacedAsync();
+        await using var host = new PageHost(s.App).UseRequest();
+
+        var page = host.Render<TheaterIndex>();
+
+        page.WaitForText("Starlight");
+        Assert.Contains("theaters/starlight", page.Markup);
+    }
+
+    [Fact]
+    public async Task Visitors_see_live_theaters_and_members_also_see_their_demo_theater()
+    {
+        var s = await PlacedAsync();
+        var demo = await s.App.CreateTheaterAsync("Moonlight", s.Owner.Id);
+        await using (var db = s.App.Db())
+        {
+            (await db.Theaters.SingleAsync(t => t.Id == demo.Id)).Mode = TheaterMode.Demo;
+            await db.SaveChangesAsync();
+        }
+
+        await using var host = new PageHost(s.App).UseRequest();
+        var page = host.Render<TheaterIndex>();
+        page.WaitForText("Starlight");
+        Assert.DoesNotContain("Moonlight", page.Text());
+
+        host.SignIn(s.Owner);
+        var mine = host.Render<TheaterIndex>();
+        mine.WaitForText("Moonlight");
+    }
+
+    [Fact]
+    public async Task The_search_is_a_get_form_that_keeps_what_was_asked()
+    {
+        var s = await PlacedAsync();
+        await using var host = new PageHost(s.App).UseRequest();
+        host.Nav.NavigateTo("theaters?near=78701&radius=50");
+
+        var page = host.Render<TheaterIndex>();
+
+        var form = page.Find("form[role=search]");
+        Assert.Equal("get", form.GetAttribute("method"));
+        Assert.Equal("theaters", form.GetAttribute("action"));
+        Assert.Equal("78701", page.Find("input[name=near]").GetAttribute("value"));
+        Assert.Equal("50", page.Find("select[name=radius] option[selected]").GetAttribute("value"));
+        // geo.js reveals "Use my location"; without JavaScript it stays hidden.
+        Assert.True(page.Find("button[data-geo-locate]").HasAttribute("hidden"));
+    }
+
+    [Fact]
+    public async Task A_search_lists_theaters_nearest_first_even_when_signed_out()
     {
         var s = await PlacedAsync();
         s.App.Geocoder.Places["78701"] = new GeoPoint(30.30, -97.70);
-        await using var host = await BuyerHostAsync(s);
-        var page = host.Render<TheaterIndex>();
-        page.WaitForText("Starlight");
+        await using var host = new PageHost(s.App).UseRequest();
 
-        page.SetField("ZIP code or city", "78701");
-        page.Find("form").Submit();
-
-        Assert.Contains("theaters?near=78701&radius=100", host.Nav.Uri);
+        host.Nav.NavigateTo("theaters?near=78701&radius=100");
         var results = host.Render<TheaterIndex>();
+
         results.WaitForText("1 theater within 100 miles of 78701, nearest first.");
         Assert.Contains("3 miles away", results.Text());
     }
 
     [Fact]
-    public async Task An_empty_search_shows_every_theater_again()
+    public async Task Signed_out_searches_are_limited_by_the_visitors_address()
+    {
+        var s = await PlacedAsync();
+        s.App.Geocoder.Places["78701"] = new GeoPoint(30.30, -97.70);
+        var limit = new RateLimitOptions().PlaceSearch;
+        await using var host = new PageHost(s.App).UseRequest();
+        host.Request.Connection.RemoteIpAddress = System.Net.IPAddress.Parse("203.0.113.7");
+        host.Nav.NavigateTo("theaters?near=78701&radius=100");
+
+        for (var i = 0; i < limit.PermitLimit; i++)
+            host.Render<TheaterIndex>().WaitForText("nearest first.");
+        host.Render<TheaterIndex>().WaitForText("Too many attempts");
+
+        // Someone else, signed out at another address, still searches.
+        host.Request.Connection.RemoteIpAddress = System.Net.IPAddress.Parse("198.51.100.20");
+        host.Render<TheaterIndex>().WaitForText("1 theater within 100 miles of 78701, nearest first.");
+    }
+
+    [Fact]
+    public async Task An_empty_search_shows_every_theater()
     {
         var s = await PlacedAsync();
         await using var host = await BuyerHostAsync(s);
+
+        host.Nav.NavigateTo("theaters?near=%20%20&radius=100");
         var page = host.Render<TheaterIndex>();
+
         page.WaitForText("Starlight");
-
-        page.Find("form").Submit();
-
-        Assert.EndsWith("/theaters", host.Nav.Uri);
+        Assert.DoesNotContain("Show all theaters", page.Text());
     }
 
     [Fact]
@@ -86,12 +143,14 @@ public class PublicTheaterPageTests
     {
         var s = await PlacedAsync();
         await using var host = await BuyerHostAsync(s);
-        host.Nav.NavigateTo("theaters?near=Atlantis&radius=25");
 
+        host.Nav.NavigateTo("theaters?near=Atlantis&radius=25");
         var page = host.Render<TheaterIndex>();
 
         page.WaitForText("We couldn't find \"Atlantis\". Try a ZIP code, or a city and state.");
         Assert.DoesNotContain("Starlight", page.Text());
+        // The alert says why; the status line doesn't add an empty paragraph.
+        Assert.Empty(page.Find("[role=status]").QuerySelectorAll("p"));
     }
 
     [Fact]
@@ -99,11 +158,13 @@ public class PublicTheaterPageTests
     {
         var s = await PlacedAsync();
         await using var host = await BuyerHostAsync(s);
-        host.Nav.NavigateTo("theaters?lat=40.71&lon=-74.01&radius=25");
 
+        host.Nav.NavigateTo("theaters?lat=40.71&lon=-74.01&radius=25");
         var page = host.Render<TheaterIndex>();
 
         page.WaitForText("No theaters within 25 miles of your location. Try a larger distance.");
+        // A location search leaves the place box empty.
+        Assert.Null(page.Find("input[name=near]").GetAttribute("value"));
     }
 
     [Fact]
@@ -111,39 +172,23 @@ public class PublicTheaterPageTests
     {
         var s = await PlacedAsync();
         await using var host = await BuyerHostAsync(s);
-        host.Nav.NavigateTo("theaters?lat=30.2");
 
+        host.Nav.NavigateTo("theaters?lat=30.2");
         var page = host.Render<TheaterIndex>();
 
         page.WaitForText("That location isn't valid.");
     }
 
     [Fact]
-    public async Task My_location_searches_near_it()
+    public async Task My_location_from_the_link_searches_near_it()
     {
         var s = await PlacedAsync();
         await using var host = await BuyerHostAsync(s);
-        SetPosition(host, 30.2712, -97.7431, null);
+
+        host.Nav.NavigateTo("theaters?lat=30.27&lon=-97.74&radius=100");
         var page = host.Render<TheaterIndex>();
-        page.WaitForText("Starlight");
 
-        page.ClickButton("Use my location");
-
-        page.WaitForAssertion(() => Assert.Contains("theaters?lat=30.27&lon=-97.74&radius=100", host.Nav.Uri));
-    }
-
-    [Fact]
-    public async Task A_refused_location_explains_what_to_do()
-    {
-        var s = await PlacedAsync();
-        await using var host = await BuyerHostAsync(s);
-        SetPosition(host, null, null, "denied");
-        var page = host.Render<TheaterIndex>();
-        page.WaitForText("Starlight");
-
-        page.ClickButton("Use my location");
-
-        page.WaitForText("Your browser didn't share your location.");
+        page.WaitForText("1 theater within 100 miles of your location, nearest first.");
     }
 
     [Fact]
