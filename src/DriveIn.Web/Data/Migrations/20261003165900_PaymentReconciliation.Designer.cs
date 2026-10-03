@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace DriveIn.Web.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20261002152640_PaymentReconciliation")]
+    [Migration("20261003165900_PaymentReconciliation")]
     partial class PaymentReconciliation
     {
         /// <inheritdoc />
@@ -448,6 +448,11 @@ namespace DriveIn.Web.Data.Migrations
                     b.Property<int>("FilmId")
                         .HasColumnType("integer")
                         .HasColumnName("film_id");
+
+                    b.Property<string>("CdnKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("cdn_key");
 
                     b.Property<string>("ContentType")
                         .IsRequired()
@@ -1546,6 +1551,11 @@ namespace DriveIn.Web.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("byte_size");
 
+                    b.Property<string>("CdnKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("cdn_key");
+
                     b.Property<string>("ContentType")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -1600,6 +1610,11 @@ namespace DriveIn.Web.Data.Migrations
                     b.Property<int>("TheaterId")
                         .HasColumnType("integer")
                         .HasColumnName("theater_id");
+
+                    b.Property<string>("CdnKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("cdn_key");
 
                     b.Property<string>("ContentType")
                         .IsRequired()
