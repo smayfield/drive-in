@@ -14,7 +14,24 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 - Google sign-in (`Authentication:Google:ClientId/ClientSecret`; callback `/signin-google`). Links automatically to an existing
   confirmed account with the same verified email; links manageable at Account → External logins.
 - Two-factor (authenticator app, recovery codes), passkeys (add, rename, remove), download/delete personal data.
-- Login uses `lockoutOnFailure: false`, so failed passwords don't lock an account out.
+- **Lockout** (`AppIdentityOptions`, shared by `Program.cs` and the tests): 10 wrong passwords (or 2FA / recovery codes) in a row
+  lock the account for 15 minutes (`lockoutOnFailure: true`); a successful sign-in resets the count. A locked account can't sign
+  in by any method (password, passkey, Google) and is sent to `/Account/Lockout`, which says how long and links to Forgot password:
+  resetting the password lifts a lockout from wrong passwords, but not an admin's lock (`LockoutEnd` = max), which never ends.
+- **Rate limits** (`Services/RateLimiting.cs`, config section `RateLimits`, each rule `PermitLimit` per `WindowSeconds` in a
+  fixed window). Per signed-in user, or per client IP when signed out (an IPv6 address by its /64), except where noted:
+  - Endpoint limits (ASP.NET Core's limiter; `UseRateLimiter` after forwarded headers and authentication): `Account`, 10 a
+    minute, for form posts to every account page (`[EnableRateLimiting]` in `Components/Account/Pages/_Imports.razor`, and on
+    `Invite`) and the `/Account/PerformExternalLogin` and passkey options endpoints. One budget across those pages; viewing a
+    page (GET/HEAD) never counts. Over it: `429` with `Retry-After` and a small "Too many attempts" page.
+  - Circuit actions (`ActionRateLimiter`, a singleton the services call, since endpoint limits never see what happens over a
+    circuit's WebSocket; in memory on the app's clock, so one server, reset on restart; signed-out callers share one budget).
+    Over a limit the service throws `AppValidationException` ("Too many attempts. Please wait ... and try again."):
+    `Messages` 10 a minute (new conversations and replies), `PlaceSearch` 20 a minute (`FindPlaceAsync`), and, counting only
+    codes that match nothing, `GiftCardMissesPerUser` 10 per 10 minutes and `GiftCardMissesPerTheater` 100 an hour across
+    everyone at a theater (checkout and gate gift card checks; past either, no code is looked up) and `GateCodeMisses` 30 a
+    minute (`FindAtGateAsync`; real scans never count).
+  - Every refusal counts `drivein.rate_limited{policy}` (section 14).
 - `Admin` is the only Identity role. The user whose email equals `Seed:AdminEmail` is made admin at sign-in (re-granted if removed).
 - Owner = `Theater.OwnerId`; Employee = `ApplicationUser.EmployeeTheaterId`, one theater per employee account. Not Identity roles.
   `AppClaimsPrincipalFactory` adds the employee-theater claim.
@@ -357,7 +374,9 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   `drivein.invoices.payments` (dollars), and `drivein.errors.logged{category, level}` (every Error/Critical log message,
   `ErrorCountingLoggerProvider`: failures inside Blazor circuits never become 5xx responses),
   `drivein.messages.sent{kind=theater|support, side=customer|theater|support}`, `drivein.notifications.emailed` (digests),
-  and `drivein.content.published{kind=page|post}` (a page or post's first publish).
+  `drivein.content.published{kind=page|post}` (a page or post's first publish), and
+  `drivein.rate_limited{policy=account|messages|place_search|gift_card_misses_user|gift_card_misses_theater|gate_code_misses}`
+  (requests and actions refused by a rate limit, section 1).
 - **`BusinessGauges`** (hosted service, only when `Metrics:OtlpEndpoint` is set) reads totals every minute and reports them as gauges: `drivein.users{kind=customer|employee}`,
   `drivein.theaters{mode}` (active), `drivein.screens.live`, `drivein.showings.upcoming` (next 7 days, live theaters),
   `drivein.theaters.go_live_pending`, `drivein.free_admission.pending`, `drivein.invoices.outstanding` (dollars). Nothing is
@@ -370,7 +389,7 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
     sessions, emails, messages and notification emails, content published per day).
   - **Drive-In: Site performance**: requests, 5xx, latency (p50/95/99, leaving out the Blazor circuit's connection), busiest and
     slowest routes, errors logged by category, unhandled exceptions, job failures, payments, emails, circuits and connections,
-    sign-ins, outbound calls, database time and pool, EF Core, and the .NET runtime (memory, CPU, GC, thread pool).
+    sign-ins, rate-limited requests by policy, outbound calls, database time and pool, EF Core, and the .NET runtime (memory, CPU, GC, thread pool).
   - **Drive-In: Server**: host, edge, PostgreSQL, backups, monitoring targets.
 - **Alerts** email through the `drive-in-alerts` SNS topic (`infra/app.yml`, `AlertEmail`), which Grafana publishes to with the
   instance role. Grafana rules (folder Drive-In, group Server): disk over 80% (10 min), memory available under 10% (10 min),
@@ -399,7 +418,8 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   even though they pass every theater permission check (unless they own the theater).
 - **The customer's side**: `/messages` lists their conversations (theaters and support), `/messages/{id}` is the thread. Only
   the theater (or, for support, an admin) closes a conversation; nobody can post in a closed one until it's reopened.
-- Limits: 10 new conversations per person per 24 hours (replies are unlimited). Unread state is per person
+- Limits: 10 new conversations per person per 24 hours, and at most 10 messages (new conversations and replies) a minute
+  (`RateLimits:Messages`, section 1). Unread state is per person
   (`conversation_reads`): opening a thread marks it read for you only. Deleting an account keeps its conversations and
   messages, shown as "Deleted account". The personal-data download includes the messages you wrote.
 - Threads, inboxes, the bell and `/notifications` update live through in-process `MessageEvents` / `NotificationEvents`

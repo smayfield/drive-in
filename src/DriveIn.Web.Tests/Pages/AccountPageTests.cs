@@ -1,3 +1,4 @@
+using DriveIn.Web.Authorization;
 using DriveIn.Web.Components.Account.Pages;
 using DriveIn.Web.Data;
 using Microsoft.AspNetCore.Identity;
@@ -60,6 +61,70 @@ public class AccountPageTests
         page.Find("form").Submit();
 
         page.WaitForText("The Email field is required.");
+    }
+
+    // Records wrong passwords as Identity does for each failed sign-in.
+    private static async Task FailSignInsAsync(TestApp app, string userId, int times)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        for (var i = 0; i < times; i++)
+            await users.AccessFailedAsync((await users.FindByIdAsync(userId))!);
+    }
+
+    private static async Task<(bool Locked, int Failures)> LockStateAsync(TestApp app, string userId)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var user = (await users.FindByIdAsync(userId))!;
+        return (await users.IsLockedOutAsync(user), await users.GetAccessFailedCountAsync(user));
+    }
+
+    [Fact]
+    public async Task Too_many_wrong_passwords_in_a_row_lock_the_account()
+    {
+        await using var app = new TestApp();
+        var pat = await app.CreateUserAsync("pat@example.com");
+        await FailSignInsAsync(app, pat.Id, AppIdentityOptions.MaxFailedSignIns - 1);
+        Assert.Equal((false, AppIdentityOptions.MaxFailedSignIns - 1), await LockStateAsync(app, pat.Id));
+        await using var host = new PageHost(app).UseRequest("POST");
+        var page = host.Render<Login>();
+
+        Type(page, "Input.Email", "pat@example.com");
+        Type(page, "Input.Password", "wrong");
+        page.Find("form").Submit();
+
+        page.WaitForAssertion(() => Assert.EndsWith("Account/Lockout", host.Nav.Uri));
+        Assert.True((await LockStateAsync(app, pat.Id)).Locked);
+        Assert.DoesNotContain(".AspNetCore.Identity.Application", host.ResponseCookies);
+    }
+
+    [Fact]
+    public async Task A_right_password_before_the_limit_signs_in_and_clears_the_count()
+    {
+        await using var app = new TestApp();
+        var pat = await app.CreateUserAsync("pat@example.com");
+        await FailSignInsAsync(app, pat.Id, AppIdentityOptions.MaxFailedSignIns - 1);
+        await using var host = new PageHost(app).UseRequest("POST");
+        var page = host.Render<Login>();
+
+        Type(page, "Input.Email", "pat@example.com");
+        Type(page, "Input.Password", "Password123!");
+        page.Find("form").Submit();
+
+        page.WaitForAssertion(() => Assert.Contains(".AspNetCore.Identity.Application", host.ResponseCookies));
+        Assert.Equal((false, 0), await LockStateAsync(app, pat.Id));
+    }
+
+    [Fact]
+    public async Task The_lockout_page_says_how_long_and_how_to_unlock()
+    {
+        await using var host = new PageHost().UseRequest();
+        var page = host.Render<Lockout>();
+
+        Assert.Contains($"After {AppIdentityOptions.MaxFailedSignIns} sign-in attempts", page.Text());
+        Assert.Contains($"locked for {(int)AppIdentityOptions.LockoutDuration.TotalMinutes} minutes", page.Text());
+        Assert.NotNull(page.Find("a[href='Account/ForgotPassword']"));
     }
 
     [Fact]

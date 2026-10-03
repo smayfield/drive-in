@@ -37,6 +37,7 @@ public sealed class DriveInMetrics
     private readonly Counter<long> messagesSent;
     private readonly Counter<long> notificationsEmailed;
     private readonly Counter<long> contentPublished;
+    private readonly Counter<long> rateLimited;
 
     public DriveInMetrics(IMeterFactory meterFactory)
     {
@@ -77,6 +78,8 @@ public sealed class DriveInMetrics
             "Notification digests emailed (one email per user per run, however many notifications it lists).");
         contentPublished = meter.CreateCounter<long>("drivein.content.published", "{item}",
             "Theater pages and posts published for the first time (kind: page, post).");
+        rateLimited = meter.CreateCounter<long>("drivein.rate_limited", "{request}",
+            "Requests and actions refused by a rate limit (policy: see RateLimitPolicies).");
     }
 
     public void UserRegistered(string method) => usersRegistered.Add(1, new KeyValuePair<string, object?>("method", method));
@@ -128,4 +131,6 @@ public sealed class DriveInMetrics
 
     public void ContentPublished(PageKind kind) =>
         contentPublished.Add(1, new KeyValuePair<string, object?>("kind", kind.ToString().ToLowerInvariant()));
+
+    public void RateLimited(string policy) => rateLimited.Add(1, new KeyValuePair<string, object?>("policy", policy));
 }

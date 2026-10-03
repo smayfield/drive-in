@@ -12,7 +12,7 @@ public sealed record TheaterSummary(
 
 public sealed class TheaterService(
     IDbContextFactory<ApplicationDbContext> dbFactory, IAuthorizationService auth, TimeProvider time, IGeocoder geocoder,
-    DriveInMetrics metrics)
+    DriveInMetrics metrics, ActionRateLimiter limiter)
 {
     // --- Browsing (any signed-in user) ---
 
@@ -52,7 +52,11 @@ public sealed class TheaterService(
     public async Task<GeoPoint?> FindPlaceAsync(ClaimsPrincipal user, string place, CancellationToken ct = default)
     {
         Guard.RequireUserId(user);
-        return string.IsNullOrWhiteSpace(place) ? null : await geocoder.GeocodeAsync(place, ct);
+        if (string.IsNullOrWhiteSpace(place))
+            return null;
+        // Each search may be a lookup at the geocoder, whose public server allows about one a second for the whole site.
+        limiter.Hit(RateLimitPolicies.PlaceSearch, ActionRateLimiter.KeyFor(user));
+        return await geocoder.GeocodeAsync(place, ct);
     }
 
     public async Task<Theater?> GetBySlugAsync(ClaimsPrincipal user, string slug)

@@ -71,6 +71,37 @@ public class AccountRecoveryPageTests
         Assert.True(await WithUsersAsync(app, async users => await users.CheckPasswordAsync((await users.FindByIdAsync(pat.Id))!, "NewPassword456!")));
     }
 
+    [Theory]
+    [InlineData(false, false)] // locked by wrong passwords: resetting unlocks it
+    [InlineData(true, true)]   // locked by an admin: it stays locked
+    public async Task Resetting_a_password_lifts_a_lockout_from_wrong_passwords_but_not_an_admins_lock(bool lockedByAdmin, bool lockedAfter)
+    {
+        await using var app = new TestApp();
+        var pat = await app.CreateUserAsync("pat@example.com");
+        var token = await WithUsersAsync(app, async users =>
+        {
+            var user = (await users.FindByIdAsync(pat.Id))!;
+            if (lockedByAdmin)
+                await users.SetLockoutEndDateAsync(user, DateTimeOffset.MaxValue);
+            else
+                for (var i = 0; i < DriveIn.Web.Authorization.AppIdentityOptions.MaxFailedSignIns; i++)
+                    await users.AccessFailedAsync(user);
+            Assert.True(await users.IsLockedOutAsync(user));
+            return await users.GeneratePasswordResetTokenAsync(user);
+        });
+        await using var host = new PageHost(app).UseRequest("POST");
+        host.Nav.NavigateTo($"Account/ResetPassword?code={Encode(token)}");
+        var page = host.Render<ResetPassword>();
+
+        Type(page, "Input.Email", "pat@example.com");
+        Type(page, "Input.Password", "NewPassword456!");
+        Type(page, "Input.ConfirmPassword", "NewPassword456!");
+        page.Find("form").Submit();
+
+        page.WaitForAssertion(() => Assert.EndsWith("Account/ResetPasswordConfirmation", host.Nav.Uri));
+        Assert.Equal(lockedAfter, await WithUsersAsync(app, async users => await users.IsLockedOutAsync((await users.FindByIdAsync(pat.Id))!)));
+    }
+
     [Fact]
     public async Task A_bad_reset_link_is_refused()
     {
