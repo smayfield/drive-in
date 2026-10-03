@@ -134,8 +134,8 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 ## 5. Buying online (`TicketSalesService`)
 
 - **Public theater pages**: `/theaters/{slug}` (showings, news, the theater's menu) and its pages and posts (section 16) need no
-  sign-in; `CanBrowse` still hides demo and inactive theaters from everyone but their members. Signed-out visitors see "Sign in to
-  buy" on showings. The theater list and near-me search, the showing (spot map) and gift-card pages, and buying all need sign-in.
+  sign-in and are statically rendered (section 12); `CanBrowse` still hides demo and inactive theaters from everyone but their
+  members, and an unknown or hidden theater is a 404. Signed-out visitors see "Sign in to buy" on showings. The theater list and near-me search, the showing (spot map) and gift-card pages, and buying all need sign-in.
 - **Near me** (`/theaters`): a ZIP code or city (geocoded by `TheaterService.FindPlaceAsync`), or **Use my location**
   (`wwwroot/geo.js`, browser geolocation rounded to 2 decimals), within 25/50/100 (default)/250 miles or any distance.
   `TheaterService.ListNearAsync` applies the same visibility as the list (`CanBrowse`: demo theaters only for members),
@@ -152,7 +152,9 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
   nothing is shown, not even the "available later" note). Showings that end past the forecast range
   (`WeatherService.ForecastDays`, 16 whole UTC days from today) say when the forecast becomes available. A showing's hours
   are those it overlaps (an end on the hour doesn't take in the next). °F/mph when the theater's country is US or blank,
-  otherwise °C/km/h. It loads after the first interactive render, so a slow provider never delays the page.
+  otherwise °C/km/h. A slow provider never delays the page: on the (static) theater page each stub's line is streamed in
+  (`StreamedWeatherLine`, `[StreamRendering]`) once the forecast arrives, and a failing forecast just leaves it out; the
+  interactive showing and ticket pages load it after their first render.
   `Weather:Provider` (case-insensitive; an unknown value fails at startup): `OpenMeteo` (default; `OpenMeteoForecaster`, no
   key, one request per place cached for an hour, 5 s timeout, failures logged and shown as no forecast) or `None`.
 - Routes: `/theaters` (list), `/theaters/{slug}` (details, showings), `/theaters/{slug}/showings/{showtimeId}` (spot map +
@@ -287,9 +289,14 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 
 ## 12. Static and marketing pages
 
-- Interactive pages open to signed-out visitors: a theater's page, its pages and posts, and its news (section 16).
-- `[ExcludeFromInteractiveRouting]` static SSR with plain CSS (`static.css`, `marketing.css`): `/`, `/features`, `/pricing`,
-  `/faq`, `/legal`, `/legal/terms`, `/legal/privacy`, `/legal/license`, `/invite/{token}`, `/Error`, `/not-found`, account pages.
+- `[ExcludeFromInteractiveRouting]` static SSR with plain CSS (`static.css`, `marketing.css`, `public.css`): `/`, `/features`,
+  `/pricing`, `/faq`, `/legal`, `/legal/terms`, `/legal/privacy`, `/legal/license`, `/invite/{token}`, `/Error`, `/not-found`,
+  account pages, and the public theater pages: `/theaters/{slug}`, `/theaters/{slug}/pages/{page}`, `/theaters/{slug}/news` and
+  `/theaters/{slug}/news/{post}` (section 16). Signed-out visitors and crawlers read those without opening a Blazor circuit.
+  They use `PublicLayout` (the static top bar over a 1280px page, like the app's); `public.css` is written against the
+  `app.css` tokens rather than MudBlazor's palette variables, so the marquee and stubs look the same there as on the
+  interactive showing and ticket pages. "Choose a spot" links into the interactive showing page (enhanced navigation starts the
+  circuit only then). The static top bar's notifications are a link with the unread count, not the live bell.
 - Config: `Plans:PricePerScreenPerMonth`, `Billing:PaymentTermsDays`, `Company:*` (legal name, mailing address, governing state, contact email, effective date).
   Unset values render as placeholders; legal pages show a "draft, not in effect" banner until `Company:LegalName` is set.
 
@@ -426,7 +433,7 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 - **Publishing**: a draft until published (`PublishAt` null). Publish now, or schedule a start (`PublishAt`) and optional end
   (`UnpublishAt`) in the theater's time zone; shown only between them. Status: Draft, Scheduled, Live, Ended. Unpublish returns it
   to a draft. Publishing needs some text or a cover image. Staff with `content.manage` see drafts and scheduled items at their public
-  address with a "Preview: only staff can see this" banner (and `noindex`); everyone else gets "Page not found" (404 when prerendered).
+  address with a "Preview: only staff can see this" banner (and `noindex`); everyone else gets "Page not found" (404).
 - **Editor** (`RichTextEditor`: Quill 2, vendored in `wwwroot/lib/quill`, via `wwwroot/rich-text.js`): headings (H2 to H4), bold,
   italic, underline, strike, lists, indent, quote, link, alignment, images. Pasted HTML keeps only this theater's library images.
 - **Images**: the theater's library (`theater_images`, `/manage/{id}/content/images`): JPG, PNG, GIF or WebP, up to 5 MB each and

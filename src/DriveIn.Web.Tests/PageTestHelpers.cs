@@ -173,14 +173,17 @@ public static class RenderedExtensions
         return Regex.Replace(WebUtility.HtmlDecode(Regex.Replace(text, "<[^>]+>", " ")), @"\s+", " ");
     }
 
-    // Clicks the first (or last) button whose text (or an icon button's aria-label) is exactly this.
-    public static void ClickButton<T>(this IRenderedComponent<T> page, string text, bool last = false) where T : IComponent
-    {
-        var buttons = page.FindAll("button").Where(b => b.TextContent.Trim() == text || b.GetAttribute("aria-label") == text).ToList();
-        if (buttons.Count == 0)
-            throw new InvalidOperationException($"No button '{text}'.");
-        (last ? buttons[^1] : buttons[0]).Click();
-    }
+    // Clicks the first (or last) button whose text (or an icon button's aria-label) is exactly this. Found and clicked on the
+    // renderer's dispatcher, so a re-render in between (e.g. the showing page's one-second hold countdown) can't leave the
+    // click aimed at a stale event handler.
+    public static void ClickButton<T>(this IRenderedComponent<T> page, string text, bool last = false) where T : IComponent =>
+        page.InvokeAsync(() =>
+        {
+            var buttons = page.FindAll("button").Where(b => b.TextContent.Trim() == text || b.GetAttribute("aria-label") == text).ToList();
+            if (buttons.Count == 0)
+                throw new InvalidOperationException($"No button '{text}'.");
+            (last ? buttons[^1] : buttons[0]).Click();
+        }).GetAwaiter().GetResult();
 
     // The inputs and textareas of the MudBlazor fields with this label (or aria-label / placeholder), in page order.
     public static List<IElement> Fields<T>(this IRenderedComponent<T> page, string label) where T : IComponent =>
@@ -195,19 +198,21 @@ public static class RenderedExtensions
         page.Fields(label).ElementAtOrDefault(index) ?? throw new InvalidOperationException($"No field labelled '{label}' at {index}.");
 
     // Sets a text or numeric field and fires its change, as MudBlazor fields bind on change.
-    // Immediate fields bind on input instead. Index picks among fields sharing a label.
-    public static void SetField<T>(this IRenderedComponent<T> page, string label, string value, int index = 0) where T : IComponent
-    {
-        var field = page.Field(label, index);
-        try
+    // Immediate fields bind on input instead. Index picks among fields sharing a label. Like ClickButton, found and changed
+    // on the renderer's dispatcher so a re-render in between can't make the handler stale.
+    public static void SetField<T>(this IRenderedComponent<T> page, string label, string value, int index = 0) where T : IComponent =>
+        page.InvokeAsync(() =>
         {
-            field.Change(value);
-        }
-        catch (MissingEventHandlerException)
-        {
-            field.Input(value);
-        }
-    }
+            var field = page.Field(label, index);
+            try
+            {
+                field.Change(value);
+            }
+            catch (MissingEventHandlerException)
+            {
+                field.Input(value);
+            }
+        }).GetAwaiter().GetResult();
 
     // Ticks or unticks the MudCheckBox / MudSwitch whose label contains this text.
     public static void Check<T>(this IRenderedComponent<T> page, string label, bool value = true) where T : IComponent =>
