@@ -111,6 +111,8 @@ else if (theaters.Count == 0)
     [SupplyParameterFromQuery(Name = "lon")] public double? Lon { get; set; }
     [SupplyParameterFromQuery(Name = "radius")] public int? RadiusParam { get; set; }
 
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
+
     private List<(Theater Theater, double? Miles)> theaters = [];
     private bool placeNotFound;
 
@@ -139,7 +141,9 @@ else if (theaters.Count == 0)
             }
             else if (!string.IsNullOrWhiteSpace(Near))
             {
-                var from = await Theaters.FindPlaceAsync(User, Near)
+                // Limited per signed-in user, or per client IP for visitors who aren't signed in.
+                var clientKey = HttpContext is null ? null : HttpRateLimiting.PartitionKey(HttpContext);
+                var from = await Theaters.FindPlaceAsync(User, Near, clientKey)
                     ?? throw new AppValidationException($"We couldn't find \"{Near.Trim()}\". Try a ZIP code, or a city and state.");
                 theaters = Nearest(await Theaters.ListNearAsync(User, from, radius));
             }

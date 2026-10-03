@@ -107,6 +107,25 @@ public class PublicTheaterPageTests
     }
 
     [Fact]
+    public async Task Signed_out_searches_are_limited_by_the_visitors_address()
+    {
+        var s = await PlacedAsync();
+        s.App.Geocoder.Places["78701"] = new GeoPoint(30.30, -97.70);
+        var limit = new RateLimitOptions().PlaceSearch;
+        await using var host = new PageHost(s.App).UseRequest();
+        host.Request.Connection.RemoteIpAddress = System.Net.IPAddress.Parse("203.0.113.7");
+        host.Nav.NavigateTo("theaters?near=78701&radius=100");
+
+        for (var i = 0; i < limit.PermitLimit; i++)
+            host.Render<TheaterIndex>().WaitForText("nearest first.");
+        host.Render<TheaterIndex>().WaitForText("Too many attempts");
+
+        // Someone else, signed out at another address, still searches.
+        host.Request.Connection.RemoteIpAddress = System.Net.IPAddress.Parse("198.51.100.20");
+        host.Render<TheaterIndex>().WaitForText("1 theater within 100 miles of 78701, nearest first.");
+    }
+
+    [Fact]
     public async Task An_empty_search_shows_every_theater()
     {
         var s = await PlacedAsync();

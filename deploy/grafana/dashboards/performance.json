@@ -1317,13 +1317,72 @@
       }
     },
     {
+      "id": 39,
+      "type": "timeseries",
+      "title": "Rate-limited requests",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "victoriametrics"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 48,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "victoriametrics"
+          },
+          "expr": "sum by (policy) (increase(drivein_rate_limited_total[$__rate_interval]))",
+          "legendFormat": "{{policy}}",
+          "range": true,
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "min": 0,
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Requests and actions refused by a rate limit, by policy (account: sign-in and recovery form posts; messages; place_search; gift_card_misses_user / gift_card_misses_theater; gate_code_misses). A steady stream on one policy is someone guessing or scripting."
+    },
+    {
       "id": 25,
       "type": "row",
       "title": "Outbound and database",
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 48,
+        "y": 56,
         "w": 24,
         "h": 1
       },
@@ -1339,7 +1398,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 49,
+        "y": 57,
         "w": 8,
         "h": 8
       },
@@ -1397,7 +1456,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 49,
+        "y": 57,
         "w": 8,
         "h": 8
       },
@@ -1455,7 +1514,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 49,
+        "y": 57,
         "w": 8,
         "h": 8
       },
@@ -1523,7 +1582,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 57,
+        "y": 65,
         "w": 8,
         "h": 8
       },
@@ -1592,7 +1651,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 57,
+        "y": 65,
         "w": 8,
         "h": 8
       },
@@ -1671,7 +1730,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 57,
+        "y": 65,
         "w": 8,
         "h": 8
       },
@@ -1725,7 +1784,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 65,
+        "y": 73,
         "w": 24,
         "h": 1
       },
@@ -1741,7 +1800,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 66,
+        "y": 74,
         "w": 8,
         "h": 8
       },
@@ -1820,7 +1879,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 66,
+        "y": 74,
         "w": 8,
         "h": 8
       },
@@ -1877,7 +1936,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 66,
+        "y": 74,
         "w": 8,
         "h": 8
       },
@@ -1945,7 +2004,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 74,
+        "y": 82,
         "w": 8,
         "h": 8
       },
@@ -2014,7 +2073,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 74,
+        "y": 82,
         "w": 8,
         "h": 8
       },
@@ -2071,7 +2130,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 74,
+        "y": 82,
         "w": 8,
         "h": 8
       },

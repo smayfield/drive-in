@@ -283,4 +283,37 @@ public class NearMeTests
         Assert.Null(await Nominatim(new StubHandler(_ => Json("not json"))).GeocodeAsync("Austin"));
         Assert.Null(await Nominatim(new StubHandler(_ => Json("""[{"lat":"999","lon":"0"}]"""))).GeocodeAsync("Austin"));
     }
+
+    [Fact]
+    public async Task Place_searches_are_limited_per_person()
+    {
+        await using var app = new TestApp();
+        var user = Principals.For(await app.CreateUserAsync("guest@example.com"));
+        app.Geocoder.Places["78701"] = Austin;
+        var theaters = app.Get<TheaterService>();
+        var limit = new RateLimitOptions().PlaceSearch;
+
+        for (var i = 0; i < limit.PermitLimit; i++)
+            await theaters.FindPlaceAsync(user, "78701");
+        var refused = await Assert.ThrowsAsync<AppValidationException>(() => theaters.FindPlaceAsync(user, "78701"));
+
+        Assert.StartsWith("Too many attempts", refused.Message);
+        Assert.Equal(Austin, await theaters.FindPlaceAsync(Principals.For(await app.CreateUserAsync("other@example.com")), "78701"));
+    }
+
+    [Fact]
+    public async Task Signed_out_place_searches_are_limited_per_client()
+    {
+        await using var app = new TestApp();
+        app.Geocoder.Places["78701"] = Austin;
+        var theaters = app.Get<TheaterService>();
+        var limit = new RateLimitOptions().PlaceSearch;
+
+        for (var i = 0; i < limit.PermitLimit; i++)
+            await theaters.FindPlaceAsync(Principals.Anonymous, "78701", "ip:203.0.113.7");
+        await Assert.ThrowsAsync<AppValidationException>(() => theaters.FindPlaceAsync(Principals.Anonymous, "78701", "ip:203.0.113.7"));
+
+        // Another visitor, at another address, isn't held up by the first.
+        Assert.Equal(Austin, await theaters.FindPlaceAsync(Principals.Anonymous, "78701", "ip:198.51.100.20"));
+    }
 }

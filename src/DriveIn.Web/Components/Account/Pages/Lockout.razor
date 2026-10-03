@@ -1,8 +1,14 @@
 ﻿@page "/Account/Lockout"
+@using DriveIn.Web.Authorization
 
 <PageTitle>Locked out</PageTitle>
 
 <header>
     <h1 class="text-danger">Locked out</h1>
-    <p class="text-danger" role="alert">This account has been locked out, please try again later.</p>
+    <p class="text-danger" role="alert">This account is locked, so it can't sign in right now.</p>
+    <p>
+        After @AppIdentityOptions.MaxFailedSignIns sign-in attempts in a row that didn't work, an account is locked for
+        @((int)AppIdentityOptions.LockoutDuration.TotalMinutes) minutes. Try again after that, or
+        <a href="Account/ForgotPassword">reset your password</a> to unlock it now.
+    </p>
 </header>
