@@ -1,3 +1,4 @@
+using DriveIn.Web.Data;
 using Microsoft.Extensions.Options;
 using Stripe;
 
@@ -46,8 +47,15 @@ public sealed class StripePaymentProcessor(IStripeClient client, ICardReader rea
     // The Element is created in the same currency the server charges in (Payments:Currency), or Stripe rejects it.
     public PaymentClient Client => new(PaymentClientKind.Stripe, options.Value.PublishableKey, payments.Value.Currency);
 
+    // Stripe won't charge less than this (50¢ in USD and most currencies it settles in).
+    public const long MinimumChargeCents = 50;
+
     public async Task<PaymentResult> ChargeAsync(PaymentRequest request, CancellationToken ct = default)
     {
+        // E.g. a few cents left after a gift card: a clean decline (the sale is undone and the gift card made whole)
+        // rather than an error from Stripe.
+        if (request.AmountCents < MinimumChargeCents)
+            return PaymentResult.Declined($"card payments must be at least {Money.Format(MinimumChargeCents / 100m)}; pay the whole amount by card instead");
         if (request.CardPresent)
             return await reader.CollectAsync(request, ct);
 
