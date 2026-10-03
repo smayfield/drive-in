@@ -18,7 +18,7 @@
     <link rel="stylesheet" href="@Assets["manage.css"]" />
     <link rel="stylesheet" href="@Assets["marketing.css"]" />
     <link rel="stylesheet" href="@Assets["DriveIn.Web.styles.css"]" />
-    <ImportMap />
+    <ImportMap nonce="@SecurityHeaders.Nonce(HttpContext)" />
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <HeadOutlet @rendermode="PageRenderMode" />
 </head>

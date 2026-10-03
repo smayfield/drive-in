@@ -19,7 +19,7 @@ For the full list of features and behaviors (rules, limits, routes, permission k
 | `infra/dns.yml` | CloudFormation: Route 53 hosted zone. |
 | `infra/email.yml` | CloudFormation: SES domain identity (DKIM, MAIL FROM). |
 | `infra/mail.yml` | CloudFormation: inbound mail. Any address at the domain is forwarded to one mailbox (SES receiving, S3, a small Lambda). |
-| `infra/app.yml` | CloudFormation: VPC, EC2, EIP, ECR, ops bucket, snapshots, DNS records, alerts topic and alarms, GitHub deploy role. |
+| `infra/app.yml` | CloudFormation: VPC, EC2, EIP, ECR, ops bucket, snapshots, container log group, DNS records, alerts topic and alarms, GitHub deploy role. |
 | `.github/workflows/deploy.yml` | On merge to `main`: test, build ARM64 images, deploy via SSM. |
 
 ## Accounts and permissions
@@ -199,15 +199,19 @@ invitee sets a password or continues with Google using the invited address.
 ## Look and feel
 
 - **MudBlazor** (MIT, free for commercial use) provides the components for every signed-in page; the app shell is
-  `Components/Layout/AppLayout.razor`. Marketing pages, legal pages and the Identity account pages stay statically
-  rendered (fast, indexable, and Identity needs the HTTP response) with plain CSS (`wwwroot/static.css`); they are marked
-  `[ExcludeFromInteractiveRouting]`.
+  `Components/Layout/AppLayout.razor`. Marketing pages, legal pages, the Identity account pages and a theater's public pages
+  (its page, its own pages and posts, its news) stay statically rendered (fast, indexable, no live connection held per
+  visitor, and Identity needs the HTTP response) with plain CSS (`wwwroot/static.css`, `public.css`); they are marked
+  `[ExcludeFromInteractiveRouting]`. The showing (spot map), checkout and ticket pages are interactive.
 - **Light and dark** follow the visitor's browser or OS setting, with no toggle. `wwwroot/theme.js` runs before first paint and
   remembers the choice in a `di-scheme` cookie, so the server prerenders the right palette next time (the first-ever visit
   from a dark device may flash light for a moment). The palettes live in `Layout/DriveInTheme.cs` (MudBlazor) and at the
   top of `wwwroot/app.css`; `marketing.css` has its own copy.
 - **Public pages** (theaters, showings, tickets) are the showy ones: a bulb-lit marquee header per theater and
   ticket-stub showings and tickets (`wwwroot/public.css`, `Components/Shared/Stub.razor`). **Manage and admin pages** are meant to stay plain and dense.
+- **Security headers** (CSP and friends) are set by the app for every response, in `Services/SecurityHeaders.cs`. Loading
+  anything from another site (a script, stylesheet, font, frame or API, such as a payment provider's) means adding its
+  host to the policy there, or the browser blocks it.
 - Fonts: Bungee for display headings, Barlow for everything else. Both are self-hosted (`wwwroot/fonts`, SIL Open Font
   License; Latin and Latin Extended subsets from Fontsource), so pages load nothing from Google.
 
@@ -240,6 +244,20 @@ before the new app version starts; if a migration fails, the old version keeps r
 ## Workflow
 
 All changes go through a feature branch and a pull request; nothing is committed to `main` directly.
+Every pull request to `main` is built and tested by `.github/workflows/ci.yml` (job `build-and-test`: Release build,
+`dotnet test`, and a build of the web image). Make that job a required status check so a failing PR can't be merged:
+
+```sh
+gh api -X PUT repos/smayfield/drive-in/branches/main/protection --input - <<'EOF'
+{
+  "required_status_checks": { "strict": false, "contexts": ["build-and-test"] },
+  "enforce_admins": false,
+  "required_pull_request_reviews": null,
+  "restrictions": null
+}
+EOF
+```
+
 Merging to `main` runs `.github/workflows/deploy.yml`, which assumes the IAM role
 `drive-in-app-deploy` via OIDC (no stored AWS keys) and reads these repo **variables**:
 `AWS_ROLE_ARN`, `ECR_REGISTRY`, `OPS_BUCKET`, `INSTANCE_ID` (from the `drive-in-app` stack outputs).
@@ -354,7 +372,17 @@ before redeploying. Patches within the image come from `dnf upgrade` on the serv
   `drive-in-alerts` SNS topic; to check delivery, open Alerting → Contact points → SNS email → Test.
 
 - Shell on the server: `aws ssm start-session --target <InstanceId>`; the stack lives in `/opt/drive-in`.
-- Logs: `docker compose logs web` there (lost when the container is recreated on deploy). Production logs include
-  scopes, so a request ID from the error page (`00-<trace id>-<span id>-00`) can be found by grepping for its trace id.
+- Logs: every container's output goes to CloudWatch Logs, log group `/drive-in/containers` (kept 30 days), one stream
+  per container (`drive-in-web-1/<container id>`, ...), so it survives redeploys. `docker compose logs web` on the server
+  still shows the current container's. The web app logs JSON with scopes, so a request ID from the error page
+  (`00-<trace id>-<span id>-00`) is found with CloudWatch → Logs Insights on `/drive-in/containers`:
+  ```
+  fields @timestamp, LogLevel, Category, Message, Exception
+  | filter @message like "<trace id>"
+  | sort @timestamp asc
+  ```
+  Recent errors: `fields @timestamp, Category, Message, Exception | filter LogLevel in ["Error", "Critical"] | sort @timestamp desc`.
+  The Grafana alerts already cover error rates (`drivein.errors.logged`), so there's no CloudWatch metric filter on top.
+  If CloudWatch can't be reached, Docker buffers then drops lines rather than stalling the app.
 - Backups: nightly `pg_dump` to `s3://<OpsBucket>/backups/` (30 days), plus daily EBS snapshots (7).
   Run one now with `sudo drive-in-backup <OpsBucket>`.
