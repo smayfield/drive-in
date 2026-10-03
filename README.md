@@ -247,7 +247,7 @@ before the new app version starts; if a migration fails, the old version keeps r
 ## Workflow
 
 All changes go through a feature branch and a pull request; nothing is committed to `main` directly.
-Every pull request to `main` is built and tested by `.github/workflows/ci.yml` (job `build-and-test`: Release build,
+Every pull request (to `main`, or to another PR's branch when stacked) is built and tested by `.github/workflows/ci.yml` (job `build-and-test`: Release build,
 `dotnet test`, and a build of the web image). Make that job a required status check so a failing PR can't be merged:
 
 ```sh
