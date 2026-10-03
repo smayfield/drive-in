@@ -280,7 +280,8 @@ else
     app.UseHsts();
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
-app.UseSecurityHeaders(app.Environment.IsDevelopment());
+// Stripe's hosts are allowed only when Stripe is the processor (its card form needs them).
+app.UseSecurityHeaders(app.Environment.IsDevelopment(), stripe: paymentProvider == "Stripe");
 app.UseHttpsRedirection();
 
 // Explicit so they run after UseForwardedHeaders. Left implicit, WebApplication inserts them at the
