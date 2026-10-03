@@ -36,7 +36,7 @@ BEGIN
                    THEN column_name IN ('id', 'created_at', 'email_confirmed', 'employee_theater_id', 'lockout_end',
                                         'two_factor_enabled')
                    ELSE column_name NOT IN ('code', 'short_code', 'token_hash', 'password_hash', 'security_stamp',
-                                            'data', 'payment_reference')
+                                            'data', 'payment_reference', 'cdn_key')
                         AND column_name NOT LIKE '%email%'
                         -- What people write to each other in the app (and notification titles naming them).
                         AND (t.table_name, column_name) NOT IN (('messages', 'body'), ('conversations', 'subject'),
