@@ -68,7 +68,7 @@ public class NearMeTests
     }
 
     [Fact]
-    public async Task FindPlace_uses_the_geocoder_and_requires_sign_in()
+    public async Task FindPlace_uses_the_geocoder_for_anyone()
     {
         await using var app = new TestApp();
         var user = await app.CreateUserAsync("guest@example.com");
@@ -77,7 +77,8 @@ public class NearMeTests
 
         Assert.Equal(Austin, await theaters.FindPlaceAsync(Principals.For(user), "78701"));
         Assert.Null(await theaters.FindPlaceAsync(Principals.For(user), "Atlantis"));
-        await Assert.ThrowsAsync<AccessDeniedException>(() => theaters.FindPlaceAsync(Principals.Anonymous, "78701"));
+        // The theater list is public, so its search is too.
+        Assert.Equal(Austin, await theaters.FindPlaceAsync(Principals.Anonymous, "78701"));
     }
 
     [Fact]
@@ -241,11 +242,78 @@ public class NearMeTests
     }
 
     [Fact]
+    public async Task Nominatim_gives_up_rather_than_queue_behind_a_slow_lookup()
+    {
+        var release = new TaskCompletionSource();
+        var handler = new BlockingHandler(release.Task, """[{"lat":"30.27","lon":"-97.74"}]""");
+        var geocoder = new NominatimGeocoder(new StubFactory(handler), TimeProvider.System, NullLogger<NominatimGeocoder>.Instance)
+        {
+            QueueTimeout = TimeSpan.FromMilliseconds(50),
+        };
+
+        var first = geocoder.GeocodeAsync("Austin");
+        await handler.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Null(await geocoder.GeocodeAsync("Dallas"));
+
+        release.SetResult();
+        Assert.Equal(new GeoPoint(30.27, -97.74), await first);
+        Assert.Equal(1, handler.Calls);
+    }
+
+    // Answers once release completes, so the first lookup holds the geocoder's turn.
+    private sealed class BlockingHandler(Task release, string body) : HttpMessageHandler
+    {
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public int Calls { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            Calls++;
+            Started.TrySetResult();
+            await release;
+            return Json(body);
+        }
+    }
+
+    [Fact]
     public async Task Nominatim_returns_null_for_no_match_or_a_failure()
     {
         Assert.Null(await Nominatim(new StubHandler(_ => Json("[]"))).GeocodeAsync("Atlantis"));
         Assert.Null(await Nominatim(new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable))).GeocodeAsync("Austin"));
         Assert.Null(await Nominatim(new StubHandler(_ => Json("not json"))).GeocodeAsync("Austin"));
         Assert.Null(await Nominatim(new StubHandler(_ => Json("""[{"lat":"999","lon":"0"}]"""))).GeocodeAsync("Austin"));
+    }
+
+    [Fact]
+    public async Task Place_searches_are_limited_per_person()
+    {
+        await using var app = new TestApp();
+        var user = Principals.For(await app.CreateUserAsync("guest@example.com"));
+        app.Geocoder.Places["78701"] = Austin;
+        var theaters = app.Get<TheaterService>();
+        var limit = new RateLimitOptions().PlaceSearch;
+
+        for (var i = 0; i < limit.PermitLimit; i++)
+            await theaters.FindPlaceAsync(user, "78701");
+        var refused = await Assert.ThrowsAsync<AppValidationException>(() => theaters.FindPlaceAsync(user, "78701"));
+
+        Assert.StartsWith("Too many attempts", refused.Message);
+        Assert.Equal(Austin, await theaters.FindPlaceAsync(Principals.For(await app.CreateUserAsync("other@example.com")), "78701"));
+    }
+
+    [Fact]
+    public async Task Signed_out_place_searches_are_limited_per_client()
+    {
+        await using var app = new TestApp();
+        app.Geocoder.Places["78701"] = Austin;
+        var theaters = app.Get<TheaterService>();
+        var limit = new RateLimitOptions().PlaceSearch;
+
+        for (var i = 0; i < limit.PermitLimit; i++)
+            await theaters.FindPlaceAsync(Principals.Anonymous, "78701", "ip:203.0.113.7");
+        await Assert.ThrowsAsync<AppValidationException>(() => theaters.FindPlaceAsync(Principals.Anonymous, "78701", "ip:203.0.113.7"));
+
+        // Another visitor, at another address, isn't held up by the first.
+        Assert.Equal(Austin, await theaters.FindPlaceAsync(Principals.Anonymous, "78701", "ip:198.51.100.20"));
     }
 }

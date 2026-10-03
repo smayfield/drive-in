@@ -1,0 +1,114 @@
+@page "/manage/{Id:int}/gate/offline"
+@attribute [Authorize]
+@attribute [ExcludeFromInteractiveRouting]
+@layout GateOfflineLayout
+@using DriveIn.Web.Endpoints
+@inject TheaterService Theaters
+@inject TheaterAccess Access
+
+@* Static SSR plus plain JS (wwwroot/gate-offline/) on purpose: a Blazor circuit stops when the signal drops, and this
+   page has to keep checking cars in. The script keeps tonight's admit list on the device and syncs check-ins when it can
+   (see GateOfflineEndpoints). *@
+
+<PageTitle>Offline gate · @(theater?.Name ?? "Manage") · Drive-In Online</PageTitle>
+
+<HeadContent>
+    <link rel="manifest" href="@($"{GateOfflineEndpoints.PagePath(Id)}/manifest.webmanifest")" />
+    <link rel="stylesheet" href="@Assets["gate-offline/gate-offline.css"]" />
+</HeadContent>
+
+@if (theater is null)
+{
+    <h1>Theater not found</h1>
+}
+else if (!canAdmit)
+{
+    <h1>Offline gate</h1>
+    <p>Checking cars in needs the "Admit guests" action at @theater.Name. Ask the theater's owner or a manager.</p>
+    <p><a href="@($"manage/{Id}")">Back to @theater.Name</a></p>
+}
+else
+{
+    <div id="gate-offline" class="gate-offline"
+         data-theater-id="@Id"
+         data-base="@GateOfflineEndpoints.PagePath(Id)"
+         data-token-header="@GateOfflineEndpoints.TokenHeader">
+        <header class="gate-offline-header">
+            <div>
+                <h1>@theater.Name: gate</h1>
+                <p class="small gate-muted">Works without a signal. Check-ins are kept on this device and sent when it's back online.</p>
+            </div>
+            <a class="btn btn-outline-secondary" href="@($"manage/{Id}/gate")" data-enhance-nav="false">Online gate</a>
+        </header>
+
+        <div class="gate-status" role="status" aria-live="polite">
+            <span class="gate-pill" data-ref="connection" data-state="unknown">Starting…</span>
+            <span data-ref="updated">No list on this device yet.</span>
+            <span data-ref="queue"></span>
+            <button type="button" class="btn btn-outline-secondary" data-ref="sync">Sync now</button>
+        </div>
+
+        <noscript>
+            <div class="alert alert-danger">This page needs JavaScript. Use the <a href="@($"manage/{Id}/gate")">online gate</a> instead.</div>
+        </noscript>
+
+        <section aria-labelledby="gate-checkin-title" class="gate-card">
+            <h2 id="gate-checkin-title">Check in</h2>
+            @* A plain input on purpose: handheld scanners type into it and press Enter. *@
+            <form data-ref="form" class="gate-form" autocomplete="off">
+                <label class="visually-hidden" for="gate-code">Gate code, ticket code or scanned QR code</label>
+                <input id="gate-code" data-ref="code" class="form-control gate-input" autocapitalize="characters"
+                       placeholder="Gate code or scan" autofocus />
+                <button type="submit" class="btn btn-primary btn-lg">Find</button>
+            </form>
+            <p class="small gate-muted">
+                Type the guest's 4-character gate code, or scan their QR code with a handheld scanner. Only tickets for
+                today's showings are on this device, so a ticket for another day won't be found.
+            </p>
+            <div data-ref="results" aria-live="assertive"></div>
+        </section>
+
+        @* Below the check-in panel so it coming and going (e.g. on losing the signal) doesn't move the Check in button. *@
+        <div class="alert alert-warning" data-ref="notice" hidden></div>
+
+        <section aria-labelledby="gate-conflicts-title" class="gate-card" data-ref="conflicts-section" hidden>
+            <h2 id="gate-conflicts-title">Needs a look</h2>
+            <p class="small gate-muted">
+                These cars were checked in on this device while it was offline, but the server didn't accept the check-in.
+                The car is already in, so it's worth finding out why (for example, the same ticket shown at two gates).
+            </p>
+            <ul data-ref="conflicts" class="list-unstyled gate-conflicts"></ul>
+            <button type="button" class="btn btn-outline-secondary" data-ref="clear-conflicts">Clear this list</button>
+        </section>
+
+        <section aria-labelledby="gate-showings-title" class="gate-card">
+            <h2 id="gate-showings-title">Today's showings</h2>
+            <div data-ref="showings"><p class="gate-muted">Loading…</p></div>
+        </section>
+    </div>
+    <script src="@Assets["gate-offline/gate-offline.js"]" type="module"></script>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private Theater? theater;
+    private bool canAdmit;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthState).User;
+        try
+        {
+            theater = await Theaters.GetForManageAsync(user, Id);
+        }
+        catch (Exception ex) when (ex is NotFoundException or AccessDeniedException)
+        {
+            // Not a member: say so the same way as an unknown theater.
+            return;
+        }
+        canAdmit = (await Access.GetPermissionsAsync(user, theater)).Contains(TheaterPermissions.AdmitGuests);
+    }
+}

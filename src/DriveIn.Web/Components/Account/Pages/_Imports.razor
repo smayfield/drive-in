@@ -1,3 +1,5 @@
 ﻿@using DriveIn.Web.Components.Account.Shared
 @attribute [ExcludeFromInteractiveRouting]
+@* Form posts on every account page (sign-in, registration, recovery, and Manage) share one rate limit; viewing them doesn't count. *@
+@attribute [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(DriveIn.Web.Services.RateLimitPolicies.Account)]
 @layout DriveIn.Web.Components.Layout.AccountLayout
