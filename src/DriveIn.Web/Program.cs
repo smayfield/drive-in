@@ -224,8 +224,12 @@ builder.Services.AddSingleton<DummyPaymentProcessor>(); // also used for demo th
 // Matched like the other providers: case and surrounding spaces don't matter.
 var paymentProvider = builder.Configuration[$"{PaymentOptions.Section}:Provider"]?.Trim() ?? "";
 var useStripe = paymentProvider.Equals("Stripe", StringComparison.OrdinalIgnoreCase);
+// Theaters' payout accounts (Manage → Payouts) go with the processor: Stripe Connect, a dummy that's enabled at once, or none.
 if (paymentProvider.Equals("Dummy", StringComparison.OrdinalIgnoreCase))
+{
     builder.Services.AddSingleton<IPaymentProcessor>(sp => sp.GetRequiredService<DummyPaymentProcessor>());
+    builder.Services.AddSingleton<IPayoutAccounts, DummyPayoutAccounts>();
+}
 else if (useStripe)
 {
     var stripe = builder.Configuration.GetSection(StripeOptions.Section).Get<StripeOptions>() ?? new StripeOptions();
@@ -234,9 +238,14 @@ else if (useStripe)
     builder.Services.AddSingleton<Stripe.IStripeClient>(new Stripe.StripeClient(stripe.SecretKey));
     builder.Services.AddSingleton<ICardReader, StripeTerminalReader>();
     builder.Services.AddSingleton<IPaymentProcessor, StripePaymentProcessor>();
+    builder.Services.AddSingleton<IPayoutAccounts, StripeConnectAccounts>();
 }
 else
+{
     builder.Services.AddSingleton<IPaymentProcessor, UnavailablePaymentProcessor>();
+    builder.Services.AddSingleton<IPayoutAccounts, UnavailablePayoutAccounts>();
+}
+builder.Services.AddScoped<PayoutService>();
 builder.Services.AddSingleton<SpotEvents>();
 
 // The forecast for showings (Open-Meteo: no key, 16 days ahead), cached per place in the shared memory cache.

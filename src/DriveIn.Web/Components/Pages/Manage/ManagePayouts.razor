@@ -1,0 +1,128 @@
+@page "/manage/{Id:int}/payouts"
+@attribute [Authorize]
+@inherits AppComponentBase
+@inject PayoutService Payouts
+
+<PageTitle>Payouts · Manage · Drive-In Online</PageTitle>
+
+@if (view is null)
+{
+    <Alerts Error="@Error" />
+    @if (Error is null) { <MudProgressCircular Indeterminate Size="Size.Small" aria-label="Loading payouts" /> }
+}
+else
+{
+    var theater = view.Theater;
+    <ManageHeader Theater="theater" Title="Payouts" Current="payouts" />
+
+    <Alerts Error="@Error" Success="@Success" />
+
+    <section class="manage-section">
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+            <MudText Typo="Typo.h5">Payout account</MudText>
+            <MudChip T="string" Size="Size.Small" Color="@StatusColor(theater.PayoutStatus)" Class="my-0">@StatusText(theater.PayoutStatus)</MudChip>
+        </div>
+        <MudText Class="muted mb-3">
+            Ticket and gift card sales are paid to the theater's own account with our payment processor, which pays out to
+            your bank. The processor collects your business and bank details and verifies them; we never see them.
+        </MudText>
+
+        @if (!view.Available)
+        {
+            <MudAlert Severity="Severity.Info">
+                There's nothing to set up yet: card payments aren't switched on for this site. You'll be asked to set up
+                payouts here before your theater takes real card payments.
+            </MudAlert>
+        }
+        else
+        {
+            @if (theater.PayoutStatus == PayoutStatus.Enabled)
+            {
+                <MudText Class="mb-3">Your payout account is ready: card payments go to it.</MudText>
+            }
+            else if (view.RequiredToSell && !theater.IsDemo)
+            {
+                <MudAlert Severity="Severity.Warning" Class="mb-3">
+                    Until your payout account is ready, the theater can't take card payments online or at the gate.
+                </MudAlert>
+            }
+            @if (theater.PayoutStatusCheckedAt is DateTimeOffset checkedAt)
+            {
+                <MudText Typo="Typo.body2" Class="muted mb-3">Last checked @TheaterTime.ToLocal(theater, checkedAt).ToString("MMM d, h:mm tt").</MudText>
+            }
+            <div class="d-flex flex-wrap gap-2">
+                @if (theater.PayoutStatus != PayoutStatus.Enabled)
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="busy" OnClick="StartAsync">
+                        @(theater.PayoutAccountId is null ? "Set up payouts" : "Continue setup")
+                    </MudButton>
+                }
+                @if (theater.PayoutAccountId is not null)
+                {
+                    <MudButton Variant="Variant.Outlined" Disabled="busy" OnClick="RefreshAsync">Check status</MudButton>
+                }
+            </div>
+        }
+    </section>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    // Set by the processor's onboarding when it sends the owner back: done (finished or left), or expired (a new link
+    // is needed).
+    [SupplyParameterFromQuery] public string? Done { get; set; }
+    [SupplyParameterFromQuery] public string? Expired { get; set; }
+
+    private PayoutView? view;
+    private bool busy;
+
+    protected override async Task LoadAsync()
+    {
+        view = await Payouts.GetAsync(User, Id);
+        if (Done is not null && view.Theater.PayoutAccountId is not null)
+        {
+            view = view with { Theater = await Payouts.RefreshAsync(User, Id) };
+            Success = view.Theater.PayoutStatus == PayoutStatus.Enabled
+                ? "Your payout account is ready."
+                : "Thanks. The processor is still waiting on some details or checking them; continue setup, or check back later.";
+        }
+        else if (Expired is not null)
+            Error = "That setup link expired. Continue setup to get a new one.";
+    }
+
+    // Off to the processor's hosted onboarding (another site), which sends the owner back here.
+    private Task StartAsync() => RunAsync(async () =>
+    {
+        busy = true;
+        try
+        {
+            Nav.NavigateTo(await Payouts.StartOnboardingAsync(User, Id, BaseUri), forceLoad: true);
+        }
+        finally
+        {
+            busy = false;
+        }
+    });
+
+    private Task RefreshAsync() => RunAsync(async () =>
+    {
+        var theater = await Payouts.RefreshAsync(User, Id);
+        view = view! with { Theater = theater };
+        Success = theater.PayoutStatus == PayoutStatus.Enabled ? "Your payout account is ready." : "Not ready yet: continue setup to finish it.";
+    });
+
+    private static string StatusText(PayoutStatus status) => status switch
+    {
+        PayoutStatus.Enabled => "Ready",
+        PayoutStatus.Pending => "Setup not finished",
+        _ => "Not set up",
+    };
+
+    private static Color StatusColor(PayoutStatus status) => status switch
+    {
+        PayoutStatus.Enabled => Color.Success,
+        PayoutStatus.Pending => Color.Warning,
+        _ => Color.Default,
+    };
+}

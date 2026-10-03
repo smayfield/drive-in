@@ -56,6 +56,15 @@
         </section>
 
         <section class="manage-section">
+            <MudText Typo="Typo.h5">Payouts</MudText>
+            <MudText Typo="Typo.body2">
+                @(payoutStatus switch { PayoutStatus.Enabled => "Ready", PayoutStatus.Pending => "Setup not finished", _ => "Not set up" })
+                @if (payoutAccountId is not null) { <span class="muted"> · <code>@payoutAccountId</code></span> }
+                · <MudLink Href="@($"manage/{Id}/payouts")" Typo="Typo.body2">Payouts page</MudLink>
+            </MudText>
+        </section>
+
+        <section class="manage-section">
             <MudText Typo="Typo.h5">Owner</MudText>
             <MudText>Current owner: <strong>@(ownerEmail ?? "none")</strong></MudText>
             <MudText Typo="Typo.body2" Class="muted mb-2">
@@ -104,6 +113,8 @@
     private string ownerInviteEmail = "";
     private List<Invitation> pending = [];
     private Subscription? subscription;
+    private PayoutStatus payoutStatus;
+    private string? payoutAccountId;
 
     private string Title => Id is null ? "New theater" : model.Name;
 
@@ -114,7 +125,8 @@
             var theater = await Theaters.AdminGetAsync(User, id);
             model = theater.CopyForEdit();
             ownerEmail = theater.Owner?.Email;
-            pending = await Invitations.ListPendingAsync(User, id);
+            (payoutStatus, payoutAccountId) = (theater.PayoutStatus, theater.PayoutAccountId);
+            pending =await Invitations.ListPendingAsync(User, id);
             subscription = await Billing.GetSubscriptionAsync(User, id);
         }
         loaded = true;

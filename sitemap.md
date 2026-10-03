@@ -50,6 +50,7 @@ Owners can do everything at their own theaters. Start at [/manage](https://drive
 | `/manage/{id}/reports` | Sales, attendance and gift card reports. Each table downloads as CSV from `/manage/{id}/reports/{kind}.csv?from=yyyy-MM-dd&to=yyyy-MM-dd`, where `{kind}` is days, films, showings or giftcards |
 | `/manage/{id}/billing` | Plan, invoices and payments (owner only unless granted) |
 | `/manage/{id}/billing/invoices/{invoiceId}` | One invoice (printable) |
+| `/manage/{id}/payouts` | Payout account with the payment processor (owner only unless granted) |
 
 The employee pages below are open to owners too.
 

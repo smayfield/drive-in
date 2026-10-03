@@ -29,8 +29,10 @@ public sealed record PaymentClient(PaymentClientKind Kind, string? PublishableKe
 // One charge. PaymentMethodId is the token the buyer's browser made (online); null is a card-present charge at the gate,
 // where the processor's card reader takes the card. IdempotencyKey is the same for every attempt at the same charge, so
 // a retry can never charge twice. Metadata (ticket id, theater id...) is stored with the charge at the processor.
+// PayoutAccountId is the theater's connected account (Theater.PayoutAccountId): the money is the theater's, so with
+// Stripe it's a destination charge on its behalf, less ApplicationFeeCents for the platform (a placeholder, 0 for now).
 public sealed record PaymentRequest(long AmountCents, string Currency, string Description, string? PaymentMethodId,
-    string IdempotencyKey, IReadOnlyDictionary<string, string> Metadata)
+    string IdempotencyKey, IReadOnlyDictionary<string, string> Metadata, string? PayoutAccountId = null, long ApplicationFeeCents = 0)
 {
     public bool CardPresent => PaymentMethodId is null;
     public decimal Amount => AmountCents / 100m;
@@ -71,6 +73,10 @@ public interface IPaymentProcessor
     // What checkout pages need to tokenize a card for this processor.
     PaymentClient Client { get; }
 
+    // Whether charges go to the theater's own payout account, so a live theater can't sell by card until it has one
+    // (Theater.PayoutStatus Enabled). True for Stripe (Connect); the dummy processor takes no money and needs none.
+    bool RequiresPayoutAccount => false;
+
     // Charges once per IdempotencyKey: asking again with the same key returns the first attempt's outcome.
     Task<PaymentResult> ChargeAsync(PaymentRequest request, CancellationToken ct = default);
 
@@ -100,6 +106,13 @@ public sealed class PaymentOptions
         get;
         set => field = string.IsNullOrWhiteSpace(value) ? PaymentClient.Usd : value.Trim().ToLowerInvariant();
     } = PaymentClient.Usd;
+
+    // The platform's cut of each card charge to a theater's payout account, in percent. A placeholder: 0 (no fee)
+    // until the business decides one; the plan's per-screen subscription is billed separately (BillingService).
+    public decimal ApplicationFeePercent { get; set; }
+
+    public long ApplicationFeeCents(long amountCents) =>
+        (long)decimal.Round(amountCents * ApplicationFeePercent / 100m, 0, MidpointRounding.AwayFromZero);
 
     // Prices, totals and charges are all amounts with two decimal places (PaymentRequest.AmountCents is amount × 100),
     // so a currency whose minor unit isn't a hundredth (Stripe's zero- and three-decimal currencies) would be charged

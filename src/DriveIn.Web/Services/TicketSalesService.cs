@@ -476,17 +476,30 @@ public sealed partial class TicketSalesService(
     // this same charge can't charge twice, while a later checkout of the same ticket (after a decline put it back to
     // Held) is a new charge.
     private PaymentRequest TicketCharge(Ticket ticket, Theater theater, decimal amount, string description, string? paymentMethod) =>
-        new(PaymentRequest.ToCents(amount), paymentOptions.Value.Currency, description, paymentMethod,
-            ticket.PaymentKey!,
-            new Dictionary<string, string>
-            {
-                ["kind"] = "ticket", ["ticket_id"] = ticket.Id.ToString(), ["theater_id"] = theater.Id.ToString(),
-                ["showtime_id"] = ticket.ShowtimeId.ToString(),
-            });
+        Charge(theater, amount, description, paymentMethod, ticket.PaymentKey!, new Dictionary<string, string>
+        {
+            ["kind"] = "ticket", ["ticket_id"] = ticket.Id.ToString(), ["theater_id"] = theater.Id.ToString(),
+            ["showtime_id"] = ticket.ShowtimeId.ToString(),
+        });
+
+    // A charge of the theater's money: paid to its payout account where the processor uses one, less the platform's fee.
+    private PaymentRequest Charge(Theater theater, decimal amount, string description, string? paymentMethod, string key,
+        Dictionary<string, string> metadata)
+    {
+        var cents = PaymentRequest.ToCents(amount);
+        var payout = ProcessorFor(theater).RequiresPayoutAccount ? theater.PayoutAccountId : null;
+        return new PaymentRequest(cents, paymentOptions.Value.Currency, description, paymentMethod, key, metadata, payout,
+            payout is null ? 0 : paymentOptions.Value.ApplicationFeeCents(cents));
+    }
 
     // Demo theaters always sell through the dummy processor (test tickets, no money), even where real payments
     // aren't set up, so prospective owners can try the whole flow.
     private IPaymentProcessor ProcessorFor(Theater theater) => theater.IsDemo ? testPayments : payments;
+
+    // A live theater whose processor pays theaters directly (Stripe) can't take a card until its payout account is
+    // enabled, or its money would have nowhere to go.
+    private bool NeedsPayoutAccount(Theater theater) =>
+        ProcessorFor(theater).RequiresPayoutAccount && theater.PayoutStatus != PayoutStatus.Enabled;
 
     // Online sales stop when the showing starts; the gate keeps selling to latecomers until it ends.
     // Showtime.Screen.Theater must be loaded.
@@ -501,6 +514,9 @@ public sealed partial class TicketSalesService(
         if (!ProcessorFor(showtime.Screen.Theater).IsAvailable)
             return atGate ? "Card payments aren't set up yet, so tickets can't be sold at the gate."
                 : "Online ticket sales aren't available yet.";
+        if (NeedsPayoutAccount(showtime.Screen.Theater))
+            return atGate ? "The theater's payout account isn't set up yet (Manage → Payouts), so tickets can't be sold at the gate."
+                : "This theater isn't selling tickets online yet.";
         if (prices.Options.Count == 0)
             return "Tickets for this showing aren't on sale yet.";
         return null;

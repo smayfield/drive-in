@@ -50,6 +50,7 @@ public sealed class TestApp : IAsyncDisposable
     public ServiceProvider Services { get; }
     public FakeEmailSender Email { get; } = new();
     public FakePaymentProcessor Payments { get; } = new();
+    public FakePayoutAccounts Payouts { get; } = new();
     public SpotEvents Events { get; } = new();
     public NotificationEvents NotificationEvents { get; } = new();
     public MessageEvents MessageEvents { get; } = new();
@@ -104,6 +105,8 @@ public sealed class TestApp : IAsyncDisposable
         services.AddScoped<RoleService>();
         services.AddSingleton<IPaymentProcessor>(Payments);
         services.AddSingleton<DummyPaymentProcessor>();
+        services.AddSingleton<IPayoutAccounts>(Payouts);
+        services.AddScoped<PayoutService>();
         services.Configure<PlanOptions>(o => o.PricePerScreenPerMonth = 49m);
         services.AddScoped<BillingService>();
         services.AddScoped<BillingReportService>();
@@ -196,6 +199,8 @@ public sealed class FakePaymentProcessor : IPaymentProcessor
 {
     public bool IsAvailable { get; set; } = true;
     public PaymentClient Client { get; set; } = PaymentClient.Test;
+    // Like Stripe (Connect) when set: a live theater needs an enabled payout account to sell.
+    public bool RequiresPayoutAccount { get; set; }
     public string? DeclineWith { get; set; }
     // When set, the charge fails with this before reaching the processor (it has no record of it), as opposed to declining.
     public Exception? FailWith { get; set; }
@@ -229,6 +234,30 @@ public sealed class FakePaymentProcessor : IPaymentProcessor
         Lookups.Add(lookup);
         return Task.FromResult(Outcomes.GetValueOrDefault(lookup.IdempotencyKey) ?? PaymentStatus.NotFound);
     }
+}
+
+// Payout accounts that stay Pending until a test marks them Enabled (as if the owner finished onboarding).
+public sealed class FakePayoutAccounts : IPayoutAccounts
+{
+    public bool IsAvailable { get; set; } = true;
+    public Dictionary<string, PayoutStatus> Accounts { get; } = [];
+    public List<(string Account, string ReturnUrl, string RefreshUrl)> Links { get; } = [];
+
+    public Task<string> CreateAccountAsync(Theater theater, string? email, CancellationToken ct = default)
+    {
+        var id = $"acct_fake{Accounts.Count + 1}";
+        Accounts[id] = PayoutStatus.Pending;
+        return Task.FromResult(id);
+    }
+
+    public Task<string> CreateOnboardingLinkAsync(string accountId, string returnUrl, string refreshUrl, CancellationToken ct = default)
+    {
+        Links.Add((accountId, returnUrl, refreshUrl));
+        return Task.FromResult($"https://connect.example.test/setup/{accountId}");
+    }
+
+    public Task<PayoutStatus> GetStatusAsync(string accountId, CancellationToken ct = default) =>
+        Task.FromResult(Accounts.GetValueOrDefault(accountId));
 }
 
 // Knows the places it's told about (by exact query); everything else isn't found. Records every lookup.

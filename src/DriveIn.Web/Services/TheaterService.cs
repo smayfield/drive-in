@@ -8,7 +8,8 @@ namespace DriveIn.Web.Services;
 
 public sealed record TheaterSummary(
     int Id, string Name, string Slug, string? City, string? State, bool IsActive,
-    string? OwnerEmail, int ScreenCount, int EmployeeCount, TheaterMode Mode = TheaterMode.Live, DateTimeOffset? GoLiveRequestedAt = null);
+    string? OwnerEmail, int ScreenCount, int EmployeeCount, TheaterMode Mode = TheaterMode.Live, DateTimeOffset? GoLiveRequestedAt = null,
+    PayoutStatus PayoutStatus = PayoutStatus.None);
 
 public sealed class TheaterService(
     IDbContextFactory<ApplicationDbContext> dbFactory, IAuthorizationService auth, TimeProvider time, IGeocoder geocoder,
@@ -209,7 +210,7 @@ public sealed class TheaterService(
         return await db.Theaters.AsNoTracking()
             .OrderBy(t => t.Name)
             .Select(t => new TheaterSummary(t.Id, t.Name, t.Slug, t.City, t.State, t.IsActive,
-                t.Owner != null ? t.Owner.Email : null, t.Screens.Count, t.Employees.Count, t.Mode, t.GoLiveRequestedAt))
+                t.Owner != null ? t.Owner.Email : null, t.Screens.Count, t.Employees.Count, t.Mode, t.GoLiveRequestedAt, t.PayoutStatus))
             .ToListAsync();
     }
 

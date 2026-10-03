@@ -32,6 +32,7 @@ public static class TheaterPermissions
     public const string ViewMessages = "messages.view";
     public const string ReplyMessages = "messages.reply";
     public const string ManageContent = "content.manage";
+    public const string ManagePayouts = "payouts.manage";
 
     public static readonly IReadOnlyList<TheaterPermission> All =
     [
@@ -54,6 +55,7 @@ public static class TheaterPermissions
         new(ViewReports, "Reports", "View reports", "See ticket sales, attendance and gift card reports (sold, redeemed and still owed) for any dates, and download them as CSV."),
         new(ViewBilling, "Billing", "View billing", "See the theater's plan, its invoices and receipts, and what's owed."),
         new(ManageBilling, "Billing", "Manage billing", "Change where invoices are emailed, and cancel the theater's subscription."),
+        new(ManagePayouts, "Billing", "Manage payouts", "Set up and check the theater's payout account with the payment processor, where ticket and gift card money is paid."),
         new(ViewMessages, "Messages", "View messages", "Read the messages customers send the theater, and get notified of new ones."),
         new(ReplyMessages, "Messages", "Reply to messages", "Reply to customers' messages, and close or reopen conversations. Needs \"View messages\" to see them."),
         new(ManageContent, "Content", "Manage pages and posts", "Write, publish, schedule and delete the theater's own pages (in its menu) and posts (news and events), and manage its image library."),
@@ -63,8 +65,9 @@ public static class TheaterPermissions
 
     public static bool IsKnown(string key) => AllKeys.Contains(key);
 
-    // The owner's business with us rather than running the theater, so no default role gets these.
-    public static readonly IReadOnlySet<string> Billing = new HashSet<string> { ViewBilling, ManageBilling };
+    // The owner's business with us, and where the theater's money goes, rather than running the theater, so no default
+    // role gets these (only the owner, unless they grant them).
+    public static readonly IReadOnlySet<string> Billing = new HashSet<string> { ViewBilling, ManageBilling, ManagePayouts };
 }
 
 // Roles created for every new theater. Owners can rename, change or delete them.

@@ -1,4 +1,5 @@
 using System.Globalization;
+using DriveIn.Web.Data;
 using Microsoft.Extensions.Options;
 using Stripe;
 
@@ -45,6 +46,11 @@ public sealed class StripeOptions
 // - The PaymentIntent's id is the payment reference stored on the ticket or gift card.
 // - Its metadata carries the idempotency key as payment_key, so a charge whose outcome the server didn't hear can be
 //   found again with the Search API (which can lag by about a minute; PaymentReconcileService waits longer than that).
+// - The money is the theater's: a destination charge on behalf of its Connect account (on_behalf_of +
+//   transfer_data.destination), so the theater is the merchant of record on the buyer's statement and receives the
+//   payout, less application_fee_amount for the platform (PaymentRequest.ApplicationFeeCents, 0 until fees are decided).
+//   Stripe's own fees come out of the platform's balance with destination charges; whether to pass them on is a
+//   business decision for when the integration is set up.
 public sealed class StripePaymentProcessor(IStripeClient client, ICardReader reader, IOptions<StripeOptions> options,
     IOptions<PaymentOptions> payments, ILogger<StripePaymentProcessor> logger) : IPaymentProcessor
 {
@@ -53,19 +59,14 @@ public sealed class StripePaymentProcessor(IStripeClient client, ICardReader rea
     // The Element is created in the same currency the server charges in (Payments:Currency), or Stripe rejects it.
     public PaymentClient Client => new(PaymentClientKind.Stripe, options.Value.PublishableKey, payments.Value.Currency);
 
+    public bool RequiresPayoutAccount => true;
+
     // Stripe won't charge less than this (50¢ in USD and most currencies it settles in).
     public const long MinimumChargeCents = 50;
 
-    public async Task<PaymentResult> ChargeAsync(PaymentRequest request, CancellationToken ct = default)
+    // The PaymentIntent for an online charge (also what the tests check, since nothing here can call Stripe yet).
+    public static PaymentIntentCreateOptions CreateOptions(PaymentRequest request)
     {
-        // E.g. a few cents left after a gift card: a clean decline (the sale is undone and the gift card made whole)
-        // rather than an error from Stripe.
-        if (request.AmountCents < MinimumChargeCents)
-            return PaymentResult.Declined(string.Create(CultureInfo.InvariantCulture,
-                $"card payments must be at least {MinimumChargeCents / 100m:0.00} {request.Currency.ToUpperInvariant()}; pay the whole amount by card instead"));
-        if (request.CardPresent)
-            return await reader.CollectAsync(request, ct);
-
         var create = new PaymentIntentCreateOptions
         {
             Amount = request.AmountCents,
@@ -77,6 +78,31 @@ public sealed class StripePaymentProcessor(IStripeClient client, ICardReader rea
             Metadata = new Dictionary<string, string>(request.Metadata) { [PaymentKeyMetadata] = request.IdempotencyKey },
             Expand = ["payment_method"],
         };
+        if (request.PayoutAccountId is { } account)
+        {
+            create.OnBehalfOf = account;
+            create.TransferData = new PaymentIntentTransferDataOptions { Destination = account };
+            if (request.ApplicationFeeCents > 0)
+                create.ApplicationFeeAmount = request.ApplicationFeeCents;
+        }
+        return create;
+    }
+
+    public async Task<PaymentResult> ChargeAsync(PaymentRequest request, CancellationToken ct = default)
+    {
+        // E.g. a few cents left after a gift card: a clean decline (the sale is undone and the gift card made whole)
+        // rather than an error from Stripe.
+        if (request.AmountCents < MinimumChargeCents)
+            return PaymentResult.Declined(string.Create(CultureInfo.InvariantCulture,
+                $"card payments must be at least {MinimumChargeCents / 100m:0.00} {request.Currency.ToUpperInvariant()}; pay the whole amount by card instead"));
+        if (request.CardPresent)
+            return await reader.CollectAsync(request, ct);
+        // Every sale is checked for an enabled payout account before it gets here (TicketSalesService), so this is a
+        // last guard against money landing in the platform's own balance.
+        if (request.PayoutAccountId is null)
+            throw new InvalidOperationException("A Stripe charge needs the theater's payout account.");
+
+        var create = CreateOptions(request);
         PaymentIntent intent;
         try
         {
@@ -191,6 +217,48 @@ public static class StripeWebhook
             && intent.Metadata.TryGetValue(StripePaymentProcessor.PaymentKeyMetadata, out var key))
             await sales.SettlePaymentAsync(key, intent.Id, baseUri, ct);
         return Results.Ok();
+    }
+}
+
+// Theaters' payout accounts as Stripe Connect Express accounts. UNTESTED against Stripe. Stripe's hosted onboarding
+// collects the business, identity and bank details; this only keeps the account id and whether it's enabled.
+// Assumptions: Express accounts (Stripe-hosted dashboard for the theater), card_payments and transfers capabilities,
+// and "enabled" meaning charges_enabled and payouts_enabled. The status is checked when the owner comes back from
+// onboarding or presses "Check status"; an account.updated Connect webhook could keep it current later.
+public sealed class StripeConnectAccounts(IStripeClient client) : IPayoutAccounts
+{
+    public bool IsAvailable => true;
+
+    public async Task<string> CreateAccountAsync(Theater theater, string? email, CancellationToken ct = default)
+    {
+        var account = await new AccountService(client).CreateAsync(new AccountCreateOptions
+        {
+            Type = "express",
+            Email = email,
+            BusinessProfile = new AccountBusinessProfileOptions { Name = theater.Name },
+            Capabilities = new AccountCapabilitiesOptions
+            {
+                CardPayments = new AccountCapabilitiesCardPaymentsOptions { Requested = true },
+                Transfers = new AccountCapabilitiesTransfersOptions { Requested = true },
+            },
+            Metadata = new Dictionary<string, string> { ["theater_id"] = theater.Id.ToString() },
+        }, new RequestOptions { IdempotencyKey = $"payout-account-theater-{theater.Id}" }, ct);
+        return account.Id;
+    }
+
+    public async Task<string> CreateOnboardingLinkAsync(string accountId, string returnUrl, string refreshUrl, CancellationToken ct = default)
+    {
+        var link = await new AccountLinkService(client).CreateAsync(new AccountLinkCreateOptions
+        {
+            Account = accountId, Type = "account_onboarding", ReturnUrl = returnUrl, RefreshUrl = refreshUrl,
+        }, cancellationToken: ct);
+        return link.Url;
+    }
+
+    public async Task<PayoutStatus> GetStatusAsync(string accountId, CancellationToken ct = default)
+    {
+        var account = await new AccountService(client).GetAsync(accountId, cancellationToken: ct);
+        return account.ChargesEnabled && account.PayoutsEnabled ? PayoutStatus.Enabled : PayoutStatus.Pending;
     }
 }
 
