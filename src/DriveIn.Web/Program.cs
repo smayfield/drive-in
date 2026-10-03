@@ -282,6 +282,7 @@ else
     app.UseHsts();
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+app.UseSecurityHeaders(app.Environment.IsDevelopment());
 app.UseHttpsRedirection();
 
 // Explicit so they run after UseForwardedHeaders. Left implicit, WebApplication inserts them at the

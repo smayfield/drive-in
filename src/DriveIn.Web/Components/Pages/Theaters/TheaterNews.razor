@@ -1,5 +1,7 @@
 @page "/theaters/{Slug}/news"
-@* All of a theater's live posts, NewsPageSize at a time. Public like the theater's page. *@
+@attribute [ExcludeFromInteractiveRouting]
+@layout PublicLayout
+@* All of a theater's live posts, NewsPageSize at a time. Public and statically rendered, like the theater's page. *@
 @inject TheaterService Theaters
 @inject ContentService Content
 
@@ -8,8 +10,8 @@
     @if (loaded)
     {
         <PageTitle>Theater not found · Drive-In Online</PageTitle>
-        <MudText Typo="Typo.h3" HtmlTag="h1" Class="mb-2">Theater not found</MudText>
-        <MudLink Href="theaters">Back to all theaters</MudLink>
+        <h1 class="mb-2">Theater not found</h1>
+        <a href="theaters">Back to all theaters</a>
     }
 }
 else
@@ -19,25 +21,25 @@ else
 
     <TheaterMasthead Theater="theater" Current="@($"theaters/{theater.Slug}/news")" />
 
-    <MudText Typo="Typo.h4" HtmlTag="h1" Class="mb-3">News &amp; events</MudText>
+    <h1 class="h4 mb-3">News &amp; events</h1>
     @if (posts.Count == 0)
     {
-        <MudText Class="muted">Nothing here yet.</MudText>
+        <p class="muted">Nothing here yet.</p>
     }
     else
     {
         <NewsCards Theater="theater" Posts="posts" />
-        <div class="d-flex justify-content-between mt-4">
+        <nav class="d-flex justify-content-between mt-4" aria-label="More news">
             @if (PageNumber > 1)
             {
-                <MudLink Href="@PageHref(PageNumber - 1)">&larr; Newer</MudLink>
+                <a href="@PageHref(PageNumber - 1)">&larr; Newer</a>
             }
             else { <span></span> }
             @if (PageNumber * ContentService.NewsPageSize < total)
             {
-                <MudLink Href="@PageHref(PageNumber + 1)">Older &rarr;</MudLink>
+                <a href="@PageHref(PageNumber + 1)">Older &rarr;</a>
             }
-        </div>
+        </nav>
     }
 }
 
