@@ -106,10 +106,11 @@ public static partial class PaymentTokens
         var token = id?.Trim();
         if (string.IsNullOrEmpty(token))
             throw new AppValidationException("Enter your card details.");
-        // A run of 13+ digits looks like a card number (e.g. pm_4242424242424242): refuse it rather than pass it on, log
-        // it or send it to the processor. Real tokens don't have one (Stripe's ids are random letters and digits; the
-        // test card form's random part is letters only).
-        if (token.Length > MaxLength || !TokenPattern().IsMatch(token) || CardNumberLike().IsMatch(token))
+        // A run of 13+ digits looks like a card number (e.g. pm_4242424242424242, or pm_4242_4242_4242_4242 with the
+        // underscores taken out): refuse it rather than pass it on, log it or send it to the processor. Real tokens don't
+        // have one (Stripe's ids are random letters and digits; the test card form's random part is letters only). It's
+        // a guard against a client mistake, not a filter: someone set on sending their own card number can always encode it.
+        if (token.Length > MaxLength || !TokenPattern().IsMatch(token) || CardNumberLike().IsMatch(token.Replace("_", "")))
             throw new AppValidationException("Your card details didn't come through. Enter them again.");
         return token;
     }
