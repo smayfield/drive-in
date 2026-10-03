@@ -5,6 +5,23 @@
 	metrics
 }
 
+# The web app's upstream: whichever copy (web-blue or web-green) deploy.sh last switched to, named in the file
+# "upstream" next to this one (`to web-<color>:8080`). Caddy checks it every 5 s with /healthz (Host: localhost, which
+# the app's AllowedHosts accepts) and stops sending requests after 3 failures in a row. On a reload (each deploy
+# switches colors with one), WebSockets already open (Blazor circuits) stay on the old copy for up to 5 minutes instead
+# of being cut at once; deploy.sh stops the old copy sooner, after its drain time.
+(web) {
+	import upstream
+	health_uri /healthz
+	health_interval 5s
+	health_timeout 3s
+	health_fails 3
+	health_headers {
+		Host localhost
+	}
+	stream_close_delay 5m
+}
+
 drive-in.online {
 	encode zstd gzip
 	# Grafana, for site admins only. Each request first asks the app (/ops/grafana-auth): admins get a 200 with
@@ -15,7 +32,8 @@ drive-in.online {
 	handle @grafana {
 		route {
 			request_header -X-WEBAUTH-USER
-			forward_auth web:8080 {
+			forward_auth {
+				import web
 				uri /ops/grafana-auth
 				copy_headers X-WEBAUTH-USER
 			}
@@ -23,7 +41,9 @@ drive-in.online {
 		}
 	}
 	handle {
-		reverse_proxy web:8080
+		reverse_proxy {
+			import web
+		}
 	}
 }
 

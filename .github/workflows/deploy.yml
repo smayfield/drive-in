@@ -54,6 +54,14 @@ jobs:
           R="${{ vars.ECR_REGISTRY }}"
           docker buildx build --platform linux/arm64 --push -t "$R/drive-in-web:$TAG"     -f src/DriveIn.Web/Dockerfile .
           docker buildx build --platform linux/arm64 --push -t "$R/drive-in-migrate:$TAG" -f src/DriveIn.Web/Dockerfile.migrate .
+          # PostgreSQL + pgBackRest, tagged by its Dockerfile's hash (deploy.sh computes the same tag) and built only when
+          # that tag is new, so a deploy doesn't restart the database unless the image really changed.
+          PG_TAG="pg-$(sha256sum deploy/postgres/Dockerfile | cut -c1-12)"
+          if docker buildx imagetools inspect "$R/drive-in-postgres:$PG_TAG" >/dev/null 2>&1; then
+            echo "drive-in-postgres:$PG_TAG already built"
+          else
+            docker buildx build --platform linux/arm64 --push -t "$R/drive-in-postgres:$PG_TAG" deploy/postgres
+          fi
 
       - name: Upload deploy files
         run: aws s3 cp deploy/ "s3://${{ vars.OPS_BUCKET }}/deploy/$TAG/" --recursive

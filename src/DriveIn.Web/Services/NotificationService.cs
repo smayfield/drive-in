@@ -252,7 +252,7 @@ public static class NotificationEmails
 
 // Emails unread notifications every minute (NotificationService.SendDueEmailsAsync).
 public sealed class NotificationEmailService(IServiceScopeFactory scopes, TimeProvider time, DriveInMetrics metrics,
-    ILogger<NotificationEmailService> logger)
+    IJobLeadership leadership, ILogger<NotificationEmailService> logger)
     : BackgroundService
 {
     public static readonly TimeSpan Interval = TimeSpan.FromMinutes(1);
@@ -264,6 +264,9 @@ public sealed class NotificationEmailService(IServiceScopeFactory scopes, TimePr
         {
             try
             {
+                // Only one copy of the app may send these, or each would be emailed twice.
+                if (!await leadership.IsLeaderAsync(stoppingToken))
+                    continue;
                 await using var scope = scopes.CreateAsyncScope();
                 await scope.ServiceProvider.GetRequiredService<NotificationService>().SendDueEmailsAsync(stoppingToken);
             }
