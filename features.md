@@ -319,8 +319,10 @@ Conventions used below: `Service.Method` names are in `src/DriveIn.Web/Services`
 - Data: PostgreSQL via EF Core, snake_case, migrations in `Data/Migrations`. Interactive components don't hold a DbContext;
   data services use `IDbContextFactory`, services that use `UserManager` open a DI scope per call.
 - Security headers (`Services/SecurityHeaders.cs`, after the exception handler so error pages get them too) on every app
-  response: a CSP (`script-src 'self'` plus a per-request nonce on Blazor's import map, the only inline script; inline
-  styles allowed for MudBlazor and Quill; images `self`, `data:`, `blob:`; `connect-src 'self'` for the circuit;
+  response: a CSP (`script-src 'self'` plus a per-request nonce on Blazor's import map, the only inline script, and
+  js.stripe.com for the card form; inline styles allowed for MudBlazor and Quill; images `self`, `data:`, `blob:`;
+  `connect-src 'self'` for the circuit plus api.stripe.com; `frame-src` only Stripe's card-field iframes (js.stripe.com,
+  hooks.stripe.com);
   `form-action` adds accounts.google.com for Google sign-in's redirect; `frame-ancestors 'none'`, `object-src 'none'`,
   `base-uri 'self'`), `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`,
   `Cross-Origin-Opener-Policy: same-origin` and a `Permissions-Policy` (camera, geolocation and payment for this site only;

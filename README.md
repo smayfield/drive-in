@@ -120,9 +120,9 @@ invitee sets a password or continues with Google using the invited address.
     test-mode keys (`pk_test_`/`sk_test_`) and production doesn't enable it. Keys: `Payments:Stripe:PublishableKey` and
     `Payments:Stripe:SecretKey` (user-secrets locally; in production, SSM `/drive-in/stripe-publishable-key` and
     `/drive-in/stripe-secret-key`, which `deploy.sh` doesn't read yet). Before turning it on: try a test-mode sale, a
-    decline and a gift card end to end; add the keys to `deploy.sh` and the compose file; allow Stripe in the site's
-    Content-Security-Policy (`Services/SecurityHeaders.cs`): `https://js.stripe.com` in `script-src` and `frame-src`, and
-    `https://api.stripe.com` in `connect-src`; then lift the test-key check in `StripeOptions.Validate`.
+    decline and a gift card end to end; add the keys to `deploy.sh` and the compose file; then lift the test-key check
+    in `StripeOptions.Validate`. The Content-Security-Policy (`Services/SecurityHeaders.cs`) already allows Stripe.js and
+    its card fields (js.stripe.com, hooks.stripe.com, api.stripe.com).
     Known gaps: cards that ask for 3-D Secure are declined for now, and gate sales need Stripe Terminal readers
     (`StripeTerminalReader` is a stub that declines).
   - Unset (as in production): nothing is sold, online or at the gate.

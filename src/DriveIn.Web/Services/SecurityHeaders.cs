@@ -35,19 +35,22 @@ public static class SecurityHeaders
 
     public static string ContentSecurityPolicy(string nonce, bool development) => string.Join("; ",
         "default-src 'self'",
-        $"script-src 'self' 'nonce-{nonce}'",
+        // Stripe.js, for the card form (payments.js; only loaded when Stripe is the processor). The Stripe hosts here and
+        // below are the ones Stripe's CSP guide lists for Elements.
+        $"script-src 'self' 'nonce-{nonce}' https://js.stripe.com",
         // MudBlazor and Quill set inline styles (style attributes and the theme's <style> element).
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
         "font-src 'self' https://fonts.gstatic.com",
         // Inline images: QR codes and pasted images are data: URIs; previews of a chosen file are blob: URLs.
         "img-src 'self' data: blob:",
-        // 'self' covers the Blazor circuit's WebSocket on the same host. Locally, dotnet watch's browser refresh
-        // connects to its own localhost port.
-        development ? "connect-src 'self' ws://localhost:* wss://localhost:*" : "connect-src 'self'",
+        // 'self' covers the Blazor circuit's WebSocket on the same host; Stripe.js creates payment methods at
+        // api.stripe.com. Locally, dotnet watch's browser refresh connects to its own localhost port.
+        development ? "connect-src 'self' https://api.stripe.com ws://localhost:* wss://localhost:*" : "connect-src 'self' https://api.stripe.com",
         // Sign-in with Google posts to us and is redirected to Google, and form-action applies to that redirect.
         "form-action 'self' https://accounts.google.com",
         "frame-ancestors 'none'",
-        "frame-src 'none'",
+        // Stripe's card fields live in its own iframes (and hooks.stripe.com for card checks).
+        "frame-src https://js.stripe.com https://hooks.stripe.com",
         "object-src 'none'",
         "base-uri 'self'");
 }
