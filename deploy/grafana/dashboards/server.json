@@ -1970,7 +1970,7 @@
         "wideLayout": true,
         "showPercentChange": false
       },
-      "description": "Time since the nightly pg_dump to S3 last succeeded (backup.sh records it)."
+      "description": "Time since the nightly pgBackRest base backup (full on Sundays, differential otherwise) last succeeded (backup.sh records it)."
     },
     {
       "id": 38,
@@ -2039,7 +2039,7 @@
         "wideLayout": true,
         "showPercentChange": false
       },
-      "description": "Time since the nightly pg_dump to S3 last succeeded (backup.sh records it)."
+      "description": "Time since PostgreSQL last archived a WAL segment to S3 (pg_stat_archiver). Idle periods archive nothing, so a long age alone is not a problem; failures are."
     },
     {
       "id": 39,
@@ -2108,7 +2108,7 @@
         "wideLayout": true,
         "showPercentChange": false
       },
-      "description": "Time since the nightly pg_dump to S3 last succeeded (backup.sh records it)."
+      "description": "WAL segments PostgreSQL failed to archive to S3 in the last hour (pg_stat_archiver). Anything above 0 for 10 minutes fires the WAL archiving failing alert."
     },
     {
       "id": 31,

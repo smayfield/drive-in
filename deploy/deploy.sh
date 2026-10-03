@@ -28,7 +28,8 @@ ALERTS_TOPIC_ARN=$(param alerts-topic-arn)
 # Grafana's built-in admin password is never used (no login form or basic auth); keep it random.
 GRAFANA_ADMIN_PASSWORD=$(grep -s '^GRAFANA_ADMIN_PASSWORD=' .env | cut -d= -f2- || true)
 GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')}
-# PostgreSQL's image is tagged by its Dockerfile's hash, as the Deploy workflow tags it.
+# PostgreSQL's image is tagged by its Dockerfile's hash, as the Deploy workflow tags it. (The workflow copies the repo's
+# deploy/ folder into $DIR, so deploy/postgres/Dockerfile is $DIR/postgres/Dockerfile here.)
 PG_TAG="pg-$(sha256sum "$DIR/postgres/Dockerfile" | cut -c1-12)"
 cat > .env <<EOF
 REGISTRY=$REGISTRY
@@ -78,7 +79,7 @@ compose up -d --wait postgres
 
 # pgBackRest's repository in S3 (point-in-time recovery). stanza-create is a no-op once it exists. A failure here doesn't
 # stop the deploy: the database still works, WAL waits in pg_wal, and the "WAL archiving failing" alert fires.
-log "Checking the WAL archive"
+log "Creating the WAL archive's pgBackRest stanza (if it's new)"
 compose exec -T -u postgres postgres pgbackrest stanza-create --log-level-console=warn \
   || echo "WARNING: pgBackRest stanza-create failed; WAL isn't being archived. See README: Backups and restores." >&2
 
