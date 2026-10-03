@@ -60,6 +60,9 @@ public sealed class StripePaymentProcessor(IStripeClient client, ICardReader rea
 
     public bool RequiresPayoutAccount => true;
 
+    // Stripe won't charge less than this (50¢ in USD and most currencies it settles in).
+    public const long MinimumChargeCents = 50;
+
     // The PaymentIntent for an online charge (also what the tests check, since nothing here can call Stripe yet).
     public static PaymentIntentCreateOptions CreateOptions(PaymentRequest request)
     {
@@ -86,6 +89,10 @@ public sealed class StripePaymentProcessor(IStripeClient client, ICardReader rea
 
     public async Task<PaymentResult> ChargeAsync(PaymentRequest request, CancellationToken ct = default)
     {
+        // E.g. a few cents left after a gift card: a clean decline (the sale is undone and the gift card made whole)
+        // rather than an error from Stripe.
+        if (request.AmountCents < MinimumChargeCents)
+            return PaymentResult.Declined($"card payments must be at least {Money.Format(MinimumChargeCents / 100m)}; pay the whole amount by card instead");
         if (request.CardPresent)
             return await reader.CollectAsync(request, ct);
         // Every sale is checked for an enabled payout account before it gets here (TicketSalesService), so this is a
