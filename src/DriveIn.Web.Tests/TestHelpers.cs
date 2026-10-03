@@ -282,9 +282,17 @@ public sealed class FakeWeatherForecaster : IWeatherForecaster
     public HourlyForecast? Forecast { get; set; }
     public List<GeoPoint> Requests { get; } = [];
 
+    // When set, requests wait for it (a slow weather service) instead of answering with Forecast at once.
+    public TaskCompletionSource<HourlyForecast?>? Pending { get; set; }
+
+    // When set, requests fail with it.
+    public Exception? Failure { get; set; }
+
     public Task<HourlyForecast?> GetHourlyAsync(GeoPoint at, CancellationToken ct = default)
     {
         Requests.Add(at);
-        return Task.FromResult(Forecast);
+        if (Failure is not null)
+            return Task.FromException<HourlyForecast?>(Failure);
+        return Pending?.Task.WaitAsync(ct) ?? Task.FromResult(Forecast);
     }
 }

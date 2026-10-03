@@ -61,7 +61,9 @@ export async function tokenizeStripe(host) {
     if (submitted.error)
         return { error: submitted.error.message };
     const { error, paymentMethod } = await s.stripe.createPaymentMethod({ elements: s.elements });
-    return error ? { error: error.message } : { id: paymentMethod.id };
+    if (error)
+        return { error: error.message };
+    return paymentMethod?.id ? { id: paymentMethod.id } : { error: "Your card details didn't come through. Enter them again." };
 }
 
 export function unmountStripe(host) {

@@ -6,13 +6,14 @@
 
 body { margin: 0; font-size: 1rem; line-height: 1.5; -webkit-text-size-adjust: 100%; }
 
-h1, h2, h3, h4, h5, h6, .h5 { margin: 0 0 0.5rem; font-weight: 600; line-height: 1.2; }
+h1, h2, h3, h4, h5, h6, .h4, .h5, .h6 { margin: 0 0 0.5rem; font-weight: 600; line-height: 1.2; }
 h1 { font-size: 2rem; }
 h2 { font-size: 1.5rem; }
 h3 { font-size: 1.25rem; }
 h4 { font-size: 1.125rem; }
+.h4 { font-size: 1.25rem; }
 h5, .h5 { font-size: 1.125rem; }
-h6 { font-size: 1rem; }
+h6, .h6 { font-size: 1rem; }
 p { margin: 0 0 1rem; }
 ul, ol { margin: 0 0 1rem; padding-left: 2rem; }
 hr { margin: 1rem 0; border: 0; border-top: 1px solid var(--di-line); }
@@ -26,6 +27,8 @@ code { font-size: 0.875em; }
 
 /* --- Layout --- */
 .container { width: 100%; max-width: 1140px; margin-inline: auto; padding-inline: 12px; }
+/* As wide as the interactive app's MudContainer (Large), for the public pages that sit beside it. */
+.container-wide { max-width: 1280px; }
 .row { display: flex; flex-wrap: wrap; margin-inline: -0.75rem; }
 .row > * { flex-shrink: 0; width: 100%; max-width: 100%; padding-inline: 0.75rem; }
 @media (min-width: 768px) {
@@ -90,6 +93,8 @@ code { font-size: 0.875em; }
 .btn-primary:hover { background: color-mix(in srgb, var(--di-primary) 88%, black); color: var(--di-on-primary); }
 .btn-danger { background: var(--di-danger); border-color: var(--di-danger); color: var(--di-on-primary); }
 .btn-danger:hover { background: color-mix(in srgb, var(--di-danger) 88%, black); color: var(--di-on-primary); }
+.btn-outline-primary { border-color: var(--di-primary); color: var(--di-primary); }
+.btn-outline-primary:hover { background: color-mix(in srgb, var(--di-primary) 10%, transparent); color: var(--di-primary); }
 .btn-link { color: var(--di-accent); text-decoration: underline; }
 .btn-outline-secondary, .btn-outline-dark { border-color: var(--di-line-strong); color: var(--di-ink); }
 .btn-outline-secondary:hover, .btn-outline-dark:hover { background: color-mix(in srgb, var(--di-ink) 8%, transparent); color: var(--di-ink); }
@@ -154,6 +159,8 @@ code { font-size: 0.875em; }
 .card-body { padding: 1rem; }
 .table { width: 100%; margin-bottom: 1rem; }
 .table th, .table td { padding: 0.5rem; border-bottom: 1px solid var(--di-line); text-align: start; vertical-align: middle; }
+.table th.text-end, .table td.text-end { text-align: end; }
+.table-dense th, .table-dense td { padding: 0.3rem 0.5rem; }
 
 /* --- Navigation pills (the account settings menu) --- */
 .nav { display: flex; flex-wrap: wrap; margin: 0; padding: 0; list-style: none; }
