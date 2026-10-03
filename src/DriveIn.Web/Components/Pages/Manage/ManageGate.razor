@@ -90,7 +90,7 @@ else
                                                  MineLabel="This car" Vehicle="moveVehicle" Current="(t.Row, t.Spot)" />
                                         <div class="d-flex flex-wrap gap-2 mt-2">
                                             <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(busy || moveTarget is null)" OnClick="MoveAsync">
-                                                @(moveTarget is LotSpot to ? $"Move {t.SpotLabel} → {to.Label}" : "Pick a green spot")
+                                                @(moveTarget is LotSpot to ? $"Move {t.SpotLabel} → {to.Label}" : "Pick an available spot")
                                             </MudButton>
                                             <MudButton Variant="Variant.Outlined" Disabled="@busy" OnClick="CancelMove">Cancel</MudButton>
                                         </div>
@@ -182,11 +182,11 @@ else
                                         <div>Send the car to <strong>spot @sold.Ticket.SpotLabel</strong> on @sold.Showing.ScreenName.</div>
                                         <div class="small">@Money.Format(sold.Ticket.Total) · @TicketReceipt.PaidWith(sold.Ticket) · gate code <span class="font-monospace">@sold.Ticket.ShortCode</span></div>
                                     </MudAlert>
-                                    <MudText Typo="Typo.body2" Class="muted">Pick a green spot for the next car.</MudText>
+                                    <MudText Typo="Typo.body2" Class="muted">Pick an available spot for the next car.</MudText>
                                 }
                                 else if (sale.OnSale)
                                 {
-                                    <MudText Class="muted">Pick a green spot for the car. @AvailableCount of @sale.Screen.SpotCount are open.</MudText>
+                                    <MudText Class="muted">Pick an available spot for the car. @AvailableCount of @sale.Screen.SpotCount are open.</MudText>
                                 }
                             </MudItem>
                         </MudGrid>
