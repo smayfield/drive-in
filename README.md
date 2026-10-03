@@ -212,7 +212,8 @@ invitee sets a password or continues with Google using the invited address.
 - **Security headers** (CSP and friends) are set by the app for every response, in `Services/SecurityHeaders.cs`. Loading
   anything from another site (a script, stylesheet, font, frame or API, such as a payment provider's) means adding its
   host to the policy there, or the browser blocks it.
-- Fonts: Bungee for display headings, Barlow for everything else. Both are self-hosted (`wwwroot/fonts`, SIL Open Font
+- Fonts: Bungee for display headings (and Bungee Shade for the marketing site's marquee), Barlow for everything else.
+  All are self-hosted (`wwwroot/fonts`, SIL Open Font
   License; Latin and Latin Extended subsets from Fontsource), so pages load nothing from Google.
 
 ## Local development
