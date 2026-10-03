@@ -585,6 +585,19 @@ public class TicketSalesTests
             Assert.Throws<InvalidOperationException>(() => StripeOptions.Validate(options));
     }
 
+    [Fact]
+    public async Task Stripe_declines_charges_under_its_minimum_without_calling_it()
+    {
+        var stripe = new StripePaymentProcessor(new Stripe.StripeClient("sk_test_x"), new StripeTerminalReader(),
+            Microsoft.Extensions.Options.Options.Create(new StripeOptions()), Microsoft.Extensions.Options.Options.Create(new PaymentOptions()),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<StripePaymentProcessor>.Instance);
+
+        var result = await stripe.ChargeAsync(new PaymentRequest(30, "usd", "x", "pm_1Qabc", "k", new Dictionary<string, string>()));
+
+        Assert.False(result.Approved);
+        Assert.Contains("at least $0.50", result.DeclineReason);
+    }
+
     [Theory]
     [InlineData("USD ", "usd")]
     [InlineData("cad", "cad")]
