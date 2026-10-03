@@ -20,7 +20,8 @@ cd "$DIR"
 
 log() { echo "==> $*"; }
 die() { echo "restore: $*" >&2; exit 1; }
-compose() { docker compose -f "$COMPOSE_FILE" --env-file .env "$@"; }
+# Always the same project as the labels, network and container names below use (and the compose file's own name:).
+compose() { docker compose -p "$PROJECT" -f "$COMPOSE_FILE" --env-file .env "$@"; }
 psql_live() { compose exec -T postgres psql -qtAX -U drivein -d "${2:-drivein}" -c "$1"; }
 
 YES=0
@@ -43,7 +44,11 @@ confirm() {
 }
 
 # The web app's services (one, or blue and green) that are running now, so they can be started again afterwards.
-running_web() { compose ps --status running --services | grep '^web' || true; }
+# From Docker's labels rather than `compose ps`, which leaves out services whose profile isn't enabled (web-blue/green).
+running_web() {
+  docker ps --filter "label=com.docker.compose.project=$PROJECT" --format '{{.Label "com.docker.compose.service"}}' \
+    | grep '^web' | sort -u || true
+}
 stop_web() {
   WEB_SERVICES=$(running_web)
   if [ -n "$WEB_SERVICES" ]; then

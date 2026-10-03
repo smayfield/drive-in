@@ -47,7 +47,12 @@ See README.md for the full picture. Conventions worth knowing before changing co
   data services use `IDbContextFactory`; services that also use `UserManager` open a DI scope per call.
 - **Schema:** EF Core migrations in `Data/Migrations` (snake_case via EFCore.NamingConventions). Add with
   `dotnet ef migrations add <Name> --project src/DriveIn.Web --output-dir Data/Migrations`.
-  `DesignTimeDbContextFactory` is what `dotnet ef` and the migration bundle use.
+  `DesignTimeDbContextFactory` is what `dotnet ef` and the migration bundle use. **Migrations must work with the
+  previous release too**: deploys are blue/green, so for about a minute after migrating, the old version still serves
+  on the new schema. Add tables and nullable (or defaulted) columns freely. To rename or drop a column or table, or make
+  one required, do it in two PRs: first stop using it (and add its replacement), then remove it in a later release.
+- **Background jobs** (`BackgroundService`s that change data or send email) must ask `IJobLeadership.IsLeaderAsync`
+  before each run, so only one running copy of the app does them (a Postgres advisory lock; see `JobLeadership.cs`).
 - **Metrics:** a new business event (a sale, sign-up, failure...) records a counter in `Services/DriveInMetrics.cs` after its
   save, with low-cardinality tags only (no ids), and gets a panel in `deploy/grafana/dashboards` (and an alert rule if it's a
   failure). Grafana is provisioned from `deploy/grafana`; see features.md section 14.
