@@ -1,6 +1,6 @@
 # Production stack for drive-in.online, run on the EC2 server by deploy.sh.
 # Variables (REGISTRY, TAG, PG_TAG, OPS_BUCKET, DB_PASSWORD, GOOGLE_*, ADMIN_EMAIL, GEOCODING_CONTACT_EMAIL, PUBLIC_HOST,
-# GRAFANA_*, ALERTS_TOPIC_ARN) come from the .env file deploy.sh writes from SSM Parameter Store. Local development uses the
+# GRAFANA_*, ALERTS_TOPIC_ARN, IMAGES_*) come from the .env file deploy.sh writes from SSM Parameter Store. Local development uses the
 # docker-compose.yml at the repo root.
 name: drive-in
 
@@ -40,6 +40,10 @@ x-web: &web
     ForwardedHeaders__KnownNetworks__0: 172.30.0.0/24
     # SES credentials come from the EC2 instance role (IMDS hop limit is 2 for containers).
     AWS_REGION: us-east-1
+    # Public theaters' images in the image CDN (PublicImages.cs); blank = the app serves them all itself.
+    PublicImages__Bucket: ${IMAGES_BUCKET:-}
+    PublicImages__BaseUrl: ${IMAGES_URL:-}
+    PublicImages__DistributionId: ${IMAGES_DISTRIBUTION_ID:-}
   volumes:
     - dpkeys:/keys
   depends_on:

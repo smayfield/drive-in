@@ -16,4 +16,9 @@ public class TheaterLogo
     public string ContentType { get; set; } = "";
 
     public byte[] Data { get; set; } = [];
+
+    // Where its public copy is in the image CDN, while the theater is public (PublicImagePublisher). It names the
+    // Theater.LogoUpdatedAt version it was made from, so a replaced logo's old copy is never served.
+    [MaxLength(CdnKeys.MaxLength)]
+    public string? CdnKey { get; set; }
 }

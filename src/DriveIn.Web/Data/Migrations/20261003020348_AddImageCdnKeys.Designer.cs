@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using DriveIn.Web.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace DriveIn.Web.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261003020348_AddImageCdnKeys")]
+    partial class AddImageCdnKeys
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -566,94 +569,6 @@ namespace DriveIn.Web.Data.Migrations
                         {
                             t.HasCheckConstraint("ck_gift_cards_balance", "balance >= 0 AND balance <= initial_amount");
                         });
-                });
-
-            modelBuilder.Entity("DriveIn.Web.Data.GiftCardPurchase", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<decimal>("Amount")
-                        .HasPrecision(8, 2)
-                        .HasColumnType("numeric(8,2)")
-                        .HasColumnName("amount");
-
-                    b.Property<int?>("GiftCardId")
-                        .HasColumnType("integer")
-                        .HasColumnName("gift_card_id");
-
-                    b.Property<bool>("IsTest")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_test");
-
-                    b.Property<string>("Message")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("message");
-
-                    b.Property<string>("PurchaserEmail")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("purchaser_email");
-
-                    b.Property<string>("PurchaserId")
-                        .HasColumnType("text")
-                        .HasColumnName("purchaser_id");
-
-                    b.Property<string>("PurchaserName")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("purchaser_name");
-
-                    b.Property<string>("RecipientEmail")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("recipient_email");
-
-                    b.Property<string>("RecipientName")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("recipient_name");
-
-                    b.Property<Guid>("Stamp")
-                        .IsConcurrencyToken()
-                        .HasColumnType("uuid")
-                        .HasColumnName("stamp");
-
-                    b.Property<DateTimeOffset>("StartedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("started_at");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("status");
-
-                    b.Property<int>("TheaterId")
-                        .HasColumnType("integer")
-                        .HasColumnName("theater_id");
-
-                    b.HasKey("Id")
-                        .HasName("pk_gift_card_purchases");
-
-                    b.HasIndex("GiftCardId")
-                        .HasDatabaseName("ix_gift_card_purchases_gift_card_id");
-
-                    b.HasIndex("PurchaserId")
-                        .HasDatabaseName("ix_gift_card_purchases_purchaser_id");
-
-                    b.HasIndex("TheaterId")
-                        .HasDatabaseName("ix_gift_card_purchases_theater_id");
-
-                    b.HasIndex("Status", "StartedAt")
-                        .HasDatabaseName("ix_gift_card_purchases_status_started_at");
-
-                    b.ToTable("gift_card_purchases", (string)null);
                 });
 
             modelBuilder.Entity("DriveIn.Web.Data.GiftCardTransaction", b =>
@@ -1879,19 +1794,10 @@ namespace DriveIn.Web.Data.Migrations
                         .HasColumnType("numeric(8,2)")
                         .HasColumnName("option_price");
 
-                    b.Property<string>("PaymentKey")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("payment_key");
-
                     b.Property<string>("PaymentReference")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("payment_reference");
-
-                    b.Property<DateTimeOffset?>("PaymentStartedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("payment_started_at");
 
                     b.Property<int>("Row")
                         .HasColumnType("integer")
@@ -1963,10 +1869,6 @@ namespace DriveIn.Web.Data.Migrations
 
                     b.HasIndex("GiftCardId")
                         .HasDatabaseName("ix_tickets_gift_card_id");
-
-                    b.HasIndex("PaymentKey")
-                        .IsUnique()
-                        .HasDatabaseName("ix_tickets_payment_key");
 
                     b.HasIndex("ShortCode")
                         .HasDatabaseName("ix_tickets_short_code");
@@ -2429,34 +2331,6 @@ namespace DriveIn.Web.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_gift_cards_theaters_theater_id");
-
-                    b.Navigation("Purchaser");
-
-                    b.Navigation("Theater");
-                });
-
-            modelBuilder.Entity("DriveIn.Web.Data.GiftCardPurchase", b =>
-                {
-                    b.HasOne("DriveIn.Web.Data.GiftCard", "GiftCard")
-                        .WithMany()
-                        .HasForeignKey("GiftCardId")
-                        .OnDelete(DeleteBehavior.SetNull)
-                        .HasConstraintName("fk_gift_card_purchases_gift_cards_gift_card_id");
-
-                    b.HasOne("DriveIn.Web.Data.ApplicationUser", "Purchaser")
-                        .WithMany()
-                        .HasForeignKey("PurchaserId")
-                        .OnDelete(DeleteBehavior.SetNull)
-                        .HasConstraintName("fk_gift_card_purchases_users_purchaser_id");
-
-                    b.HasOne("DriveIn.Web.Data.Theater", "Theater")
-                        .WithMany()
-                        .HasForeignKey("TheaterId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_gift_card_purchases_theaters_theater_id");
-
-                    b.Navigation("GiftCard");
 
                     b.Navigation("Purchaser");
 

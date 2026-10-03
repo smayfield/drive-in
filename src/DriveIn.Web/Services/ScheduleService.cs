@@ -119,6 +119,7 @@ public sealed class ScheduleService(IDbContextFactory<ApplicationDbContext> dbFa
             db.FilmPosters.Add(poster = new FilmPoster { FilmId = filmId });
         poster.ContentType = contentType;
         poster.Data = data;
+        poster.CdnKey = null; // the old public copy is the old poster (PublicImagePublisher makes a new one)
         film.PosterUpdatedAt = time.GetUtcNow();
         await db.SaveChangesAsync();
     }

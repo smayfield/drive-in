@@ -11,7 +11,7 @@ public class SecurityHeadersTests
     {
         string? seen = null;
         var app = new ApplicationBuilder(new ServiceCollection().BuildServiceProvider());
-        app.UseSecurityHeaders(development, stripe);
+        app.UseSecurityHeaders(development, stripe: stripe);
         app.Run(context =>
         {
             seen = SecurityHeaders.Nonce(context);
@@ -68,6 +68,16 @@ public class SecurityHeadersTests
         Assert.Contains($"script-src 'self' 'nonce-{nonce}' https://js.stripe.com;", csp);
         Assert.Contains("connect-src 'self' https://api.stripe.com;", csp);
         // Stripe's Payment Element runs in its own iframes; no other site can be framed.
+        Assert.Contains("frame-src https://js.stripe.com https://hooks.stripe.com;", csp);
+    }
+
+    [Fact]
+    public void The_image_cdn_and_stripe_can_both_be_allowed()
+    {
+        var csp = SecurityHeaders.ContentSecurityPolicy("n", development: false, imageOrigin: "https://images.example.test", stripe: true);
+
+        Assert.Contains("img-src 'self' data: blob: https://images.example.test;", csp);
+        Assert.Contains("connect-src 'self' https://api.stripe.com;", csp);
         Assert.Contains("frame-src https://js.stripe.com https://hooks.stripe.com;", csp);
     }
 
